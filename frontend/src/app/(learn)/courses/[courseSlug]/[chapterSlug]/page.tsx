@@ -113,6 +113,7 @@ export default async function ChapterReaderPage({
         recap={content.recap}
         streakMilestone={content.streakMilestone}
         headingNotes={content.headingNotes}
+        highlights={content.highlights}
         predictGate={content.predictGate}
         predictRevealed={content.predictRevealed}
         promptCourseRating={Boolean(content.promptCourseRating)}

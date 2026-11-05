@@ -314,6 +314,7 @@ model User {
   helpThreadsAsked      HelpThread[]   @relation("HelpThreadsAsked")
   helpMessagesAuthored  HelpMessage[]  @relation("HelpMessagesAuthored")
   headingNotes          HeadingNote[]
+  highlights            ChapterHighlight[]
   organizationCourseRequestsReviewed OrganizationCourseRequest[] @relation("OrgCourseRequestReviewer")
   instructorAccessRequest       InstructorAccessRequest?
   instructorAccessReviews       InstructorAccessRequest[] @relation("InstructorAccessReviewer")
@@ -592,6 +593,7 @@ model Chapter {
   helpThreads       HelpThread[]
   studySessions     StudySession[]
   headingNotes      HeadingNote[]
+  highlights        ChapterHighlight[]
   integrityAttempts IntegrityAttempt[]
   releaseDraft CourseChapterDraft?
 
@@ -715,6 +717,7 @@ model Enrollment {
   specialisationChosenAt DateTime?
   createdAt         DateTime          @default(now())
   chapterProgress   ChapterProgress[]
+  highlights        ChapterHighlight[]
   dailyActivity     DailyActivity[]
   studySessions     StudySession[]
   integrityAttempts IntegrityAttempt[]
@@ -1404,6 +1407,35 @@ model HeadingNote {
   updatedAt DateTime @updatedAt
 
   @@unique([userId, chapterId, headingId])
+  @@index([chapterId])
+}
+
+enum HighlightColor {
+  YELLOW
+  GREEN
+  BLUE
+  PINK
+}
+
+model ChapterHighlight {
+  id           String         @id @default(cuid())
+  userId       String
+  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  enrollmentId String
+  enrollment   Enrollment     @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  chapterId    String
+  chapter      Chapter        @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  color        HighlightColor @default(YELLOW)
+  quote        String         @db.Text
+  prefix       String?        @db.Text
+  suffix       String?        @db.Text
+  occurrence   Int            @default(0)
+  note         String?        @db.Text
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([enrollmentId, chapterId])
   @@index([chapterId])
 }
 

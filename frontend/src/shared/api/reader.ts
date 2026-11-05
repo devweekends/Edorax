@@ -10,6 +10,16 @@ import type { SyllabusModule } from "./syllabus";
 
 export type ReaderChapterLink = { slug: string; title: string; moduleOrder: number; order: number };
 
+export type ReaderHighlight = {
+  id: string;
+  color: "YELLOW" | "GREEN" | "BLUE" | "PINK";
+  quote: string;
+  prefix: string | null;
+  suffix: string | null;
+  occurrence: number;
+  note: string | null;
+};
+
 export type ChapterReaderContent = {
   /** Raw MDX (compiled when available). The web app renders it. */
   source: string;
@@ -24,6 +34,7 @@ export type ChapterReaderContent = {
   recap: { checks: string; open: string; next: string };
   streakMilestone: StreakMilestone | null;
   headingNotes: Record<string, string>;
+  highlights: ReaderHighlight[];
   predictGate: boolean;
   predictRevealed: boolean;
   helpThread: HelpThreadView | null;

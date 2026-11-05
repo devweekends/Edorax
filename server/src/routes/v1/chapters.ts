@@ -12,6 +12,9 @@ import {
   checklistItemParams,
   headingNoteBody,
   headingNoteParams,
+  highlightCreateBody,
+  highlightParams,
+  highlightUpdateBody,
   learningLogBody,
   quizSubmitBody,
 } from "../../validations/chapters.js";
@@ -39,6 +42,12 @@ router.post("/:chapterId/complete", ...learner, validateParams(chapterParams), c
 router.put("/:chapterId/checklist/:itemId", ...learner, validate({ params: checklistItemParams, body: checklistItemBody }), chapters.putChecklistItem);
 router.put("/:chapterId/learning-log", ...learner, validate({ params: chapterParams, body: learningLogBody }), chapters.putLearningLog);
 router.put("/:chapterId/notes/:headingId", ...learner, validate({ params: headingNoteParams, body: headingNoteBody }), chapters.putHeadingNote);
+
+// Learner highlights on a chapter (private annotations).
+router.get("/:chapterId/highlights", ...learner, validateParams(chapterParams), chapters.getHighlights);
+router.post("/:chapterId/highlights", ...learner, validate({ params: chapterParams, body: highlightCreateBody }), chapters.postHighlight);
+router.patch("/:chapterId/highlights/:highlightId", ...learner, validate({ params: highlightParams, body: highlightUpdateBody }), chapters.patchHighlight);
+router.delete("/:chapterId/highlights/:highlightId", ...learner, validateParams(highlightParams), chapters.deleteHighlight);
 
 // Ask about this chapter. Access is checked in the service (same rules as blocks); the daily and
 // platform limits are counted in the database, and this limiter only blunts a burst before it gets there.
