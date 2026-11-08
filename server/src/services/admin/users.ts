@@ -15,6 +15,8 @@ import { dispatchNotification } from "../notifications/service.js";
 import { ADMIN_AUDIT_ACTIONS, recordAdminAction, type AdminActor } from "./audit.js";
 import { releaseEnrollmentSlot } from "../integrations/allocation.js";
 import { cancelIssuedCouponUsage } from "../coupons/issue.js";
+import { adminWaiverSnapshot } from "../financials/settlement.js";
+import { releaseOrganizationCredits } from "../organizations/credits.js";
 import { assignmentForNewEnrollment } from "../courses/variant-assignment.js";
 import { CONFIRMED_ENROLLMENT_WHERE, isConfirmedEnrollment } from "../enrollment/lifecycle.js";
 import { resolvePendingBlockReview } from "../progress/compute.js";
@@ -653,7 +655,7 @@ export async function enrollUser(
   if (!user) throw new NotFoundError("User not found");
   const course = await prisma.course.findUnique({
     where: { id: courseId },
-    select: { id: true, title: true, status: true, variantAssignment: true, activeReleaseId: true },
+    select: { id: true, title: true, status: true, variantAssignment: true, activeReleaseId: true, pricingType: true, priceCents: true, currency: true },
   });
   if (!course) throw new NotFoundError("Course not found");
   if (course.status && course.status !== "PUBLISHED") {
@@ -679,20 +681,20 @@ export async function enrollUser(
           startedAt: existing.startedAt ?? new Date(),
         },
       });
+      const waiver = adminWaiverSnapshot({ originalAmountCents: course.priceCents, pricingType: course.pricingType });
       if (existing.payment && existing.payment.status !== "SUCCEEDED") {
         await tx.payment.update({
           where: { enrollmentId: existing.id },
-          data: {
-            amountCents: 0,
-            status: "SUCCEEDED",
-            provider: "admin",
-            paidAt: new Date(),
-            instructorShareCents: 0,
-            instructorPayoutStatus: "NOT_DUE",
-          },
+          data: waiver,
+        });
+      }
+      if (!existing.payment) {
+        await tx.payment.create({
+          data: { enrollmentId: existing.id, currency: course.currency, ...waiver },
         });
       }
       await cancelIssuedCouponUsage(tx, existing.id);
+      await releaseOrganizationCredits(tx, existing.id);
     } else {
       const assignment =
         course.variantAssignment === "RANDOM" ? await assignmentForNewEnrollment(tx, course.id) : {};
@@ -706,6 +708,13 @@ export async function enrollUser(
           source: "DIRECT",
           startedAt: new Date(),
           ...(course.activeReleaseId ? { releaseId: course.activeReleaseId } : {}),
+        },
+      });
+      await tx.payment.create({
+        data: {
+          enrollmentId: row.id,
+          currency: course.currency,
+          ...adminWaiverSnapshot({ originalAmountCents: course.priceCents, pricingType: course.pricingType }),
         },
       });
     }

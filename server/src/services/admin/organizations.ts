@@ -96,7 +96,7 @@ async function requireOrganization(orgId: string) {
 const PUBLISHED_COURSES_CAP = 500;
 
 export async function getOrganization(orgId: string): Promise<AdminOrganizationDetail> {
-  const [org, publishedCourses] = await Promise.all([
+  const [org, creditTransactions, publishedCourses] = await Promise.all([
     prisma.organization.findUnique({
       where: { id: orgId },
       include: {
@@ -108,6 +108,12 @@ export async function getOrganization(orgId: string): Promise<AdminOrganizationD
         courseRequests: { where: { status: "PENDING" }, include: { course: { select: { title: true, slug: true } } } },
         _count: { select: { enrollments: { where: CONFIRMED_ENROLLMENT_WHERE } } },
       },
+    }),
+    prisma.organizationCreditTransaction.findMany({
+      where: { organizationId: orgId },
+      orderBy: { createdAt: "desc" },
+      take: 25,
+      include: { enrollment: { select: { course: { select: { title: true } } } } },
     }),
     // One extra row tells us whether the cap was hit.
     prisma.course.findMany({
@@ -125,7 +131,23 @@ export async function getOrganization(orgId: string): Promise<AdminOrganizationD
   const couponPools = await listCouponPools(org.id);
 
   return {
-    organization: { id: org.id, slug: org.slug, name: org.name, enrollmentCount: org._count.enrollments },
+    organization: {
+      id: org.id,
+      slug: org.slug,
+      name: org.name,
+      enrollmentCount: org._count.enrollments,
+      creditBalance: org.creditBalance,
+    },
+    creditTransactions: creditTransactions.map((transaction) => ({
+      id: transaction.id,
+      amountCredits: transaction.amountCredits,
+      status: transaction.status,
+      createdAt: transaction.createdAt.toISOString(),
+      committedAt: transaction.committedAt?.toISOString() ?? null,
+      releasedAt: transaction.releasedAt?.toISOString() ?? null,
+      enrollmentId: transaction.enrollmentId,
+      courseTitle: transaction.enrollment.course.title,
+    })),
     credentials: org.apiCredentials.map((cred) => ({
       id: cred.id,
       accessKey: cred.accessKey,
@@ -301,4 +323,32 @@ export async function setAllocationLeaderboard(orgId: string, courseId: string, 
     data: { leaderboardEnabled: enabled },
   });
   if (count === 0) throw new NotFoundError("Allocation not found");
+}
+
+export async function grantOrganizationCreditsAdmin(
+  orgId: string,
+  actor: AdminActor,
+  amountCredits: number,
+  reason?: string
+): Promise<{ id: string; creditBalance: number }> {
+  return prisma.$transaction(async (tx) => {
+    const org = await tx.organization.findUnique({
+      where: { id: orgId },
+      select: { id: true, name: true, creditBalance: true },
+    });
+    if (!org) throw new NotFoundError("Organization not found.");
+    const updated = await tx.organization.update({
+      where: { id: orgId },
+      data: { creditBalance: { increment: amountCredits } },
+      select: { id: true, creditBalance: true },
+    });
+    await recordAdminAction(tx, {
+      actor,
+      action: ADMIN_AUDIT_ACTIONS.ORGANIZATION_GRANT_CREDITS,
+      targetType: "Organization",
+      targetId: org.id,
+      summary: `Granted ${amountCredits} credits ($${(amountCredits / 100).toFixed(2)}) to ${org.name}.${reason ? ` Reason: ${reason}` : ""}`,
+    });
+    return updated;
+  });
 }

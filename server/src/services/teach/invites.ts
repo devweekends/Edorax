@@ -10,7 +10,8 @@ import { notifyMenteeCourseEnrollment, notifyMentorNewEnrollment } from "../noti
 import { dispatchNotification } from "../notifications/service.js";
 import { lifecycleForSignedInEnrollment } from "../enrollment/lifecycle.js";
 import { assignmentForNewEnrollment } from "../courses/variant-assignment.js";
-import { couponUnlocksContent, discountedAmountCents, issueCouponForEnrollment, redeemCouponUsage } from "../coupons/issue.js";
+import { couponUnlocksContent, issueCouponForEnrollment, redeemCouponUsage } from "../coupons/issue.js";
+import { calculateFinancialBreakdown } from "../financials/calculator.js";
 import { resolveCouponOrganizationForCourse } from "../coupons/resolve-org.js";
 import { inviteAcceptUrl, sendEmail } from "../email/send.js";
 import { requireCourseById, type OwnedCourse } from "./access.js";
@@ -63,7 +64,7 @@ export async function assignByEmails(user: SessionUser, courseId: string, emails
     throw new UnprocessableError("Enter at least one valid email address.", "VALIDATION_ERROR", ["Enter at least one valid email address."]);
   }
   requirePublished(course, "assigning it to mentees");
-  const pricing = await prisma.course.findUniqueOrThrow({ where: { id: course.id }, select: { pricingType: true, priceCents: true, currency: true } });
+  const pricing = await prisma.course.findUniqueOrThrow({ where: { id: course.id }, select: { pricingType: true, priceCents: true, currency: true, instructorPayoutPercent: true } });
 
   const couponOrg = await resolveCouponOrganizationForCourse(course.id);
   const enrolledEmails: string[] = [];
@@ -115,7 +116,32 @@ export async function assignByEmails(user: SessionUser, courseId: string, emails
         }
         if (lifecycle === "PAYMENT_REQUIRED" && !coveredByCoupon) {
           const issuedCoupon = await tx.couponUsage.findUnique({ where: { enrollmentId: created.id }, select: { percentOff: true, status: true } });
-          await tx.payment.create({ data: { enrollmentId: created.id, amountCents: issuedCoupon && issuedCoupon.status !== "CANCELLED" ? discountedAmountCents(pricing.priceCents, issuedCoupon.percentOff) : pricing.priceCents, currency: pricing.currency, status: "PENDING" } });
+          const financials = calculateFinancialBreakdown({
+            originalAmountCents: pricing.priceCents,
+            pricingType: pricing.pricingType,
+            fundingSource: issuedCoupon && issuedCoupon.status !== "CANCELLED" ? "organization_contribution" : "manual",
+            organizationContributionPercent: issuedCoupon && issuedCoupon.status !== "CANCELLED" ? issuedCoupon.percentOff : 0,
+            instructorPayoutPercent: pricing.instructorPayoutPercent,
+          });
+          await tx.payment.create({ data: { enrollmentId: created.id, amountCents: financials.learnerAmountCents, currency: pricing.currency, status: "PENDING", ...financials } });
+        } else if (lifecycle === "ACTIVE") {
+          await tx.payment.create({
+            data: {
+              enrollmentId: created.id,
+              amountCents: 0,
+              currency: pricing.currency,
+              status: "SUCCEEDED",
+              provider: coveredByCoupon ? "organization_coupon" : "free",
+              paidAt: new Date(),
+              ...calculateFinancialBreakdown({
+                originalAmountCents: pricing.priceCents,
+                pricingType: pricing.pricingType,
+                fundingSource: coveredByCoupon ? "organization_contribution" : "free",
+                organizationContributionPercent: coveredByCoupon ? 100 : 0,
+                instructorPayoutPercent: pricing.instructorPayoutPercent,
+              }),
+            },
+          });
         }
         return created;
       });

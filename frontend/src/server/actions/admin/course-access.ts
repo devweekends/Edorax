@@ -33,3 +33,27 @@ export async function markInstructorPayoutPaidAction(_prev: AdminActionState, fo
     return "Instructor payout marked paid.";
   });
 }
+
+export async function markWithdrawalPaidAction(_prev: AdminActionState, formData: FormData): Promise<AdminActionState> {
+  const withdrawalId = String(formData.get("withdrawalId") ?? "");
+  if (!withdrawalId) return { ok: false, message: "Missing withdrawal id." };
+  return runAdminAction(async () => {
+    await adminCall<void>(`/api/v1/admin/withdrawals/${encodeURIComponent(withdrawalId)}/pay`, { method: "POST" });
+    revalidatePath("/admin/course-access");
+    return "Withdrawal marked paid and payments completed.";
+  });
+}
+
+export async function rejectWithdrawalAction(_prev: AdminActionState, formData: FormData): Promise<AdminActionState> {
+  const withdrawalId = String(formData.get("withdrawalId") ?? "");
+  const reason = String(formData.get("reason") ?? "").trim() || undefined;
+  if (!withdrawalId) return { ok: false, message: "Missing withdrawal id." };
+  return runAdminAction(async () => {
+    await adminCall<void>(`/api/v1/admin/withdrawals/${encodeURIComponent(withdrawalId)}/reject`, {
+      method: "POST",
+      json: { reason },
+    });
+    revalidatePath("/admin/course-access");
+    return "Withdrawal request rejected and funds returned to instructor balance.";
+  });
+}

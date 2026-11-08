@@ -292,3 +292,52 @@ export async function publishModuleChapters(req: Request, res: Response) {
   await chapters.publishChapters(req.user!, { moduleId: param(req, "moduleId") });
   noContent(res);
 }
+
+// GET /api/v1/teach/wallet
+export async function getWallet(req: Request, res: Response) {
+  const { getInstructorWallet } = await import("../services/financials/withdrawals.js");
+  ok(res, await getInstructorWallet(req.user!.id));
+}
+
+// POST /api/v1/teach/wallet/withdraw
+export async function requestWithdrawal(req: Request, res: Response) {
+  const { requestInstructorWithdrawal } = await import("../services/financials/withdrawals.js");
+  const { note } = req.body as { note: string };
+  created(res, await requestInstructorWithdrawal(req.user!.id, note));
+}
+
+// GET /api/v1/teach/campaigns
+export async function getCampaigns(req: Request, res: Response) {
+  const { listInstructorCampaigns } = await import("../services/teach/campaigns.js");
+  ok(res, await listInstructorCampaigns(req.user!));
+}
+
+// POST /api/v1/teach/campaigns/:campaignId/participate
+export async function participateCampaign(req: Request, res: Response) {
+  const { setInstructorCampaignParticipation } = await import("../services/teach/campaigns.js");
+  const { courseIds } = req.body as { courseIds: string[] };
+  ok(res, await setInstructorCampaignParticipation(req.user!, param(req, "campaignId"), courseIds));
+}
+
+// GET /api/v1/teach/organizations
+export async function getOrganizations(req: Request, res: Response) {
+  const { listInstructorOrganizations } = await import("../services/teach/organizations.js");
+  ok(res, await listInstructorOrganizations(req.user!));
+}
+
+// POST /api/v1/teach/courses/:courseId/free-organizations
+export async function setCourseFreeOrganizations(req: Request, res: Response) {
+  const { setCourseFreeOrganizations } = await import("../services/teach/organizations.js");
+  const { organizationIds } = req.body as { organizationIds: string[] };
+  ok(res, await setCourseFreeOrganizations(req.user!, param(req, "courseId"), organizationIds));
+}
+
+// POST /api/v1/teach/organization-requests/:requestId/review
+export async function reviewOrgRequest(req: Request, res: Response) {
+  const { reviewInstructorOrgCourseRequest } = await import("../services/teach/organizations.js");
+  const { decision, grantFreeAccess } = req.body as { decision: "APPROVED" | "REJECTED"; grantFreeAccess: boolean };
+  ok(res, await reviewInstructorOrgCourseRequest(req.user!, param(req, "requestId"), decision, grantFreeAccess));
+}
+
+
+

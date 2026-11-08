@@ -3,6 +3,7 @@ import {
   AlertCircle,
   ArrowUpRight,
   BookOpen,
+  Coins,
   KeyRound,
   Layers3,
   ShieldCheck,
@@ -18,6 +19,7 @@ import { AdminActionForm } from "@/components/admin/admin-action-form";
 import { OrganizationCourseDrawer } from "@/components/admin/organization-course-drawer";
 import {
   createOrganizationCouponPoolAction,
+  grantOrganizationCreditsAction,
   rotateOrganizationCredentialFormAction,
   setAllocationAllowedAction,
   setAllocationLeaderboardAction,
@@ -46,7 +48,7 @@ export default async function AdminOrganizationDetailPage({
   const { orgId } = await params;
   const query = await searchParams;
 
-  const { organization: org, credentials, allocations, couponPools, pendingRequests, publishedCourses } =
+  const { organization: org, credentials, allocations, couponPools, creditTransactions, pendingRequests, publishedCourses } =
     await serverApiFetchOrNotFound<AdminOrganizationDetail>(`/api/v1/admin/organizations/${encodeURIComponent(orgId)}`);
 
   const allocationByCourseId = new Map(allocations.map((row) => [row.course.id, row]));
@@ -106,6 +108,7 @@ export default async function AdminOrganizationDetailPage({
       />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard icon={Coins} label="Available credits" value={`$${(org.creditBalance / 100).toFixed(2)}`} detail={`${org.creditBalance.toLocaleString()} cents available`} />
         <MetricCard icon={Users} label="Integration enrollments" value={org.enrollmentCount.toLocaleString()} detail="Learners connected" />
         <MetricCard icon={BookOpen} label="Catalog courses" value={allocations.length.toLocaleString()} detail="Allocated to this org" />
         <MetricCard icon={KeyRound} label="API credentials" value={credentials.filter((credential) => credential.active).length.toLocaleString()} detail="Active access keys" />
@@ -142,6 +145,97 @@ export default async function AdminOrganizationDetailPage({
           </ul>
         </AdminPanel>
       ) : null}
+
+      <AdminSection
+        title="Credits & funding"
+        description="Organization credits are used for Pathment course contributions. One credit represents one cent."
+        className="mt-0"
+      >
+        <AdminPanel className="p-0">
+          <div className="flex flex-col gap-4 border-b border-border p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+            <div>
+              <p className="text-sm font-semibold">Current balance</p>
+              <p className="mt-1 text-2xl font-semibold tabular-nums">${(org.creditBalance / 100).toFixed(2)}</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">{org.creditBalance.toLocaleString()} credits available</p>
+            </div>
+            <div className="rounded-xl border border-border/80 bg-background/50 p-3 sm:max-w-md">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Fund organization credits</p>
+              <AdminActionForm
+                action={grantOrganizationCreditsAction}
+                submitLabel="Grant credits"
+                pendingLabel="Adding…"
+                confirm={{
+                  question: `Grant credits to ${org.name}?`,
+                  description: "Credits will be added immediately to the organization's credit balance for Pathment course sponsorships.",
+                  confirmLabel: "Confirm credit grant",
+                }}
+              >
+                <input type="hidden" name="organizationId" value={org.id} />
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="relative">
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+                    <input
+                      name="amountDollars"
+                      type="number"
+                      min="1"
+                      step="1"
+                      defaultValue="50"
+                      required
+                      placeholder="Amount"
+                      className="h-8 w-24 rounded-md border border-input bg-background pl-6 pr-2 text-xs font-medium tabular-nums focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
+                  <input
+                    name="reason"
+                    type="text"
+                    placeholder="Reason (optional)"
+                    className="h-8 min-w-[140px] flex-1 rounded-md border border-input bg-background px-2.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+              </AdminActionForm>
+            </div>
+          </div>
+          <AdminTable minWidth="720px">
+            <AdminTableHead>
+              <tr>
+                <AdminTableHeaderCell>Date</AdminTableHeaderCell>
+                <AdminTableHeaderCell>Course</AdminTableHeaderCell>
+                <AdminTableHeaderCell align="right">Credits</AdminTableHeaderCell>
+                <AdminTableHeaderCell>Status</AdminTableHeaderCell>
+              </tr>
+            </AdminTableHead>
+            <AdminTableBody>
+              {creditTransactions.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                    No credit activity yet.
+                  </td>
+                </tr>
+              ) : (
+                creditTransactions.map((transaction) => (
+                  <AdminTableRow key={transaction.id}>
+                    <AdminTableCell className="text-muted-foreground">
+                      {new Date(transaction.createdAt).toLocaleDateString()}
+                    </AdminTableCell>
+                    <AdminTableCell>
+                      <span className="font-medium">{transaction.courseTitle}</span>
+                      <span className="mt-0.5 block text-xs text-muted-foreground">{transaction.enrollmentId}</span>
+                    </AdminTableCell>
+                    <AdminTableCell align="right" className="tabular-nums">
+                      ${ (transaction.amountCredits / 100).toFixed(2) }
+                    </AdminTableCell>
+                    <AdminTableCell>
+                      <Badge variant={transaction.status === "COMMITTED" ? "secondary" : "outline"}>
+                        {transaction.status.toLowerCase()}
+                      </Badge>
+                    </AdminTableCell>
+                  </AdminTableRow>
+                ))
+              )}
+            </AdminTableBody>
+          </AdminTable>
+        </AdminPanel>
+      </AdminSection>
 
       <AdminSection title="Access & credentials" description="Manage the keys used by this organization’s integration." className="mt-0">
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { Flame, Snowflake, Sparkles } from "lucide-react";
+import { Coins, Flame, Snowflake, Sparkles } from "lucide-react";
 import { InfoTip } from "@/components/ui/info-tip";
 import { Progress, ProgressLabel } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
@@ -162,6 +162,18 @@ export function LearningMomentum({ summary, streak }: { summary: GamificationSum
       {summary.career ? (
         <div className="border-t border-border pt-4">
           <CareerRow career={summary.career} />
+        </div>
+      ) : null}
+      {summary.credits ? (
+        <div className="flex items-center gap-3 border-t border-border pt-4">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <Coins className="size-5" aria-hidden />
+          </span>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold">Build Credits</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">Spendable rewards from your learning activity.</p>
+          </div>
+          <span className="ml-auto text-lg font-semibold tabular-nums">{numberFormat.format(summary.credits.balance)}</span>
         </div>
       ) : null}
     </div>

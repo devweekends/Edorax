@@ -172,3 +172,20 @@ export const metricsQuery = z.object({
   range: z.enum(["7", "30", "90"]).optional(),
 });
 export type MetricsQuery = z.infer<typeof metricsQuery>;
+
+export const withdrawalIdParams = z.object({
+  withdrawalId: z.string().min(1),
+});
+export type WithdrawalIdParams = z.infer<typeof withdrawalIdParams>;
+
+export const rejectWithdrawalBody = z.object({
+  reason: z.string().trim().max(240).optional(),
+});
+export type RejectWithdrawalBody = z.infer<typeof rejectWithdrawalBody>;
+
+export const grantOrganizationCreditsBody = z.object({
+  amountCredits: z.number().int().positive(),
+  reason: z.string().trim().max(240).optional(),
+});
+export type GrantOrganizationCreditsBody = z.infer<typeof grantOrganizationCreditsBody>;
+

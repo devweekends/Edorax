@@ -34,6 +34,7 @@ function settingsFromCourse(course: CourseSettingsView): CourseSettingsInput {
     pricingType: course.pricingType,
     priceDollars: course.pricingType === "PAID" && course.priceCents > 0 ? (course.priceCents / 100).toFixed(2) : "",
     currency: course.currency,
+    freeOrganizationIds: course.freeOrganizationIds,
   };
 }
 
@@ -56,6 +57,7 @@ function settingsFromForm(form: HTMLFormElement): CourseSettingsInput {
     pricingType: String(data.get("pricingType") ?? "FREE"),
     priceDollars: String(data.get("priceDollars") ?? ""),
     currency: String(data.get("currency") ?? "USD"),
+    freeOrganizationIds: Array.from(data.getAll("freeOrganizationIds")).map(String),
   };
 }
 
@@ -74,7 +76,8 @@ function sectionChanged(current: CourseSettingsInput, saved: CourseSettingsInput
       current.variantAssignment !== saved.variantAssignment
     );
   }
-  return current.pricingType !== saved.pricingType || current.priceDollars !== saved.priceDollars || current.currency !== saved.currency;
+  return current.pricingType !== saved.pricingType || current.priceDollars !== saved.priceDollars || current.currency !== saved.currency ||
+    current.freeOrganizationIds.join(",") !== saved.freeOrganizationIds.join(",");
 }
 
 function mergeSection(saved: CourseSettingsInput, current: CourseSettingsInput, section: SettingsSection): CourseSettingsInput {
@@ -93,7 +96,7 @@ function mergeSection(saved: CourseSettingsInput, current: CourseSettingsInput, 
       variantAssignment: current.variantAssignment,
     };
   }
-  return { ...saved, pricingType: current.pricingType, priceDollars: current.priceDollars, currency: current.currency };
+  return { ...saved, pricingType: current.pricingType, priceDollars: current.priceDollars, currency: current.currency, freeOrganizationIds: current.freeOrganizationIds };
 }
 
 export function CourseSettings({ course }: { course: CourseSettingsView }) {
@@ -291,6 +294,20 @@ export function CourseSettings({ course }: { course: CourseSettingsView }) {
           <Field label="Currency" htmlFor="course-currency">
             <Input id="course-currency" name="currency" defaultValue={course.currency} minLength={3} maxLength={3} required placeholder="USD" className="h-10" />
           </Field>
+          {pricingType === "PAID" && course.organizations.length > 0 && (
+            <div className="space-y-2 sm:col-span-2">
+              <Label>Free for selected organizations</Label>
+              <p className="text-xs leading-5 text-muted-foreground">Instructor-controlled access: employees assigned by these organizations pay nothing, while the course price stays unchanged for everyone else.</p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {course.organizations.map((organization) => (
+                  <label key={organization.id} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm">
+                    <input type="checkbox" name="freeOrganizationIds" value={organization.id} defaultChecked={course.freeOrganizationIds.includes(organization.id)} className="size-4 accent-primary" />
+                    {organization.name}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
           {pricingType === "PAID" && <p className="text-xs leading-5 text-muted-foreground sm:col-span-2">Payment collection depends on the course checkout configuration.</p>}
         </div>
         {footer("pricing")}

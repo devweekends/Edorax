@@ -10,6 +10,7 @@ import { validate, validateBody, validateParams } from "../../middlewares/valida
 import {
   assignByEmailsBody,
   approveCourseZipUpdateBody,
+  campaignIdParams,
   chapterDraftBody,
   chapterIdParams,
   courseInstructorInviteBody,
@@ -28,15 +29,20 @@ import {
   createModuleBody,
   deleteCourseBody,
   enrollmentIdParams,
+  freeOrganizationsBody,
   helpInboxQuery,
   inviteParams,
   menteeParams,
   moduleIdParams,
   moveBody,
+  participateCampaignBody,
   renameModuleBody,
   removeChapterBody,
   reportsQuery,
+  requestIdParams,
+  requestWithdrawalBody,
   responseIdParams,
+  reviewOrgCourseRequestBody,
   reviewQueueQuery,
   submitReviewBody,
   unpublishCourseBody,
@@ -50,6 +56,16 @@ const router = Router();
 router.use(authenticate, requireVerified, requireInstructor);
 
 router.get("/workspace", teach.getWorkspace);
+router.get("/wallet", teach.getWallet);
+router.post("/wallet/withdraw", validateBody(requestWithdrawalBody), teach.requestWithdrawal);
+router.get("/campaigns", teach.getCampaigns);
+router.post("/campaigns/:campaignId/participate", validate({ params: campaignIdParams, body: participateCampaignBody }), teach.participateCampaign);
+router.get("/organizations", teach.getOrganizations);
+router.post("/courses/:courseId/free-organizations", validate({ params: courseIdParams, body: freeOrganizationsBody }), teach.setCourseFreeOrganizations);
+router.post("/organization-requests/:requestId/review", validate({ params: requestIdParams, body: reviewOrgCourseRequestBody }), teach.reviewOrgRequest);
+
+
+
 
 router.get("/courses", teach.listCourses);
 router.post("/courses/import", requireZipImport, raw({ type: "application/zip", limit: "5mb" }), teach.importCourseZip);
