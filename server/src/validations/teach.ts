@@ -70,7 +70,6 @@ export const courseSettingsBody = z.object({
   pricingType: z.enum(["FREE", "PAID"]),
   priceDollars: z.union([z.literal(""), z.coerce.number().min(0).max(99999)]),
   currency: z.string().trim().length(3),
-  freeOrganizationIds: z.array(id).max(500).default([]),
 });
 export type CourseSettingsBody = z.infer<typeof courseSettingsBody>;
 
@@ -132,22 +131,3 @@ export const participateCampaignBody = z.object({
   courseIds: z.array(z.string()).default([]),
 });
 export type ParticipateCampaignBody = z.infer<typeof participateCampaignBody>;
-
-export const freeOrganizationsBody = z.object({
-  organizationIds: z.array(z.string()).default([]),
-});
-export type FreeOrganizationsBody = z.infer<typeof freeOrganizationsBody>;
-
-export const requestIdParams = z.object({
-  requestId: z.string().min(1),
-});
-export type RequestIdParams = z.infer<typeof requestIdParams>;
-
-export const reviewOrgCourseRequestBody = z.object({
-  decision: z.enum(["APPROVED", "REJECTED"]),
-  grantFreeAccess: z.boolean().default(true),
-});
-export type ReviewOrgCourseRequestBody = z.infer<typeof reviewOrgCourseRequestBody>;
-
-
-

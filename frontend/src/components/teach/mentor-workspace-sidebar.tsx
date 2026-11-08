@@ -7,7 +7,6 @@ import {
   Activity,
   BarChart3,
   BookOpenText,
-  Building2,
   ChevronDown,
   ChevronsUpDown,
   CircleHelp,
@@ -129,12 +128,6 @@ export function MentorWorkspaceSidebar({
       href: "/campaigns",
       icon: Sparkles,
       active: pathname.startsWith("/campaigns"),
-    },
-    {
-      label: "Organizations",
-      href: "/organizations",
-      icon: Building2,
-      active: pathname.startsWith("/organizations"),
     },
   ];
   const courseItems: NavItem[] = [

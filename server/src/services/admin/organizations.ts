@@ -246,8 +246,8 @@ export async function upsertAllocations(actor: AdminActor, orgId: string, input:
       action: ADMIN_AUDIT_ACTIONS.ORGANIZATION_ALLOCATE,
       targetType: "Organization",
       targetId: orgId,
-      summary: `${input.isAllowed ? "Allocated" : "Updated"} ${rows.length} course${rows.length === 1 ? "" : "s"} for ${organization.name}`,
-      metadata: { courseIds, removedCourseIds: removeCourseIds, isAllowed: input.isAllowed },
+      summary: `Updated ${rows.length} course${rows.length === 1 ? "" : "s"} for ${organization.name}`,
+      metadata: { courseIds, removedCourseIds: removeCourseIds, isAllowed: input.isAllowed ?? null },
     });
   });
 }
@@ -256,16 +256,16 @@ export type AllocationInput = {
   organizationId: string;
   courseId: string;
   maxEnrollments: number;
-  isAllowed: boolean;
+  isAllowed?: boolean;
   expiresAt: Date | null;
 };
 
 export function upsertAllocation(tx: Prisma.TransactionClient, input: AllocationInput) {
-  const { organizationId, courseId, ...fields } = input;
+  const { organizationId, courseId, isAllowed, ...fields } = input;
   return tx.organizationCourse.upsert({
     where: { organizationId_courseId: { organizationId, courseId } },
-    create: { organizationId, courseId, ...fields },
-    update: fields,
+    create: { organizationId, courseId, ...fields, isAllowed: isAllowed ?? true },
+    update: { ...fields, ...(isAllowed === undefined ? {} : { isAllowed }) },
   });
 }
 

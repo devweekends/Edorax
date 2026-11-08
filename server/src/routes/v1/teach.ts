@@ -1,3 +1,4 @@
+import { requireInstructorWithdrawals } from "../../middlewares/instructor-withdrawals.js";
 import { raw, Router } from "express";
 import * as teach from "../../controllers/teach.js";
 import * as media from "../../controllers/course-media.js";
@@ -29,7 +30,6 @@ import {
   createModuleBody,
   deleteCourseBody,
   enrollmentIdParams,
-  freeOrganizationsBody,
   helpInboxQuery,
   inviteParams,
   menteeParams,
@@ -39,10 +39,8 @@ import {
   renameModuleBody,
   removeChapterBody,
   reportsQuery,
-  requestIdParams,
   requestWithdrawalBody,
   responseIdParams,
-  reviewOrgCourseRequestBody,
   reviewQueueQuery,
   submitReviewBody,
   unpublishCourseBody,
@@ -57,12 +55,9 @@ router.use(authenticate, requireVerified, requireInstructor);
 
 router.get("/workspace", teach.getWorkspace);
 router.get("/wallet", teach.getWallet);
-router.post("/wallet/withdraw", validateBody(requestWithdrawalBody), teach.requestWithdrawal);
+router.post("/wallet/withdraw", requireInstructorWithdrawals, validateBody(requestWithdrawalBody), teach.requestWithdrawal);
 router.get("/campaigns", teach.getCampaigns);
 router.post("/campaigns/:campaignId/participate", validate({ params: campaignIdParams, body: participateCampaignBody }), teach.participateCampaign);
-router.get("/organizations", teach.getOrganizations);
-router.post("/courses/:courseId/free-organizations", validate({ params: courseIdParams, body: freeOrganizationsBody }), teach.setCourseFreeOrganizations);
-router.post("/organization-requests/:requestId/review", validate({ params: requestIdParams, body: reviewOrgCourseRequestBody }), teach.reviewOrgRequest);
 
 
 

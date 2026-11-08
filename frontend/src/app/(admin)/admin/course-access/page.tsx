@@ -46,11 +46,12 @@ type PayoutRow = {
 
 export default async function CourseAccessPage() {
   await requireRole("ADMIN");
-  const [requests, payouts, withdrawals, revenue] = await Promise.all([
+  const [requests, payouts, withdrawals, revenue, withdrawalConfig] = await Promise.all([
     serverApiFetch<RequestRow[]>("/api/v1/admin/manual-access"),
     serverApiFetch<PayoutRow[]>("/api/v1/admin/manual-payouts"),
     serverApiFetch<AdminWithdrawalRow[]>("/api/v1/admin/withdrawals"),
     serverApiFetch<AdminRevenueReport>("/api/v1/admin/revenue"),
+    serverApiFetch<{ enabled: boolean }>("/api/v1/admin/withdrawals/config"),
   ]);
 
   return (
@@ -108,6 +109,7 @@ export default async function CourseAccessPage() {
           </p>
         </div>
 
+        {!withdrawalConfig.enabled && <p className="text-sm text-muted-foreground">Withdrawal processing is not available yet.</p>}
         {withdrawals.length === 0 ? (
           <p className="text-sm text-muted-foreground">No withdrawal requests recorded yet.</p>
         ) : (
@@ -143,7 +145,7 @@ export default async function CourseAccessPage() {
                   </p>
                 </div>
 
-                {w.status === "REQUESTED" && (
+                {withdrawalConfig.enabled && w.status === "REQUESTED" && (
                   <div className="flex flex-wrap items-center gap-2">
                     <AdminActionForm
                       action={markWithdrawalPaidAction}

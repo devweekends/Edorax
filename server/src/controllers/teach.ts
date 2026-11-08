@@ -1,3 +1,4 @@
+import { instructorWithdrawalsEnabled } from "../middlewares/instructor-withdrawals.js";
 import * as courseImport from "../services/teach/course-import.js";
 import type { Request, Response } from "express";
 import { created, noContent, ok } from "../utils/responses.js";
@@ -296,7 +297,7 @@ export async function publishModuleChapters(req: Request, res: Response) {
 // GET /api/v1/teach/wallet
 export async function getWallet(req: Request, res: Response) {
   const { getInstructorWallet } = await import("../services/financials/withdrawals.js");
-  ok(res, await getInstructorWallet(req.user!.id));
+  ok(res, { ...await getInstructorWallet(req.user!.id), withdrawalsEnabled: instructorWithdrawalsEnabled() });
 }
 
 // POST /api/v1/teach/wallet/withdraw
@@ -318,26 +319,3 @@ export async function participateCampaign(req: Request, res: Response) {
   const { courseIds } = req.body as { courseIds: string[] };
   ok(res, await setInstructorCampaignParticipation(req.user!, param(req, "campaignId"), courseIds));
 }
-
-// GET /api/v1/teach/organizations
-export async function getOrganizations(req: Request, res: Response) {
-  const { listInstructorOrganizations } = await import("../services/teach/organizations.js");
-  ok(res, await listInstructorOrganizations(req.user!));
-}
-
-// POST /api/v1/teach/courses/:courseId/free-organizations
-export async function setCourseFreeOrganizations(req: Request, res: Response) {
-  const { setCourseFreeOrganizations } = await import("../services/teach/organizations.js");
-  const { organizationIds } = req.body as { organizationIds: string[] };
-  ok(res, await setCourseFreeOrganizations(req.user!, param(req, "courseId"), organizationIds));
-}
-
-// POST /api/v1/teach/organization-requests/:requestId/review
-export async function reviewOrgRequest(req: Request, res: Response) {
-  const { reviewInstructorOrgCourseRequest } = await import("../services/teach/organizations.js");
-  const { decision, grantFreeAccess } = req.body as { decision: "APPROVED" | "REJECTED"; grantFreeAccess: boolean };
-  ok(res, await reviewInstructorOrgCourseRequest(req.user!, param(req, "requestId"), decision, grantFreeAccess));
-}
-
-
-

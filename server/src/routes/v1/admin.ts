@@ -1,3 +1,4 @@
+import { instructorWithdrawalsEnabled, requireInstructorWithdrawals } from "../../middlewares/instructor-withdrawals.js";
 import { prisma } from "../../db/prisma.js";
 import { approveManualAccess, listManualInstructorPayouts, markManualInstructorPayoutPaid, rejectManualAccess } from "../../services/enrollment/manual-access.js";
 import { created, noContent, ok } from "../../utils/responses.js";
@@ -99,16 +100,17 @@ router.post("/manual-payouts/:enrollmentId/paid", validateParams(enrollmentParam
   ok(res, { paid: true });
 });
 
+router.get("/withdrawals/config", (_req, res) => ok(res, { enabled: instructorWithdrawalsEnabled() }));
 router.get("/withdrawals", async (req, res) => {
   const { listAdminWithdrawals } = await import("../../services/financials/withdrawals.js");
-  const status = req.query.status as any;
+  const status = req.query.status as "REQUESTED" | "PAID" | "REJECTED" | undefined;
   ok(res, await listAdminWithdrawals(status));
 });
-router.post("/withdrawals/:withdrawalId/pay", validateParams(withdrawalIdParams), async (req, res) => {
+router.post("/withdrawals/:withdrawalId/pay", requireInstructorWithdrawals, validateParams(withdrawalIdParams), async (req, res) => {
   const { markWithdrawalPaid } = await import("../../services/financials/withdrawals.js");
   ok(res, await markWithdrawalPaid(req.params.withdrawalId as string, req.user!));
 });
-router.post("/withdrawals/:withdrawalId/reject", validateParams(withdrawalIdParams), validateBody(rejectWithdrawalBody), async (req, res) => {
+router.post("/withdrawals/:withdrawalId/reject", requireInstructorWithdrawals, validateParams(withdrawalIdParams), validateBody(rejectWithdrawalBody), async (req, res) => {
   const { rejectWithdrawal } = await import("../../services/financials/withdrawals.js");
   const { reason } = req.body as { reason?: string };
   ok(res, await rejectWithdrawal(req.params.withdrawalId as string, req.user!, reason));

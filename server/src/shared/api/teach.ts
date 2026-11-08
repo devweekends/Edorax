@@ -157,8 +157,6 @@ export type CourseSettingsView = Pick<CourseBuilderCourse,
   familySlug: string | null;
   hasVariants: boolean;
   variantAssignment: VariantAssignment;
-  freeOrganizationIds: string[];
-  organizations: Array<{ id: string; name: string }>;
 };
 
 export type CourseDraftPreview = {
@@ -229,7 +227,6 @@ export type CourseSettingsInput = {
   pricingType: string;
   priceDollars: string;
   currency: string;
-  freeOrganizationIds: string[];
 };
 
 export type ChapterSettingsInput = {
@@ -652,6 +649,7 @@ export type InstructorEarningItem = {
 };
 
 export type InstructorWalletSummary = {
+  withdrawalsEnabled: boolean;
   totalEarnedCents: number;
   alreadyPaidCents: number;
   pendingWithdrawalCents: number;
@@ -694,41 +692,3 @@ export type InstructorCampaignsView = {
   campaigns: InstructorCampaignItem[];
   courses: InstructorCampaignCourse[];
 };
-
-// ---------------------------------------------------------------------------
-// Instructor organizations & free access management
-
-export type InstructorOrganizationItem = {
-  id: string;
-  name: string;
-  slug: string;
-};
-
-export type InstructorCourseFreeAccessItem = {
-  id: string;
-  title: string;
-  slug: string;
-  priceCents: number;
-  currency: string;
-  freeOrganizationIds: string[];
-};
-
-export type InstructorOrgCourseRequestItem = {
-  id: string;
-  organizationId: string;
-  organizationName: string;
-  courseId: string;
-  courseTitle: string;
-  status: "PENDING" | "APPROVED" | "REJECTED";
-  requestedAt: string;
-  reviewedAt: string | null;
-};
-
-export type InstructorOrganizationsView = {
-  organizations: InstructorOrganizationItem[];
-  courses: InstructorCourseFreeAccessItem[];
-  requests: InstructorOrgCourseRequestItem[];
-};
-
-
-

@@ -74,7 +74,7 @@ const expiresAt = z
   .transform((value) => (value ? value : undefined));
 
 export const allocationsBody = z.object({
-  isAllowed: z.boolean(),
+  isAllowed: z.boolean().optional(),
   courses: z.array(z.object({ courseId: id, maxEnrollments, expiresAt })).max(500),
   removeCourseIds: z.array(id).max(500).default([]),
 });

@@ -2,7 +2,7 @@ import { serverApiFetch } from "@/lib/api-server";
 import type { InstructorWalletSummary } from "@/shared/api/teach";
 import { Badge } from "@/components/ui/badge";
 import { WithdrawalRequestForm } from "@/components/teach/wallet/withdrawal-request-form";
-import { ArrowDownLeft, CheckCircle2, Clock, Coins, DollarSign, Wallet, XCircle } from "lucide-react";
+import { ArrowDownLeft, CheckCircle2, Clock, Coins, DollarSign, Wallet } from "lucide-react";
 
 export const metadata = {
   title: "Wallet & Payouts | Teach Workspace",
@@ -16,7 +16,7 @@ export default async function TeachWalletPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Wallet & Payouts</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          View your course earnings, track payout history, and withdraw available balances.
+          View your course earnings and payout history.
         </p>
       </div>
 
@@ -74,34 +74,42 @@ export default async function TeachWalletPage() {
         </div>
       </div>
 
-      <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
-        <div className="flex items-center gap-3 border-b border-border pb-4">
-          <span className="grid size-9 place-items-center rounded-lg bg-primary/10 text-primary">
-            <ArrowDownLeft className="size-5" />
-          </span>
-          <div>
-            <h2 className="text-lg font-semibold">Request a withdrawal</h2>
-            <p className="text-xs text-muted-foreground">
-              Withdrawals bundle all your currently available earnings into a single transfer request.
-            </p>
+      <div className="relative overflow-hidden rounded-xl border border-border bg-card p-6 shadow-sm">
+        {!wallet.withdrawalsEnabled && (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-1 bg-background/65 p-6 text-center backdrop-blur-sm">
+            <p className="text-lg font-semibold">Withdrawals coming soon</p>
+            <p className="text-sm text-muted-foreground">Withdrawal requests are not available yet.</p>
           </div>
-        </div>
-
-        <div className="mt-5">
-          {wallet.availableBalanceCents > 0 ? (
-            <WithdrawalRequestForm
-              availableAmountCents={wallet.availableBalanceCents}
-              currency={wallet.currency}
-            />
-          ) : (
-            <div className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-              <Coins className="mx-auto size-8 text-muted-foreground/60" />
-              <p className="mt-2 font-medium">No earnings currently available to withdraw</p>
-              <p className="mt-1 text-xs">
-                As learners enroll in your paid courses or organizations sponsor seats, your earnings will appear here.
+        )}
+        <div aria-hidden={!wallet.withdrawalsEnabled} inert={!wallet.withdrawalsEnabled}>
+          <div className="flex items-center gap-3 border-b border-border pb-4">
+            <span className="grid size-9 place-items-center rounded-lg bg-primary/10 text-primary">
+              <ArrowDownLeft className="size-5" />
+            </span>
+            <div>
+              <h2 className="text-lg font-semibold">Request a withdrawal</h2>
+              <p className="text-xs text-muted-foreground">
+                Withdrawals bundle all your currently available earnings into a single transfer request.
               </p>
             </div>
-          )}
+          </div>
+
+          <div className="mt-5">
+            {wallet.withdrawalsEnabled && wallet.availableBalanceCents > 0 ? (
+              <WithdrawalRequestForm
+                availableAmountCents={wallet.availableBalanceCents}
+                currency={wallet.currency}
+              />
+            ) : (
+              <div className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+                <Coins className="mx-auto size-8 text-muted-foreground/60" />
+                <p className="mt-2 font-medium">No earnings currently available to withdraw</p>
+                <p className="mt-1 text-xs">
+                  As learners enroll in your paid courses or organizations sponsor seats, your earnings will appear here.
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

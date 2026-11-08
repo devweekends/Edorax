@@ -66,7 +66,6 @@ export async function bulkUpsertOrganizationCourseAllocationsAction(
     await adminCall<void>(`/api/v1/admin/organizations/${encodeURIComponent(organizationId)}/allocations`, {
       method: "PUT",
       json: {
-        isAllowed: formData.get("isAllowed") === "on" || formData.get("isAllowed") === "true",
         courses: courseIds.map((courseId) => ({
           courseId,
           maxEnrollments: Number(formData.get(`maxEnrollments_${courseId}`) ?? 0),

@@ -147,7 +147,6 @@ export async function loadCourseSettings(user: SessionUser, courseSlug: string):
       difficulty: true, estimatedHours: true, category: true, subcategory: true, tags: true, sequential: true, autoGradeOpenQuestions: true, coverUrl: true,
       status: true, pricingType: true, priceCents: true, currency: true, integritySnapshots: true,
       familySlug: true, variantFamily: true, variantAssignment: true,
-      organizationFreeAccesses: { select: { organizationId: true } },
       _count: {
         select: {
           enrollments: { where: CONFIRMED_ENROLLMENT_WHERE },
@@ -157,17 +156,8 @@ export async function loadCourseSettings(user: SessionUser, courseSlug: string):
     },
   });
   const account = await prisma.user.findUnique({ where: { id: user.id }, select: { zipImportEnabled: true } });
-  const { variantFamily, organizationFreeAccesses, ...settings } = course;
-  const organizations = await prisma.organization.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } });
-  return {
-    ...settings,
-    freeOrganizationIds: organizationFreeAccesses.map((row) => row.organizationId),
-    organizations,
-    hasVariants: Boolean(resolveCourseFamily(course.familySlug, variantFamily)),
-    enrollmentCount: _count.enrollments,
-    chapterCount: _count.chapters,
-    zipImportEnabled: account?.zipImportEnabled ?? false,
-  };
+  const { variantFamily, ...settings } = course;
+  return { ...settings, hasVariants: Boolean(resolveCourseFamily(course.familySlug, variantFamily)), enrollmentCount: _count.enrollments, chapterCount: _count.chapters, zipImportEnabled: account?.zipImportEnabled ?? false };
 }
 
 /** Read-only preview of the latest saved draft, available to the course team. */
@@ -261,16 +251,9 @@ export async function updateCourseSettings(user: SessionUser, courseId: string, 
     throw new UnprocessableError("Repository-managed courses must be priced at $10 USD.");
   }
 
-  const organizationIds = input.pricingType === "PAID" ? [...new Set(input.freeOrganizationIds)] : [];
-  const organizationCount = await prisma.organization.count({ where: { id: { in: organizationIds } } });
-  if (organizationCount !== organizationIds.length) {
-    throw new UnprocessableError("One or more selected organizations could not be found.", "VALIDATION_ERROR");
-  }
-
-  await prisma.$transaction(async (tx) => {
-    await tx.course.update({
-      where: { id: courseId },
-      data: {
+  await prisma.course.update({
+    where: { id: courseId },
+    data: {
       title: input.title,
       description: input.description || null,
       coverUrl: input.coverUrl || null,
@@ -285,16 +268,8 @@ export async function updateCourseSettings(user: SessionUser, courseId: string, 
       ...(input.variantAssignment ? { variantAssignment: input.variantAssignment } : {}),
       pricingType: input.pricingType,
       priceCents,
-        currency: input.currency.toUpperCase(),
-      },
-    });
-    await tx.courseOrganizationAccess.deleteMany({ where: { courseId } });
-    if (organizationIds.length) {
-      await tx.courseOrganizationAccess.createMany({
-        data: organizationIds.map((organizationId) => ({ courseId, organizationId })),
-        skipDuplicates: true,
-      });
-    }
+      currency: input.currency.toUpperCase(),
+    },
   });
 }
 
