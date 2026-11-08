@@ -4,7 +4,7 @@ const db = vi.hoisted(() => ({
   user: { findUnique: vi.fn(), findMany: vi.fn(), count: vi.fn(), update: vi.fn() },
   course: { findUnique: vi.fn(), update: vi.fn() },
   enrollment: { findUnique: vi.fn(), delete: vi.fn(), update: vi.fn(), create: vi.fn() },
-  payment: { update: vi.fn() },
+  payment: { create: vi.fn(), update: vi.fn() },
   couponUsage: { findUnique: vi.fn(), updateMany: vi.fn() },
   organizationCouponPool: { updateMany: vi.fn() },
   response: { findMany: vi.fn(), deleteMany: vi.fn() },
@@ -172,7 +172,7 @@ describe("removeUserEnrollment", () => {
 describe("enrollUser", () => {
   it("creates an active enrollment and writes audit log", async () => {
     db.user.findUnique.mockResolvedValue({ id: "user-1", email: "learner@test.local" });
-    db.course.findUnique.mockResolvedValue({ id: "course-1", title: "Course 1", status: "PUBLISHED" });
+    db.course.findUnique.mockResolvedValue({ id: "course-1", title: "Course 1", status: "PUBLISHED", pricingType: "PAID", priceCents: 1950, currency: "USD" });
     db.enrollment.findUnique.mockResolvedValue(null);
     db.enrollment.create.mockResolvedValue({ id: "new-enr" });
 
@@ -186,6 +186,9 @@ describe("enrollUser", () => {
         lifecycle: "ACTIVE",
         status: "IN_PROGRESS",
       }),
+    });
+    expect(db.payment.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ enrollmentId: "new-enr", currency: "USD", originalAmountCents: 1950, status: "SUCCEEDED", provider: "admin", amountCents: 0 }),
     });
     expect(db.adminAuditLog.create).toHaveBeenCalledWith(
       expect.objectContaining({
