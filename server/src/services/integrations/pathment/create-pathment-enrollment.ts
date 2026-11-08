@@ -208,7 +208,7 @@ export async function createPathmentEnrollment(
       originalAmountCents: course.priceCents,
       instructorPayoutPercent: course.instructorPayoutPercent,
     });
-    let lifecycle: EnrollmentLifecycle = linkedUser
+    const lifecycle: EnrollmentLifecycle = linkedUser
       ? (preview.grantsAccess ? "ACTIVE" : "PAYMENT_REQUIRED")
       : "PENDING_ACCOUNT";
     const assignment = await assignmentForNewEnrollment(tx, course.id);
