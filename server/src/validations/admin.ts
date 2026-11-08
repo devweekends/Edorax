@@ -29,6 +29,16 @@ export type CreateDiscountCampaignBody = z.infer<typeof createDiscountCampaignBo
 export const discountCampaignParams = params("campaignId");
 export const discountCampaignActiveBody = z.object({ active: z.boolean() });
 
+/** Platform-admin free-for-organization grants (CourseOrganizationAccess). */
+export const courseOrgAccessParams = z.object({ courseId: id, organizationId: id });
+export const courseOrgAccessBody = z.object({ organizationId: id });
+/** Bulk change of free-for-organization for several allocated courses at once. */
+export const courseOrgAccessBulkBody = z.object({
+  courseIds: z.array(id).min(1).max(500),
+  freeForOrganization: z.boolean(),
+});
+export type CourseOrgAccessBulkBody = z.infer<typeof courseOrgAccessBulkBody>;
+
 /** Change a course's publish state from the admin catalog. */
 export const courseStatusBody = z.object({
   status: z.enum(["DRAFT", "PUBLISHED", "ARCHIVED"]),

@@ -750,7 +750,7 @@ model Organization {
   creditTransactions OrganizationCreditTransaction[]
 }
 
-/// Instructor-controlled allow-list for organizations that receive a paid course at no charge.
+/// Platform-admin-controlled allow-list for organizations that receive a paid course at no charge.
 model CourseOrganizationAccess {
   courseId       String
   organizationId String

@@ -20,6 +20,9 @@ import {
   bulkIdsOnlyBody,
   bulkSuspendBody,
   courseIdParams,
+  courseOrgAccessBody,
+  courseOrgAccessBulkBody,
+  courseOrgAccessParams,
   courseStatusBody,
   createDiscountCampaignBody,
   discountCampaignParams,
@@ -131,6 +134,10 @@ router.post("/organizations/:orgId/credits", validateParams(orgIdParams), valida
 router.get("/overview", admin.getOverview);
 router.get("/metrics", validateQuery(metricsQuery), admin.getMetrics);
 router.get("/courses", validateQuery(listCoursesQuery), admin.listCourses);
+router.post("/organizations/:orgId/free-access", validate({ params: orgIdParams, body: courseOrgAccessBulkBody }), admin.setOrgCoursesFreeAccess);
+router.get("/courses/:courseId/org-access", validateParams(courseIdParams), admin.listCourseOrgAccess);
+router.post("/courses/:courseId/org-access", validate({ params: courseIdParams, body: courseOrgAccessBody }), admin.grantCourseOrgAccess);
+router.delete("/courses/:courseId/org-access/:organizationId", validateParams(courseOrgAccessParams), admin.revokeCourseOrgAccess);
 router.get("/discount-campaigns", async (_req, res) => {
   const discounts = await import("../../services/admin/discount-campaigns.js");
   ok(res, await discounts.listDiscountCampaigns());

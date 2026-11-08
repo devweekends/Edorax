@@ -18,6 +18,8 @@ export const ADMIN_AUDIT_ACTIONS = {
   ORGANIZATION_ALLOCATE: "organization.allocate",
   COURSE_REQUEST_APPROVE: "course-request.approve",
   COURSE_REQUEST_REJECT: "course-request.reject",
+  COURSE_ORG_ACCESS_GRANT: "course-org-access.grant",
+  COURSE_ORG_ACCESS_REVOKE: "course-org-access.revoke",
   MANUAL_ACCESS_APPROVE: "manual-access.approve",
   MANUAL_ACCESS_REJECT: "manual-access.reject",
   MANUAL_INSTRUCTOR_PAYOUT_PAID: "manual-instructor-payout.paid",

@@ -14,12 +14,13 @@ export type CouponPriority = {
 /**
  * One priority order for every enrollment channel:
  * 1. The course is free for everyone, so its price is already zero.
- * 2. The instructor listed this organization for free access, and the
- *    organization is assigning the course through Pathment. Coupons do not apply.
+ * 2. A platform admin granted this organization free access to the course, and the
+ *    organization is assigning the course through Pathment. Credits and coupons do not apply.
  * 3. A Pathment assignment uses the organization coupon, then the course price.
  * 4. A direct learner uses an instructor or admin coupon, then the course price.
  *
- * Admins do not grant the organization override. Direct checkout never receives it.
+ * Only platform admins grant the organization override (CourseOrganizationAccess).
+ * Instructors cannot. Direct checkout never receives it.
  */
 export function resolveCouponPriority(input: {
   pricingType: CoursePricingType;

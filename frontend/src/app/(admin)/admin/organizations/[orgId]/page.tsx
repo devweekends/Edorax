@@ -17,6 +17,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AdminActionForm } from "@/components/admin/admin-action-form";
 import { OrganizationCourseDrawer } from "@/components/admin/organization-course-drawer";
+import { SelectAllCheckbox } from "@/components/admin/select-all-checkbox";
+import {
+  grantCourseOrgAccessAction,
+  revokeCourseOrgAccessAction,
+  setCoursesFreeForOrganizationAction,
+} from "@/server/actions/admin/course-org-access";
 import {
   createOrganizationCouponPoolAction,
   grantOrganizationCreditsAction,
@@ -293,25 +299,49 @@ export default async function AdminOrganizationDetailPage({
         description="Published courses currently allocated to this organization. Caps and expiry are enforced on integration enrollments."
         className="mt-12"
       >
+        <form id="bulk-free-access" action={setCoursesFreeForOrganizationAction} className="mb-3 flex flex-wrap items-center gap-2">
+          <input type="hidden" name="organizationId" value={org.id} />
+          <span className="mr-auto text-xs text-muted-foreground">Select courses below, then apply free access to all of them at once.</span>
+          <Button type="submit" name="freeForOrganization" value="true" size="sm" variant="outline">
+            Make selected free
+          </Button>
+          <Button type="submit" name="freeForOrganization" value="false" size="sm" variant="ghost">
+            Revoke selected free
+          </Button>
+        </form>
         <AdminTable minWidth="860px">
           <AdminTableHead>
             <tr>
+              <AdminTableHeaderCell>
+                <SelectAllCheckbox formId="bulk-free-access" name="courseIds" label="Select all courses" />
+              </AdminTableHeaderCell>
               <AdminTableHeaderCell>Course</AdminTableHeaderCell>
               <AdminTableHeaderCell align="right">Used / max</AdminTableHeaderCell>
               <AdminTableHeaderCell>Expires</AdminTableHeaderCell>
               <AdminTableHeaderCell>Assignable</AdminTableHeaderCell>
+              <AdminTableHeaderCell>Free for org</AdminTableHeaderCell>
             </tr>
           </AdminTableHead>
           <AdminTableBody>
             {allocations.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                <td colSpan={6} className="px-4 py-10 text-center text-sm text-muted-foreground">
                   No allocations yet.
                 </td>
               </tr>
             ) : (
               allocations.map((row) => (
                 <AdminTableRow key={row.id}>
+                  <AdminTableCell>
+                    <input
+                      type="checkbox"
+                      form="bulk-free-access"
+                      name="courseIds"
+                      value={row.course.id}
+                      aria-label={`Select ${row.course.title}`}
+                      className="size-4 rounded border-input accent-primary"
+                    />
+                  </AdminTableCell>
                   <AdminTableCell>
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-medium">{row.course.title}</span>
@@ -348,6 +378,43 @@ export default async function AdminOrganizationDetailPage({
                         {row.isAllowed ? "Turn off" : "Turn on"}
                       </Button>
                     </form>
+                  </AdminTableCell>
+                  <AdminTableCell>
+                    {row.freeForOrganization ? (
+                      <AdminActionForm
+                        action={revokeCourseOrgAccessAction}
+                        submitLabel="Revoke free"
+                        pendingLabel="Revoking…"
+                        variant="outline"
+                        size="sm"
+                        confirm={{
+                          question: `Revoke free access to ${row.course.title} for ${org.name}?`,
+                          description:
+                            "Future Pathment assignments of this course will use credits or coupons again. Existing enrollments are not changed.",
+                          confirmLabel: "Revoke free access",
+                        }}
+                      >
+                        <input type="hidden" name="courseId" value={row.course.id} />
+                        <input type="hidden" name="organizationId" value={org.id} />
+                      </AdminActionForm>
+                    ) : (
+                      <AdminActionForm
+                        action={grantCourseOrgAccessAction}
+                        submitLabel="Make free"
+                        pendingLabel="Saving…"
+                        variant="outline"
+                        size="sm"
+                        confirm={{
+                          question: `Make ${row.course.title} free for ${org.name}?`,
+                          description:
+                            "Pathment assignments of this course to this organization will not use credits or coupons, and the instructor receives no payout for them.",
+                          confirmLabel: "Make free for organization",
+                        }}
+                      >
+                        <input type="hidden" name="courseId" value={row.course.id} />
+                        <input type="hidden" name="organizationId" value={org.id} />
+                      </AdminActionForm>
+                    )}
                   </AdminTableCell>
                 </AdminTableRow>
               ))

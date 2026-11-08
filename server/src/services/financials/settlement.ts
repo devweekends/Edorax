@@ -9,10 +9,9 @@ export type AssignmentSettlement = {
   /** Commercial decision grants access. Account linking still waits for a user. */
   grantsAccess: boolean;
 };
-
 /**
  * One commercial decision for every enrollment channel.
- * Instructor free-for-organization is only settled on Pathment, and only for organizations the instructor listed.
+ * Organization free access is only settled on Pathment, and only for organizations a platform admin granted it to.
  * Direct checkout never receives that override. Admin course access is a separate waiver and does not use it.
  */
 export function settleAssignment(input: {

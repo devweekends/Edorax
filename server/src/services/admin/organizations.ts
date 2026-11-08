@@ -103,7 +103,17 @@ export async function getOrganization(orgId: string): Promise<AdminOrganizationD
         apiCredentials: { orderBy: { createdAt: "desc" } },
         courseAllocations: {
           orderBy: { updatedAt: "desc" },
-          include: { course: { select: { id: true, title: true, slug: true, status: true } } },
+          include: {
+            course: {
+              select: {
+                id: true,
+                title: true,
+                slug: true,
+                status: true,
+                organizationFreeAccesses: { where: { organizationId: orgId }, select: { organizationId: true } },
+              },
+            },
+          },
         },
         courseRequests: { where: { status: "PENDING" }, include: { course: { select: { title: true, slug: true } } } },
         _count: { select: { enrollments: { where: CONFIRMED_ENROLLMENT_WHERE } } },
@@ -155,9 +165,11 @@ export async function getOrganization(orgId: string): Promise<AdminOrganizationD
       active: cred.active,
       lastUsedAt: cred.lastUsedAt?.toISOString() ?? null,
     })),
-    allocations: org.courseAllocations.map((row) => ({
+    allocations: org.courseAllocations.map(({ course: { organizationFreeAccesses, ...course }, ...row }) => ({
       id: row.id,
-      course: row.course,
+      course,
+      // Platform-admin grant: the course is free for this org's Pathment assignments.
+      freeForOrganization: organizationFreeAccesses.length > 0,
       isAllowed: row.isAllowed,
       maxEnrollments: row.maxEnrollments,
       currentEnrollments: row.currentEnrollments,

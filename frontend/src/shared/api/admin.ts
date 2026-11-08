@@ -87,6 +87,8 @@ export type AdminCredentialRow = {
 export type AdminAllocationRow = {
   id: string;
   course: { id: string; slug: string; title: string; status: CourseStatus };
+  /** Platform-admin grant: this course is free for the organization's Pathment assignments. */
+  freeForOrganization: boolean;
   isAllowed: boolean;
   maxEnrollments: number;
   currentEnrollments: number;
@@ -189,6 +191,15 @@ export type AdminUsersView = {
 export type AdminCoursesView = {
   courses: AdminCourseRow[];
   page: AdminPageInfo;
+};
+
+/** Platform-admin free-for-organization grants for one course. */
+export type AdminCourseOrgAccessView = {
+  course: { id: string; title: string; slug: string };
+  grants: Array<{
+    organization: { id: string; name: string; slug: string };
+    createdAt: string;
+  }>;
 };
 
 /** One-time TOTP enrollment payload: the secret, the otpauth URI, and a scannable QR (data URL). */
