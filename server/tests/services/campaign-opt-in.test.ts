@@ -4,6 +4,7 @@ import { prisma } from "../../src/db/prisma.js";
 import { createDiscountCampaign, listDiscountCampaigns, setDiscountCampaignActive } from "../../src/services/admin/discount-campaigns.js";
 import { listInstructorCampaigns, setInstructorCampaignParticipation } from "../../src/services/teach/campaigns.js";
 import { loadCheckout } from "../../src/services/enrollment/checkout.js";
+import { createDiscountCampaignBody } from "../../src/validations/admin.js";
 import type { SessionUser } from "../../src/types/auth.js";
 
 const tag = randomUUID().slice(0, 8);
@@ -33,9 +34,29 @@ afterAll(async () => {
 });
 
 describe("campaign participation requires instructor opt-in", () => {
+  it("does not allow new campaigns to target individual courses", () => {
+    expect(createDiscountCampaignBody.safeParse({ label: "Restricted", scope: "SELECTED_COURSES", courseIds: [firstCourse.id], percentOff: 20, maxRedemptions: 50, autoApply: true }).success).toBe(false);
+  });
+
+  it("keeps existing selected-course campaigns available to their eligible instructor", async () => {
+    const legacy = await prisma.courseDiscountCampaign.create({
+      data: { createdById: admin.id, label: "Existing campaign", scope: "SELECTED_COURSES", courseIds: [firstCourse.id], percentOff: 20, maxRedemptions: 10, autoApply: true },
+    });
+    try {
+      const firstView = (await listInstructorCampaigns(instructor)).campaigns.find((item) => item.id === legacy.id);
+      const secondView = (await listInstructorCampaigns(other)).campaigns.find((item) => item.id === legacy.id);
+      expect(firstView?.eligibleCourseIds).toContain(firstCourse.id);
+      expect(secondView?.eligibleCourseIds).not.toContain(secondCourse.id);
+      await setInstructorCampaignParticipation(instructor, legacy.id, [firstCourse.id]);
+      expect((await prisma.courseDiscountCampaign.findUniqueOrThrow({ where: { id: legacy.id } })).courseIds).toEqual([firstCourse.id]);
+    } finally {
+      await prisma.courseDiscountCampaign.delete({ where: { id: legacy.id } });
+    }
+  });
+
   it("creates an eligible campaign without applying discounts and preserves choices when paused", async () => {
     const campaign = await createDiscountCampaign(admin, {
-      label: "Opt-in campaign", scope: "SELECTED_COURSES", courseIds: [firstCourse.id, secondCourse.id],
+      label: "Opt-in campaign", scope: "ALL",
       percentOff: 20, maxRedemptions: 50, autoApply: true, code: null,
     });
     campaignId = campaign.id;
@@ -63,6 +84,6 @@ describe("campaign participation requires instructor opt-in", () => {
     await setDiscountCampaignActive(admin, campaignId, false);
     await setDiscountCampaignActive(admin, campaignId, true);
     expect((await loadCheckout(firstCourse.slug, admin.id)).automaticDiscount).toBeNull();
-    expect((await prisma.courseDiscountCampaign.findUniqueOrThrow({ where: { id: campaignId } })).courseIds).toEqual(expect.arrayContaining([firstCourse.id, secondCourse.id]));
+    expect((await prisma.courseDiscountCampaign.findUniqueOrThrow({ where: { id: campaignId } })).courseIds).toEqual([]);
   });
 });

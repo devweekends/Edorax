@@ -17,16 +17,14 @@ export const createDiscountCampaignBody = z.object({
   maxRedemptions: z.coerce.number().int().min(1).max(100000),
   expiresAt: z.string().datetime().nullable().optional(),
   autoApply: z.boolean().default(false),
-  scope: z.enum(["ALL", "CATEGORY", "SUBCATEGORY", "TAG", "SELECTED_COURSES"]),
+  scope: z.enum(["ALL", "CATEGORY", "SUBCATEGORY", "TAG"]),
   category: z.enum(["TECH", "SOFT_SKILLS"]).optional(),
   subcategory: z.string().trim().min(1).max(80).optional(),
   tag: z.string().trim().min(1).max(32).optional(),
-  courseIds: z.array(id).max(500).default([]),
 }).refine((body) => body.code || body.autoApply, { message: "Enter a coupon code or enable automatic discount." })
   .refine((body) => body.scope !== "CATEGORY" || body.category, { message: "Choose a category." })
   .refine((body) => body.scope !== "SUBCATEGORY" || body.subcategory, { message: "Choose a subcategory." })
-  .refine((body) => body.scope !== "TAG" || body.tag, { message: "Choose a tag." })
-  .refine((body) => body.scope !== "SELECTED_COURSES" || body.courseIds.length > 0, { message: "Select at least one course." });
+  .refine((body) => body.scope !== "TAG" || body.tag, { message: "Choose a tag." });
 export type CreateDiscountCampaignBody = z.infer<typeof createDiscountCampaignBody>;
 export const discountCampaignParams = params("campaignId");
 export const discountCampaignActiveBody = z.object({ active: z.boolean() });

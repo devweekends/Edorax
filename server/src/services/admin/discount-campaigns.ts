@@ -9,7 +9,6 @@ function courseWhere(input: CreateDiscountCampaignBody): Prisma.CourseWhereInput
     case "CATEGORY": return { category: input.category };
     case "SUBCATEGORY": return { subcategory: { equals: input.subcategory, mode: "insensitive" } };
     case "TAG": return { tags: { has: input.tag!.toLowerCase() } };
-    case "SELECTED_COURSES": return { id: { in: input.courseIds } };
     default: return {};
   }
 }
@@ -50,9 +49,6 @@ export async function createDiscountCampaign(actor: AdminActor, input: CreateDis
   });
   if (!courses.length) throw new UnprocessableError("No published paid courses match this campaign.", "DISCOUNT_SCOPE_EMPTY");
   const courseIds = courses.map((course) => course.id);
-  if (input.scope === "SELECTED_COURSES" && courseIds.length !== new Set(input.courseIds).size) {
-    throw new UnprocessableError("One or more selected courses are not published paid courses.", "DISCOUNT_SCOPE_INVALID");
-  }
   try {
     return await prisma.$transaction(async (tx) => {
       const campaign = await tx.courseDiscountCampaign.create({
@@ -64,7 +60,7 @@ export async function createDiscountCampaign(actor: AdminActor, input: CreateDis
           category: input.scope === "CATEGORY" ? input.category : null,
           subcategory: input.scope === "SUBCATEGORY" ? input.subcategory : null,
           tag: input.scope === "TAG" ? input.tag!.toLowerCase() : null,
-          courseIds: input.scope === "SELECTED_COURSES" ? courseIds : [],
+          courseIds: [],
           percentOff: input.percentOff,
           maxRedemptions: input.maxRedemptions,
           autoApply: input.autoApply,

@@ -17,7 +17,7 @@ type DiscountAdminView = {
 export default async function AdminDiscountsPage() {
   const view = await serverApiFetch<DiscountAdminView>("/api/v1/admin/discount-campaigns");
   return <div>
-    <AdminPageHeader eyebrow="Sales" title="Discounts" description="Create one coupon or automatic discount for all paid courses, a category, a subcategory, a tag, or a selected group." />
+    <AdminPageHeader eyebrow="Sales" title="Discounts" description="Create a promotion for eligible courses. Instructors choose which courses participate." />
     <DiscountCampaignsPanel {...view} />
   </div>;
 }
