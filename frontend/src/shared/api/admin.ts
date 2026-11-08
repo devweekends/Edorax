@@ -113,7 +113,17 @@ export type AdminCouponPoolRow = {
 };
 
 export type AdminOrganizationDetail = {
-  organization: { id: string; slug: string; name: string; enrollmentCount: number };
+  organization: { id: string; slug: string; name: string; enrollmentCount: number; creditBalance: number };
+  creditTransactions: Array<{
+    id: string;
+    amountCredits: number;
+    status: "RESERVED" | "COMMITTED" | "RELEASED";
+    createdAt: string;
+    committedAt: string | null;
+    releasedAt: string | null;
+    enrollmentId: string;
+    courseTitle: string;
+  }>;
   credentials: AdminCredentialRow[];
   allocations: AdminAllocationRow[];
   couponPools: AdminCouponPoolRow[];
@@ -247,3 +257,40 @@ export type AdminAuditView = {
   entries: AdminAuditRow[];
   page: AdminPageInfo;
 };
+
+export type AdminWithdrawalRow = {
+  id: string;
+  instructorId: string;
+  instructorName: string | null;
+  instructorEmail: string;
+  amountCents: number;
+  currency: string;
+  status: "REQUESTED" | "PAID" | "REJECTED";
+  note: string;
+  paymentCount: number;
+  requestedAt: string;
+  resolvedAt: string | null;
+  resolvedById: string | null;
+};
+
+export type FundingSourceRevenueBreakdown = {
+  count: number;
+  originalAmountCents: number;
+  discountAmountCents: number;
+  organizationContributionCents: number;
+  learnerAmountCents: number;
+  instructorShareCents: number;
+  platformRevenueCents: number;
+};
+
+export type AdminRevenueReport = {
+  totalPlatformRevenueCents: number;
+  totalLearnerPaymentsCents: number;
+  totalOrganizationContributionsCents: number;
+  totalInstructorEarningsCents: number;
+  totalInstructorPaidCents: number;
+  totalInstructorPendingCents: number;
+  currency: string;
+  byFundingSource: Record<string, FundingSourceRevenueBreakdown>;
+};
+

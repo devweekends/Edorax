@@ -103,7 +103,7 @@ describe("organizations", () => {
     const ok = await request(app)
       .put(`/api/v1/admin/organizations/${createdOrgId}/allocations`)
       .set(admin())
-      .send({ isAllowed: true, courses: [{ courseId: fx.course.id, maxEnrollments: 25, expiresAt: "2030-01-31" }] });
+      .send({ courses: [{ courseId: fx.course.id, maxEnrollments: 25, expiresAt: "2030-01-31" }] });
     expect(ok.status).toBe(204);
 
     const detail = await request(app).get(`/api/v1/admin/organizations/${createdOrgId}`).set(admin());
@@ -133,9 +133,17 @@ describe("organizations", () => {
     expect(off.status).toBe(204);
     expect(await prisma.organizationCourse.findUnique({ where: key })).toMatchObject({ isAllowed: false, maxEnrollments: 25 });
 
+    // Editing the catalog without specifying assignability must preserve an explicit opt-out.
+    const edit = await request(app)
+      .put(`/api/v1/admin/organizations/${createdOrgId}/allocations`)
+      .set(admin())
+      .send({ courses: [{ courseId: fx.course.id, maxEnrollments: 30 }] });
+    expect(edit.status).toBe(204);
+    expect(await prisma.organizationCourse.findUnique({ where: key })).toMatchObject({ isAllowed: false, maxEnrollments: 30 });
+
     const on = await request(app).patch(url).set(admin()).send({ enabled: true });
     expect(on.status).toBe(204);
-    expect(await prisma.organizationCourse.findUnique({ where: key })).toMatchObject({ isAllowed: true, maxEnrollments: 25 });
+    expect(await prisma.organizationCourse.findUnique({ where: key })).toMatchObject({ isAllowed: true, maxEnrollments: 30 });
 
     // An allocation that does not exist is a 404, not a silent no-op.
     const missing = await request(app)

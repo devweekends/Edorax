@@ -619,3 +619,76 @@ export const TEACH_ERROR_CODES = {
   EMAIL_NOT_CONFIGURED: "EMAIL_NOT_CONFIGURED",
   EMAIL_FAILED: "EMAIL_FAILED",
 } as const;
+
+// ---------------------------------------------------------------------------
+// Instructor wallet & withdrawals
+
+export type InstructorWithdrawalStatus = "REQUESTED" | "PAID" | "REJECTED";
+
+export type InstructorWithdrawalItem = {
+  id: string;
+  amountCents: number;
+  currency: string;
+  status: InstructorWithdrawalStatus;
+  note: string;
+  paymentCount: number;
+  requestedAt: string;
+  resolvedAt: string | null;
+};
+
+export type InstructorEarningItem = {
+  id: string;
+  courseTitle: string;
+  learnerLabel: string;
+  fundingSource: string | null;
+  amountCents: number;
+  instructorShareCents: number;
+  currency: string;
+  paidAt: string | null;
+  status: "AVAILABLE" | "PENDING_WITHDRAWAL" | "PAID";
+};
+
+export type InstructorWalletSummary = {
+  withdrawalsEnabled: boolean;
+  totalEarnedCents: number;
+  alreadyPaidCents: number;
+  pendingWithdrawalCents: number;
+  availableBalanceCents: number;
+  currency: string;
+  withdrawals: InstructorWithdrawalItem[];
+  recentEarnings: InstructorEarningItem[];
+};
+
+// ---------------------------------------------------------------------------
+// Instructor promotional discount campaigns
+
+export type InstructorCampaignCourse = {
+  id: string;
+  title: string;
+  slug: string;
+  category: CourseCategory | null;
+  subcategory: string | null;
+  tags: string[];
+  priceCents: number;
+  currency: string;
+};
+
+export type InstructorCampaignItem = {
+  id: string;
+  label: string;
+  code: string | null;
+  scope: string;
+  percentOff: number;
+  maxRedemptions: number;
+  autoApply: boolean;
+  active: boolean;
+  expiresAt: string | null;
+  createdAt: string;
+  participatingCourseIds: string[];
+  eligibleCourseIds: string[];
+};
+
+export type InstructorCampaignsView = {
+  campaigns: InstructorCampaignItem[];
+  courses: InstructorCampaignCourse[];
+};

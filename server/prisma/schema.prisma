@@ -147,6 +147,18 @@ enum InstructorPayoutStatus {
   PAID
 }
 
+enum InstructorWithdrawalStatus {
+  REQUESTED
+  PAID
+  REJECTED
+}
+
+enum OrganizationCreditTransactionStatus {
+  RESERVED
+  COMMITTED
+  RELEASED
+}
+
 /// Org coupon seat that has been reserved for a learner (mentor assign / Pathment enroll).
 enum CouponUsageStatus {
   ISSUED
@@ -324,6 +336,7 @@ model User {
   leaguePlacements              LeaguePlacement[]
   couponUsages                  CouponUsage[]
   creditEntries                 CreditEntry[]
+  instructorWithdrawals         InstructorWithdrawal[]
 }
 
 /// A learner's own AI provider key for AI interviews. Only the AES-256-GCM
@@ -423,6 +436,8 @@ model Course {
   pricingType    CoursePricingType @default(FREE)
   priceCents     Int          @default(0)
   currency       String       @default("USD")
+  /// Global instructor share used by the financial calculator.
+  instructorPayoutPercent Int  @default(70)
   sequential     Boolean      @default(true)
   /// When true, text open questions grade instantly with the learner's OpenRouter key instead of the mentor queue.
   autoGradeOpenQuestions Boolean @default(false)
@@ -449,6 +464,7 @@ model Course {
   chapterDrafts  CourseChapterDraft[]
   enrollments    Enrollment[]
   organizationCourses OrganizationCourse[]
+  organizationFreeAccesses CourseOrganizationAccess[]
   organizationCourseRequests OrganizationCourseRequest[]
   couponPools    OrganizationCouponPool[]
   couponUsages   CouponUsage[]
@@ -706,6 +722,7 @@ model Enrollment {
   instructorCouponRedemption InstructorCouponRedemption?
   xpEntries         XpEntry[]
   couponUsage       CouponUsage?
+  organizationCreditTransaction OrganizationCreditTransaction?
   certificate       Certificate?
 
   @@unique([courseId, userId])
@@ -728,6 +745,37 @@ model Organization {
   enrollments     Enrollment[]
   couponPools     OrganizationCouponPool[]
   couponUsages    CouponUsage[]
+  freeCourseAccesses CourseOrganizationAccess[]
+  creditBalance   Int                     @default(0)
+  creditTransactions OrganizationCreditTransaction[]
+}
+
+/// Instructor-controlled allow-list for organizations that receive a paid course at no charge.
+model CourseOrganizationAccess {
+  courseId       String
+  organizationId String
+  course         Course       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  organization  Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+
+  @@id([courseId, organizationId])
+  @@index([organizationId])
+}
+
+/// Append-only organization credit movement linked to the enrollment it funds.
+model OrganizationCreditTransaction {
+  id            String                              @id @default(cuid())
+  organizationId String
+  organization  Organization                        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  enrollmentId  String                              @unique
+  enrollment    Enrollment                          @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  amountCredits Int
+  status        OrganizationCreditTransactionStatus @default(RESERVED)
+  createdAt     DateTime                            @default(now())
+  committedAt   DateTime?
+  releasedAt    DateTime?
+
+  @@index([organizationId, status])
 }
 
 /// Limited coupon seats an organization can grant for one course, or for any allocated course
@@ -907,12 +955,46 @@ model Payment {
   status       PaymentStatus @default(PENDING)
   provider     String?
   providerRef  String?
+  originalAmountCents Int               @default(0)
+  discountAmountCents Int                  @default(0)
+  organizationContributionCents Int         @default(0)
+  learnerAmountCents Int                @default(0)
+  instructorPayoutPercent Int               @default(0)
+  platformRevenueCents Int                  @default(0)
+  fundingSource String?
   paidAt       DateTime?
   instructorShareCents Int   @default(0)
   instructorPayoutStatus InstructorPayoutStatus @default(NOT_DUE)
   instructorPayoutPaidAt DateTime?
+  /// Set while these earnings are reserved by a withdrawal request, and kept after that request is paid.
+  payoutWithdrawalId String?
+  payoutWithdrawal   InstructorWithdrawal? @relation(fields: [payoutWithdrawalId], references: [id], onDelete: SetNull)
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
+
+  @@index([instructorPayoutStatus, status])
+  @@index([payoutWithdrawalId])
+}
+
+/// Instructor request to be paid the earnings already calculated on Payment rows.
+model InstructorWithdrawal {
+  id           String                      @id @default(cuid())
+  instructorId String
+  instructor   User                        @relation(fields: [instructorId], references: [id], onDelete: Cascade)
+  amountCents  Int
+  currency     String                      @default("USD")
+  status       InstructorWithdrawalStatus  @default(REQUESTED)
+  /// Where the instructor asked to receive the transfer.
+  note         String                      @db.VarChar(240)
+  /// Payment ids included when the request was created. Kept after a rejection.
+  paymentIds   String[]
+  requestedAt  DateTime                    @default(now())
+  resolvedAt   DateTime?
+  resolvedById String?
+  payments     Payment[]
+
+  @@index([instructorId, status])
+  @@index([status, requestedAt])
 }
 
 /// Denormalized daily study seconds — updated on heartbeat, not aggregated from Response.

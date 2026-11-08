@@ -1,3 +1,4 @@
+import { instructorWithdrawalsEnabled, requireInstructorWithdrawals } from "../../middlewares/instructor-withdrawals.js";
 import { prisma } from "../../db/prisma.js";
 import { approveManualAccess, listManualInstructorPayouts, markManualInstructorPayoutPaid, rejectManualAccess } from "../../services/enrollment/manual-access.js";
 import { created, noContent, ok } from "../../utils/responses.js";
@@ -42,6 +43,9 @@ import {
   totpCodeBody,
   userIdParams,
   userEnrollmentParams,
+  grantOrganizationCreditsBody,
+  rejectWithdrawalBody,
+  withdrawalIdParams,
   enrollUserBody,
 } from "../../validations/admin.js";
 
@@ -56,7 +60,30 @@ router.patch("/profile", profileLimiter, validateBody(adminProfileBody), admin.u
 router.patch("/password", profileLimiter, validateBody(adminPasswordBody), admin.updatePassword);
 
 router.get("/manual-access", async (_req, res) => {
-  const rows = await prisma.enrollment.findMany({ where: { lifecycle: "PAYMENT_REQUIRED", userId: { not: null } }, select: { id: true, createdAt: true, user: { select: { name: true, email: true } }, course: { select: { title: true } }, payment: { select: { amountCents: true, currency: true } } }, orderBy: { createdAt: "desc" }, take: 500 });
+  const rows = await prisma.enrollment.findMany({
+    where: { lifecycle: "PAYMENT_REQUIRED", userId: { not: null } },
+    select: {
+      id: true,
+      createdAt: true,
+      user: { select: { name: true, email: true } },
+      course: { select: { title: true } },
+      payment: {
+        select: {
+          amountCents: true,
+          currency: true,
+          originalAmountCents: true,
+          discountAmountCents: true,
+          organizationContributionCents: true,
+          learnerAmountCents: true,
+          instructorShareCents: true,
+          platformRevenueCents: true,
+          fundingSource: true,
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 500,
+  });
   ok(res, rows);
 });
 router.post("/manual-access/:enrollmentId/approve", validateParams(enrollmentParams), async (req, res) => {
@@ -72,6 +99,34 @@ router.post("/manual-payouts/:enrollmentId/paid", validateParams(enrollmentParam
   await markManualInstructorPayoutPaid(req.params.enrollmentId as string, req.user!);
   ok(res, { paid: true });
 });
+
+router.get("/withdrawals/config", (_req, res) => ok(res, { enabled: instructorWithdrawalsEnabled() }));
+router.get("/withdrawals", async (req, res) => {
+  const { listAdminWithdrawals } = await import("../../services/financials/withdrawals.js");
+  const status = req.query.status as "REQUESTED" | "PAID" | "REJECTED" | undefined;
+  ok(res, await listAdminWithdrawals(status));
+});
+router.post("/withdrawals/:withdrawalId/pay", requireInstructorWithdrawals, validateParams(withdrawalIdParams), async (req, res) => {
+  const { markWithdrawalPaid } = await import("../../services/financials/withdrawals.js");
+  ok(res, await markWithdrawalPaid(req.params.withdrawalId as string, req.user!));
+});
+router.post("/withdrawals/:withdrawalId/reject", requireInstructorWithdrawals, validateParams(withdrawalIdParams), validateBody(rejectWithdrawalBody), async (req, res) => {
+  const { rejectWithdrawal } = await import("../../services/financials/withdrawals.js");
+  const { reason } = req.body as { reason?: string };
+  ok(res, await rejectWithdrawal(req.params.withdrawalId as string, req.user!, reason));
+});
+
+router.get("/revenue", async (_req, res) => {
+  const { getPlatformRevenueReport } = await import("../../services/financials/revenue-report.js");
+  ok(res, await getPlatformRevenueReport());
+});
+
+router.post("/organizations/:orgId/credits", validateParams(orgIdParams), validateBody(grantOrganizationCreditsBody), async (req, res) => {
+  const { grantOrganizationCreditsAdmin } = await import("../../services/admin/organizations.js");
+  const { amountCredits, reason } = req.body as { amountCredits: number; reason?: string };
+  ok(res, await grantOrganizationCreditsAdmin(req.params.orgId as string, req.user!, amountCredits, reason));
+});
+
 
 router.get("/overview", admin.getOverview);
 router.get("/metrics", validateQuery(metricsQuery), admin.getMetrics);

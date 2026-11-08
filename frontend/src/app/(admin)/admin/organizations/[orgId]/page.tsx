@@ -3,6 +3,7 @@ import {
   AlertCircle,
   ArrowUpRight,
   BookOpen,
+  Coins,
   KeyRound,
   Layers3,
   ShieldCheck,
@@ -18,9 +19,9 @@ import { AdminActionForm } from "@/components/admin/admin-action-form";
 import { OrganizationCourseDrawer } from "@/components/admin/organization-course-drawer";
 import {
   createOrganizationCouponPoolAction,
+  grantOrganizationCreditsAction,
   rotateOrganizationCredentialFormAction,
   setAllocationAllowedAction,
-  setAllocationLeaderboardAction,
   setOrganizationCouponPoolActiveAction,
 } from "@/server/actions/admin/organizations";
 import {
@@ -46,7 +47,7 @@ export default async function AdminOrganizationDetailPage({
   const { orgId } = await params;
   const query = await searchParams;
 
-  const { organization: org, credentials, allocations, couponPools, pendingRequests, publishedCourses } =
+  const { organization: org, credentials, allocations, couponPools, creditTransactions, pendingRequests, publishedCourses } =
     await serverApiFetchOrNotFound<AdminOrganizationDetail>(`/api/v1/admin/organizations/${encodeURIComponent(orgId)}`);
 
   const allocationByCourseId = new Map(allocations.map((row) => [row.course.id, row]));
@@ -106,6 +107,7 @@ export default async function AdminOrganizationDetailPage({
       />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard icon={Coins} label="Available credits" value={`$${(org.creditBalance / 100).toFixed(2)}`} detail={`${org.creditBalance.toLocaleString()} cents available`} />
         <MetricCard icon={Users} label="Integration enrollments" value={org.enrollmentCount.toLocaleString()} detail="Learners connected" />
         <MetricCard icon={BookOpen} label="Catalog courses" value={allocations.length.toLocaleString()} detail="Allocated to this org" />
         <MetricCard icon={KeyRound} label="API credentials" value={credentials.filter((credential) => credential.active).length.toLocaleString()} detail="Active access keys" />
@@ -142,6 +144,102 @@ export default async function AdminOrganizationDetailPage({
           </ul>
         </AdminPanel>
       ) : null}
+
+      <AdminSection
+        title="Credits & funding"
+        description="Organization credits are used for Pathment course contributions. One credit represents one cent."
+        className="mt-0"
+      >
+        <AdminPanel className="p-0">
+          <div className="grid gap-6 border-b border-border p-5 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] lg:gap-8 sm:p-6">
+            <div className="flex items-start gap-4">
+              <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+                <Coins className="size-5" aria-hidden />
+              </span>
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Available balance</p>
+                <p className="mt-1 text-3xl font-semibold tracking-tight tabular-nums">${(org.creditBalance / 100).toFixed(2)}</p>
+                <p className="mt-2 text-xs text-muted-foreground">{org.creditBalance.toLocaleString()} credits available for course contributions</p>
+              </div>
+            </div>
+            <div className="rounded-xl border border-border bg-background/50 p-4 sm:p-5">
+              <h3 className="text-sm font-semibold">Add credits</h3>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">Add funds to this organization’s available balance.</p>
+              <AdminActionForm
+                action={grantOrganizationCreditsAction}
+                submitLabel="Grant credits"
+                pendingLabel="Adding…"
+                className="mt-4 space-y-4"
+                confirm={{
+                  question: `Grant credits to ${org.name}?`,
+                  description: "Credits will be added immediately to the organization's credit balance for Pathment course sponsorships.",
+                  confirmLabel: "Confirm credit grant",
+                }}
+              >
+                <input type="hidden" name="organizationId" value={org.id} />
+                <div className="grid gap-3 sm:grid-cols-[minmax(0,0.6fr)_minmax(0,1fr)]">
+                  <label className="space-y-1.5 text-xs font-medium">
+                    <span>Amount (USD)</span>
+                    <span className="relative block">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground" aria-hidden>$</span>
+                      <input name="amountDollars" type="number" min="1" step="1" defaultValue="50" required className="h-10 w-full rounded-lg border border-input bg-background pl-7 pr-3 text-sm tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+                    </span>
+                  </label>
+                  <label className="space-y-1.5 text-xs font-medium">
+                    <span>Reason <span className="font-normal text-muted-foreground">(optional)</span></span>
+                    <input name="reason" type="text" placeholder="e.g. Monthly allocation" className="block h-10 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary" />
+                  </label>
+                </div>
+              </AdminActionForm>
+            </div>
+          </div>
+          <div className="px-5 pb-3 pt-5 sm:px-6">
+            <h3 className="text-sm font-semibold">Credit activity</h3>
+            <p className="mt-1 text-xs text-muted-foreground">Course contributions funded by this organization.</p>
+          </div>
+          <AdminTable minWidth="720px">
+            <AdminTableHead>
+              <tr>
+                <AdminTableHeaderCell>Date</AdminTableHeaderCell>
+                <AdminTableHeaderCell>Course</AdminTableHeaderCell>
+                <AdminTableHeaderCell align="right">Credits</AdminTableHeaderCell>
+                <AdminTableHeaderCell>Status</AdminTableHeaderCell>
+              </tr>
+            </AdminTableHead>
+            <AdminTableBody>
+              {creditTransactions.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                    <Coins className="mx-auto mb-3 size-6 text-muted-foreground/60" aria-hidden />
+                    <span className="block font-medium text-foreground">No credit activity yet</span>
+                    <span className="mt-1 block text-xs">Course contributions will appear here.</span>
+                  </td>
+                </tr>
+              ) : (
+                creditTransactions.map((transaction) => (
+                  <AdminTableRow key={transaction.id}>
+                    <AdminTableCell className="text-muted-foreground">
+                      {new Date(transaction.createdAt).toLocaleDateString()}
+                    </AdminTableCell>
+                    <AdminTableCell>
+                      <span className="font-medium">{transaction.courseTitle}</span>
+                      <span className="mt-0.5 block text-xs text-muted-foreground">{transaction.enrollmentId}</span>
+                    </AdminTableCell>
+                    <AdminTableCell align="right" className="tabular-nums">
+                      ${ (transaction.amountCredits / 100).toFixed(2) }
+                    </AdminTableCell>
+                    <AdminTableCell>
+                      <Badge variant={transaction.status === "COMMITTED" ? "secondary" : "outline"}>
+                        {transaction.status.toLowerCase()}
+                      </Badge>
+                    </AdminTableCell>
+                  </AdminTableRow>
+                ))
+              )}
+            </AdminTableBody>
+          </AdminTable>
+        </AdminPanel>
+      </AdminSection>
 
       <AdminSection title="Access & credentials" description="Manage the keys used by this organization’s integration." className="mt-0">
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
@@ -202,13 +300,12 @@ export default async function AdminOrganizationDetailPage({
               <AdminTableHeaderCell align="right">Used / max</AdminTableHeaderCell>
               <AdminTableHeaderCell>Expires</AdminTableHeaderCell>
               <AdminTableHeaderCell>Assignable</AdminTableHeaderCell>
-              <AdminTableHeaderCell>Leaderboards</AdminTableHeaderCell>
             </tr>
           </AdminTableHead>
           <AdminTableBody>
             {allocations.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                <td colSpan={4} className="px-4 py-10 text-center text-sm text-muted-foreground">
                   No allocations yet.
                 </td>
               </tr>
@@ -249,22 +346,6 @@ export default async function AdminOrganizationDetailPage({
                         aria-label={`${row.isAllowed ? "Turn off" : "Turn on"} integration enrollments for ${row.course.title}`}
                       >
                         {row.isAllowed ? "Turn off" : "Turn on"}
-                      </Button>
-                    </form>
-                  </AdminTableCell>
-                  <AdminTableCell>
-                    <form action={setAllocationLeaderboardAction} className="flex items-center gap-2">
-                      <input type="hidden" name="organizationId" value={org.id} />
-                      <input type="hidden" name="courseId" value={row.course.id} />
-                      <input type="hidden" name="enabled" value={row.leaderboardEnabled ? "false" : "true"} />
-                      {row.leaderboardEnabled ? <Badge variant="secondary">On</Badge> : <Badge variant="outline">Off</Badge>}
-                      <Button
-                        type="submit"
-                        size="sm"
-                        variant="ghost"
-                        aria-label={`${row.leaderboardEnabled ? "Turn off" : "Turn on"} leaderboards for ${row.course.title}`}
-                      >
-                        {row.leaderboardEnabled ? "Turn off" : "Turn on"}
                       </Button>
                     </form>
                   </AdminTableCell>

@@ -279,13 +279,21 @@ export function CourseSettings({ course }: { course: CourseSettingsView }) {
       <section id="pricing" aria-labelledby="pricing-title" className="scroll-mt-24 overflow-hidden rounded-2xl border bg-card">
         <SectionHeading icon={Wallet} title="Pricing" description="Choose how learners enroll in this course." id="pricing-title" />
         <div className="grid gap-5 p-5 sm:grid-cols-2 sm:p-6">
-          <Field label="Enrollment type" htmlFor="course-pricing">
-            <select id="course-pricing" name="pricingType" value={pricingType} onChange={(event) => setPricingType(event.target.value as typeof pricingType)} className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30">
-              <option value="FREE">Free</option><option value="PAID">Paid</option>
-            </select>
-          </Field>
-          <div className="hidden sm:block" />
-          <Field label="Price" htmlFor="course-price" hint={pricingType === "FREE" ? "Free courses do not need a price." : undefined}>
+          <fieldset className="space-y-2 sm:col-span-2">
+            <legend className="text-sm font-medium">Enrollment type</legend>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {([
+                { value: "FREE", label: "Free", description: "Learners enroll without paying." },
+                { value: "PAID", label: "Paid", description: "Set a price for this course." },
+              ] as const).map((option) => (
+                <label key={option.value} className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-colors ${pricingType === option.value ? "border-primary bg-primary/5" : "border-input hover:bg-muted/40"}`}>
+                  <input type="radio" name="pricingType" value={option.value} checked={pricingType === option.value} onChange={() => setPricingType(option.value)} className="mt-0.5 size-4 accent-primary" />
+                  <span><span className="block text-sm font-medium">{option.label}</span><span className="mt-1 block text-xs text-muted-foreground">{option.description}</span></span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          <Field label="Price" htmlFor="course-price" hint={pricingType === "FREE" ? "Select Paid to set a course price." : "Enter the price learners will pay."}>
             <Input id="course-price" name="priceDollars" type="number" min={0.01} step={0.01} defaultValue={course.pricingType === "PAID" && course.priceCents > 0 ? (course.priceCents / 100).toFixed(2) : ""} disabled={pricingType === "FREE"} required={pricingType === "PAID"} placeholder="49.00" className="h-10" />
           </Field>
           <Field label="Currency" htmlFor="course-currency">
