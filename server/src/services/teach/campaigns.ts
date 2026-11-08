@@ -202,20 +202,6 @@ export async function setInstructorCampaignParticipation(
       }
     }
 
-    // 3. Keep campaign.courseIds in sync with all active participating courses
-    const allActive = await tx.instructorCoupon.findMany({
-      where: { campaignId: campaign.id, active: true },
-      select: { courseId: true },
-      distinct: ["courseId"],
-    });
-
-    await tx.courseDiscountCampaign.update({
-      where: { id: campaign.id },
-      data: {
-        courseIds: allActive.map((c) => c.courseId),
-      },
-    });
-
     return { ok: true, participatingCourseIds: selectedCourseIds };
   });
 }

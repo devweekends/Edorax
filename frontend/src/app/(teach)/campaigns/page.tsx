@@ -15,7 +15,7 @@ export default async function InstructorCampaignsPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Promotional Campaigns</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Participate in platform discount campaigns to boost course enrollments. Edorax funds the campaign discount while preserving your agreed instructor earnings.
+          Choose which of your eligible courses participate in platform discount campaigns.
         </p>
       </div>
 
