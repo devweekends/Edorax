@@ -1,6 +1,7 @@
 import type { ErrorRequestHandler } from "express";
 import { AllocationError } from "../services/integrations/allocation.js";
 import { PathmentEnrollmentError } from "../services/integrations/pathment/create-pathment-enrollment.js";
+import { InsufficientOrganizationCreditsError } from "../services/organizations/credits.js";
 import { logError, normalizeError, publicMessage } from "./error-handler.js";
 
 // The organisation API is a published contract consumed by Pathment, so it keeps
@@ -12,6 +13,9 @@ export const integrationErrorHandler: ErrorRequestHandler = (error, req, res, _n
   if (error instanceof AllocationError) {
     const status = error.code === "NOT_ALLOCATED" ? 404 : 403;
     return res.status(status).json({ error: error.message, code: error.code });
+  }
+  if (error instanceof InsufficientOrganizationCreditsError) {
+    return res.status(error.statusCode).json({ error: error.message, code: error.code });
   }
 
   const appError = normalizeError(error);

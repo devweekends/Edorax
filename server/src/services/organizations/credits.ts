@@ -1,5 +1,19 @@
 import type { Prisma } from "../../generated/prisma/index.js";
-import { ConflictError } from "../../utils/errors.js";
+import { AppError } from "../../utils/errors.js";
+
+/** Enrollment API / Pathment: organization credit balance cannot cover the contribution. */
+export class InsufficientOrganizationCreditsError extends AppError {
+  constructor(requiredCredits: number, availableCredits: number) {
+    const required = Math.max(0, Math.round(requiredCredits));
+    const available = Math.max(0, Math.round(availableCredits));
+    super(
+      `Organization credit balance is too low to fund this enrollment. Required ${required.toLocaleString()} credits ($${(required / 100).toFixed(2)}); available ${available.toLocaleString()} credits ($${(available / 100).toFixed(2)}). Add credits for the organization, then retry.`,
+      402,
+      "INSUFFICIENT_CREDITS"
+    );
+    this.name = "InsufficientOrganizationCreditsError";
+  }
+}
 
 /** Reserve credits atomically; one credit represents one cent of organization contribution. */
 export async function reserveOrganizationCredits(
@@ -15,7 +29,13 @@ export async function reserveOrganizationCredits(
     where: { id: input.organizationId, creditBalance: { gte: amount } },
     data: { creditBalance: { decrement: amount } },
   });
-  if (!updated.count) throw new ConflictError("Organization does not have enough credits.");
+  if (!updated.count) {
+    const org = await tx.organization.findUnique({
+      where: { id: input.organizationId },
+      select: { creditBalance: true },
+    });
+    throw new InsufficientOrganizationCreditsError(amount, org?.creditBalance ?? 0);
+  }
   return tx.organizationCreditTransaction.create({
     data: { organizationId: input.organizationId, enrollmentId: input.enrollmentId, amountCredits: amount, status: "RESERVED" },
   });
