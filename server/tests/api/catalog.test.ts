@@ -4,6 +4,8 @@ import { createApp } from "../../src/app.js";
 import { prisma } from "../../src/db/prisma.js";
 import { createCourseFixture } from "../helpers/fixtures.js";
 import { createSession } from "../../src/services/auth/session.js";
+import { ensureBaselineRelease, type ReleaseContent } from "../../src/services/courses/releases.js";
+import { createReleaseChapter } from "../../src/services/teach/publish-course-release.js";
 
 const app = createApp();
 let fx: Awaited<ReturnType<typeof createCourseFixture>>;
@@ -140,5 +142,46 @@ describe("self-enrolment and checkout", () => {
   it("does not expose the old payment stub", async () => {
     const res = await request(app).post(`/api/v1/enrollments/${fx.enrollment.id}/payment-stub`).set(auth());
     expect(res.status).toBe(404);
+  });
+});
+
+describe("catalog after a course is republished", () => {
+  let rx: Awaited<ReturnType<typeof createCourseFixture>>;
+
+  beforeAll(async () => {
+    rx = await createCourseFixture();
+    await prisma.$transaction((tx) => ensureBaselineRelease(tx, rx.course.id));
+    // Republish the way the publisher does: a changed lesson gets a new chapter row and the
+    // old row stays live, because learners pinned to release 1 still read it.
+    const moduleRow = await prisma.module.findFirstOrThrow({ where: { courseId: rx.course.id } });
+    const replacement = await prisma.$transaction((tx) => createReleaseChapter(tx, rx.course.id, moduleRow.id, "chapter-a", {
+      title: "Chapter A", summary: null, source: "# A, revised", blocks: [], lessonNum: 1, estimatedMinutes: null,
+      readerMode: "DEFAULT", quizPassingScore: 70, isMilestone: false, key: null,
+    } as never));
+    const first = await prisma.courseRelease.findFirstOrThrow({ where: { courseId: rx.course.id }, orderBy: { number: "desc" } });
+    const content = structuredClone(first.content as unknown as ReleaseContent);
+    content.variants.default[0].chapters = content.variants.default[0].chapters.map((chapter) =>
+      chapter.id === rx.chapterA.id ? { ...chapter, id: replacement.id } : chapter);
+    const release = await prisma.courseRelease.create({ data: { courseId: rx.course.id, number: first.number + 1, content: content as unknown as object } });
+    await prisma.course.update({ where: { id: rx.course.id }, data: { activeReleaseId: release.id } });
+  });
+  afterAll(async () => {
+    await prisma.course.update({ where: { id: rx.course.id }, data: { activeReleaseId: null } });
+    await prisma.courseRelease.deleteMany({ where: { courseId: rx.course.id } });
+    await rx.cleanup();
+  });
+
+  it("keeps both chapter rows, since learners on release 1 still need the old one", async () => {
+    expect(await prisma.chapter.count({ where: { courseId: rx.course.id, archivedAt: null } })).toBe(3);
+  });
+
+  it("counts and lists each chapter once, from the active release", async () => {
+    const list = await request(app).get("/api/v1/catalog");
+    const summary = list.body.data.courses.find((c: { slug: string }) => c.slug === rx.course.slug);
+    expect(summary).toMatchObject({ moduleCount: 1, chapterCount: 2 });
+    const detail = await request(app).get(`/api/v1/catalog/${rx.course.slug}`);
+    expect(detail.body.data).toMatchObject({ moduleCount: 1, chapterCount: 2 });
+    expect(detail.body.data.modules[0].chapters.map((c: { title: string }) => c.title)).toEqual(["Chapter A", "Chapter B"]);
+    expect(detail.body.data.modules[0].chapters.map((c: { id: string }) => c.id)).not.toContain(rx.chapterA.id);
   });
 });
