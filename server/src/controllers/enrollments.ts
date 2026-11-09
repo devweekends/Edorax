@@ -3,7 +3,6 @@ import type { Request, Response } from "express";
 import { created, ok } from "../utils/responses.js";
 import { selfEnroll } from "../services/enrollment/self-enroll.js";
 import { loadCheckout } from "../services/enrollment/checkout.js";
-import { createCourseCheckout } from "../services/payments/create-course-checkout.js";
 
 // POST /api/v1/enrollments
 export async function create(req: Request, res: Response) {
@@ -20,12 +19,4 @@ export async function checkout(req: Request, res: Response) {
 // POST /api/v1/enrollments/:enrollmentId/request-access
 export async function requestAccess(req: Request, res: Response) {
   ok(res, await requestManualAccess(req.params.enrollmentId as string, req.user!.id));
-}
-
-// POST /api/v1/enrollments/:enrollmentId/checkout
-export async function startCheckout(req: Request, res: Response) {
-  const result = await createCourseCheckout(req.params.enrollmentId as string, req.user!.id, {
-    customerIpAddress: req.ip,
-  });
-  ok(res, result);
 }
