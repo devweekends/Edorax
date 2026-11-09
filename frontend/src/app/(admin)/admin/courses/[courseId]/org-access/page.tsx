@@ -43,7 +43,7 @@ export default async function CourseOrgAccessPage({
   const available = orgs.organizations.filter((org) => !granted.has(org.id));
 
   return (
-    <div>
+    <div className="space-y-8">
       <AdminPageHeader
         eyebrow="Catalog"
         title="Free access for organizations"
@@ -55,7 +55,7 @@ export default async function CourseOrgAccessPage({
         }
       />
 
-      <section className="mt-6 space-y-3">
+      <section className="space-y-3">
         <h2 className="text-base font-semibold">Granted organizations</h2>
         {access.grants.length === 0 ? (
           <AdminEmptyState
@@ -110,7 +110,7 @@ export default async function CourseOrgAccessPage({
         )}
       </section>
 
-      <section className="mt-8 space-y-3">
+      <section className="space-y-3">
         <h2 className="text-base font-semibold">Grant free access</h2>
         {available.length === 0 ? (
           <p className="text-sm text-muted-foreground">Every organization already has free access to this course.</p>

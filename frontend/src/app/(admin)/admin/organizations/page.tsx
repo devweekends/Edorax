@@ -4,6 +4,7 @@ import { serverApiFetch } from "@/lib/api-server";
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
 import { AdminPagination } from "@/components/admin/admin-pagination";
+import { AdminQueryForm } from "@/components/admin/admin-query-form";
 import { buildPagedQuery } from "@/components/admin/admin-list-controls";
 import {
   AdminEmptyState,
@@ -33,7 +34,7 @@ export default async function AdminOrganizationsPage({
   const filtering = Boolean(sp.query);
 
   return (
-    <div>
+    <div className="space-y-6 sm:space-y-8">
       <AdminPageHeader
         eyebrow="Tenants"
         title="Organizations"
@@ -45,8 +46,8 @@ export default async function AdminOrganizationsPage({
         }
       />
 
-      <form method="get" action="/admin/organizations" className="mt-6 flex flex-wrap items-end gap-3">
-        <label className="flex min-w-56 flex-col gap-1 text-xs font-medium text-muted-foreground">
+      <AdminQueryForm basePath="/admin/organizations" className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+        <label className="flex w-full flex-col gap-1 text-xs font-medium text-muted-foreground sm:w-80">
           Search name or slug
           <input
             type="search"
@@ -56,20 +57,22 @@ export default async function AdminOrganizationsPage({
             className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
           />
         </label>
-        <button type="submit" className={cn(buttonVariants({ variant: "outline", size: "sm" }), "mb-0.5")}>
-          Search
-        </button>
-        {filtering ? (
-          <Link
-            href="/admin/organizations"
-            className="mb-2 text-xs font-medium text-muted-foreground underline-offset-4 hover:underline"
-          >
-            Clear
-          </Link>
-        ) : null}
-      </form>
+        <div className="flex items-center gap-3">
+          <button type="submit" className={cn(buttonVariants({ variant: "outline", size: "default" }))}>
+            Search
+          </button>
+          {filtering ? (
+            <Link
+              href="/admin/organizations"
+              className="text-xs font-medium text-muted-foreground underline-offset-4 hover:underline"
+            >
+              Clear
+            </Link>
+          ) : null}
+        </div>
+      </AdminQueryForm>
 
-      <div className="mt-6">
+      <div>
         {organizations.length === 0 ? (
           <AdminEmptyState
             title={filtering ? "No organizations match" : "No organizations yet"}

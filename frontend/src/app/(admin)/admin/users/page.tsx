@@ -80,12 +80,18 @@ export default async function AdminUsersPage({
   });
 
   return (
-    <div>
-      <Link href="/admin/course-access" className="inline-block mb-4 underline">Review course access requests</Link>
+    <div className="space-y-8">
       <AdminPageHeader
         eyebrow="Accounts"
         title="Users"
-        description="Manage account roles, access, and invitations."
+        description={
+          <>
+            Manage account roles, access, and invitations.{" "}
+            <Link href="/admin/course-access" className="font-medium text-primary underline-offset-4 hover:underline">
+              Review course access requests
+            </Link>
+          </>
+        }
         actions={
           <>
             <a

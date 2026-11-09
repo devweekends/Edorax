@@ -10,6 +10,7 @@ import { serverApiFetch } from "@/lib/api-server";
 import { requireRole } from "@/server/auth/guards";
 import { formatPriceCents } from "@/lib/format-price";
 import { Badge } from "@/components/ui/badge";
+import { AdminPageHeader } from "@/components/admin/admin-ui";
 import type { AdminRevenueReport, AdminWithdrawalRow } from "@/shared/api/admin";
 
 type RequestRow = {
@@ -55,13 +56,12 @@ export default async function CourseAccessPage() {
   ]);
 
   return (
-    <div className="space-y-8 p-6 max-w-7xl mx-auto">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Financials & Course Access</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Manage learner course access, platform revenue reports, instructor payouts, and withdrawal requests.
-        </p>
-      </div>
+    <div className="space-y-8 sm:space-y-10">
+      <AdminPageHeader
+        eyebrow="Finance"
+        title="Financials & course access"
+        description="Manage learner course access, platform revenue reports, instructor payouts, and withdrawal requests."
+      />
 
       {/* Platform Revenue Summary */}
       <section className="space-y-3">
@@ -101,9 +101,9 @@ export default async function CourseAccessPage() {
       </section>
 
       {/* Instructor Withdrawal Requests */}
-      <section className="space-y-4 border-t pt-6">
+      <section className="space-y-4">
         <div>
-          <h2 className="text-xl font-semibold">Instructor Withdrawal Requests</h2>
+          <h2 className="text-lg font-semibold tracking-tight">Instructor Withdrawal Requests</h2>
           <p className="text-sm text-muted-foreground">
             Formal requests by instructors to withdraw their accumulated course earnings.
           </p>
@@ -182,9 +182,9 @@ export default async function CourseAccessPage() {
       </section>
 
       {/* Manual Access Pending */}
-      <section className="space-y-4 border-t pt-6">
+      <section className="space-y-4">
         <div>
-          <h2 className="text-xl font-semibold">Course Access Requests</h2>
+          <h2 className="text-lg font-semibold tracking-tight">Course Access Requests</h2>
           <p className="text-sm text-muted-foreground">
             Contact learners and confirm payment before granting access. This list includes enrollments awaiting manual payment confirmation.
           </p>
@@ -248,9 +248,9 @@ export default async function CourseAccessPage() {
       </section>
 
       {/* Unified Instructor Payouts Queue */}
-      <section className="space-y-4 border-t pt-6">
+      <section className="space-y-4">
         <div>
-          <h2 className="text-xl font-semibold">Individual Enrollment Payout Queue</h2>
+          <h2 className="text-lg font-semibold tracking-tight">Individual Enrollment Payout Queue</h2>
           <p className="text-sm text-muted-foreground">
             Includes all instructor-earning enrollments (manual payments, 100% admin coupons, organization-funded seats, and direct checkout).
           </p>

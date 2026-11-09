@@ -40,7 +40,7 @@ export default async function AdminCoursesPage({
   const exportQuery = buildListQuery({ query: sp.query, status: sp.status });
 
   return (
-    <div>
+    <div className="space-y-6 sm:space-y-8">
       <AdminPageHeader
         eyebrow="Catalog"
         title="Courses"
@@ -75,7 +75,7 @@ export default async function AdminCoursesPage({
         ]}
       />
 
-      <div className="mt-6">
+      <div>
         {courses.length === 0 ? (
           <AdminEmptyState
             title={filtering ? "No courses match these filters" : "No courses yet"}
@@ -166,6 +166,7 @@ export default async function AdminCoursesPage({
         )}
       </div>
 
-      <AdminPagination page={page} hrefFor={(next) => `/admin/courses?${buildPagedQuery(filters, next)}`} />    </div>
+      <AdminPagination page={page} hrefFor={(next) => `/admin/courses?${buildPagedQuery(filters, next)}`} />
+    </div>
   );
 }

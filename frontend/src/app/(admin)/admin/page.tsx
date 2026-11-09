@@ -1,5 +1,7 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import {
+  AlertCircle,
   ArrowDownToLine,
   ArrowRight,
   BookOpen,
@@ -30,6 +32,35 @@ const RANGES = [
   { value: "90", label: "12 weeks" },
 ] as const;
 
+type Accent = "primary" | "blue" | "green" | "amber";
+
+const ACCENT_TONE: Record<Accent, string> = {
+  primary: "bg-primary/10 text-primary",
+  blue: "bg-sky-500/10 text-sky-700 dark:text-sky-300",
+  green: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+  amber: "bg-amber-500/10 text-amber-700 dark:text-amber-300",
+};
+
+function SectionHeader({
+  title,
+  description,
+  action,
+}: {
+  title: string;
+  description?: string;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4 sm:px-6">
+      <div className="min-w-0">
+        <h2 className="text-sm font-semibold text-foreground">{title}</h2>
+        {description ? <p className="mt-0.5 text-xs text-muted-foreground">{description}</p> : null}
+      </div>
+      {action ? <div className="shrink-0">{action}</div> : null}
+    </div>
+  );
+}
+
 function StatCard({
   href,
   icon: Icon,
@@ -43,29 +74,45 @@ function StatCard({
   label: string;
   value: number;
   note: string;
-  accent?: "primary" | "blue" | "green" | "amber";
+  accent?: Accent;
 }) {
-  const iconTone = {
-    primary: "bg-primary/10 text-primary",
-    blue: "bg-sky-500/10 text-sky-700 dark:text-sky-300",
-    green: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-    amber: "bg-amber-500/10 text-amber-700 dark:text-amber-300",
-  }[accent];
-
   return (
     <Link
       href={href}
-      className="group rounded-2xl border border-border bg-card p-5 shadow-sm transition-colors hover:border-primary/30 hover:bg-card/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="group flex flex-col rounded-2xl border border-border bg-card p-4 shadow-sm transition-colors hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:p-5"
     >
-      <div className="flex items-start justify-between gap-3">
-        <span className={cn("grid size-10 place-items-center rounded-xl", iconTone)}>
-          <Icon className="size-5" aria-hidden />
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">{label}</p>
+        <span className={cn("grid size-8 shrink-0 place-items-center rounded-lg", ACCENT_TONE[accent])}>
+          <Icon className="size-4" aria-hidden />
         </span>
-        <ArrowRight className="mt-1 size-4 text-muted-foreground opacity-0 transition group-hover:translate-x-0.5 group-hover:opacity-100" aria-hidden />
       </div>
-      <p className="mt-5 text-sm text-muted-foreground">{label}</p>
-      <p className="mt-1 text-3xl font-semibold tracking-tight tabular-nums">{value.toLocaleString()}</p>
-      <p className="mt-3 border-t border-border pt-3 text-xs text-muted-foreground">{note}</p>
+      <p className="mt-3 text-2xl font-semibold tracking-tight tabular-nums sm:text-3xl">{value.toLocaleString()}</p>
+      <p className="mt-auto flex items-center gap-1 pt-3 text-xs text-muted-foreground">
+        <span className="min-w-0 flex-1 truncate">{note}</span>
+        <ArrowRight className="size-3.5 shrink-0 opacity-0 transition group-hover:translate-x-0.5 group-hover:opacity-100" aria-hidden />
+      </p>
+    </Link>
+  );
+}
+
+function AttentionBanner({ pending }: { pending: number }) {
+  if (pending <= 0) return null;
+  return (
+    <Link
+      href="/admin/requests"
+      className="flex items-center gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-foreground transition-colors hover:bg-amber-500/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <AlertCircle className="size-5 shrink-0 text-amber-700 dark:text-amber-300" aria-hidden />
+      <span className="min-w-0 flex-1">
+        <span className="font-semibold">
+          {pending} course {pending === 1 ? "request needs" : "requests need"} review
+        </span>
+        <span className="hidden text-muted-foreground sm:inline"> · Organizations are waiting for a decision</span>
+      </span>
+      <span className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-primary">
+        Review <ArrowRight className="size-3.5" aria-hidden />
+      </span>
     </Link>
   );
 }
@@ -78,62 +125,69 @@ function GrowthChart({ points, range }: { points: AdminMetricPoint[]; range: str
 
   return (
     <AdminPanel padding="none" className="h-full">
-      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border p-5 sm:p-6">
-        <div>
-          <h2 className="text-base font-semibold">Platform growth</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Daily active learners across the platform</p>
-          <p className="mt-4 text-2xl font-semibold tabular-nums">{total.toLocaleString()} <span className="text-sm font-normal text-muted-foreground">learner-days</span></p>
-        </div>
-        <div className="flex rounded-xl bg-muted p-1" aria-label="Chart time range">
-          {RANGES.map((item) => (
-            <Link
-              key={item.value}
-              href={`/admin?range=${item.value}`}
-              scroll={false}
-              aria-current={selectedRange === item.value ? "true" : undefined}
-              className={cn(
-                "rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors",
-                selectedRange === item.value ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              {item.label}
-            </Link>
-          ))}
-        </div>
-      </div>
+      <SectionHeader
+        title="Platform growth"
+        description="Daily active learners across the platform"
+        action={
+          <div className="flex rounded-lg bg-muted p-0.5" role="group" aria-label="Chart time range">
+            {RANGES.map((item) => (
+              <Link
+                key={item.value}
+                href={`/admin?range=${item.value}`}
+                scroll={false}
+                aria-current={selectedRange === item.value ? "true" : undefined}
+                className={cn(
+                  "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                  selectedRange === item.value ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {item.label}
+              </Link>
+            ))}
+          </div>
+        }
+      />
       <div className="p-5 sm:p-6">
-        <div className="mb-2 flex items-center gap-2 text-sm text-muted-foreground">
-          <span className="size-2 rounded-full bg-primary" aria-hidden />
-          Active learners per day <span className="ml-auto tabular-nums">Peak {max}</span>
+        <div className="mb-4 flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
+          <div>
+            <p className="text-2xl font-semibold tabular-nums">
+              {total.toLocaleString()} <span className="text-sm font-normal text-muted-foreground">learner-days</span>
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">Total over the selected period</p>
+          </div>
+          <p className="text-xs text-muted-foreground tabular-nums">
+            Peak <span className="font-semibold text-foreground">{max.toLocaleString()}</span> in one day
+          </p>
         </div>
         <svg
           viewBox="0 0 100 38"
           preserveAspectRatio="none"
           role="img"
           aria-label={`Daily active learners over ${range} days. ${total} learner-days, peak ${max} in one day.`}
-          className="h-52 w-full overflow-visible text-primary sm:h-64"
+          className="h-48 w-full overflow-visible text-primary sm:h-60"
         >
-          {[8, 18, 28, 37].map((y) => <line key={y} x1="0" x2="100" y1={y} y2={y} className="stroke-border" strokeWidth="0.25" />)}
+          {[8, 18, 28, 36].map((y) => (
+            <line key={y} x1="0" x2="100" y1={y} y2={y} className="stroke-border" strokeWidth="0.25" />
+          ))}
           {points.map((point, index) => {
             const barHeight = (point.activeLearners / max) * 28;
             const x = index * width + width * 0.16;
             return (
-              <g key={point.date}>
-                <rect
-                  x={x}
-                  y={36 - barHeight}
-                  width={Math.max(width * 0.68, 0.15)}
-                  height={Math.max(barHeight, point.activeLearners > 0 ? 0.45 : 0)}
-                  rx={Math.min(width * 0.18, 0.6)}
-                  className="fill-current opacity-75 transition-opacity hover:opacity-100"
-                >
-                  <title>{`${point.date}: ${point.activeLearners} active learners`}</title>
-                </rect>
-              </g>
+              <rect
+                key={point.date}
+                x={x}
+                y={36 - barHeight}
+                width={Math.max(width * 0.68, 0.15)}
+                height={Math.max(barHeight, point.activeLearners > 0 ? 0.45 : 0)}
+                rx={Math.min(width * 0.18, 0.6)}
+                className="fill-current opacity-70 transition-opacity hover:opacity-100"
+              >
+                <title>{`${point.date}: ${point.activeLearners} active learners`}</title>
+              </rect>
             );
           })}
         </svg>
-        <div className="mt-2 flex justify-between text-[11px] text-muted-foreground">
+        <div className="mt-2 flex justify-between text-[11px] text-muted-foreground tabular-nums">
           <span>{points[0]?.date ?? "No data"}</span>
           <span>{points.at(-1)?.date ?? ""} · UTC</span>
         </div>
@@ -169,11 +223,11 @@ export default async function AdminHomePage({
   ]);
 
   return (
-    <div className="space-y-6 sm:space-y-8">
+    <div className="space-y-6">
       <AdminPageHeader
-        eyebrow="Platform management"
+        eyebrow="Dashboard"
         title="Overview"
-        description="A current snapshot of learners, courses, organizations, and admin work."
+        description="A snapshot of learners, courses, organizations, and the review queue."
         actions={
           <>
             <a href="/api/v1/admin/courses/export" className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
@@ -186,29 +240,58 @@ export default async function AdminHomePage({
         }
       />
 
-      <section aria-label="Platform totals" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard href="/admin/users" icon={Users} label="Total users" value={users.page.total} note={`${metrics.totals.newUsers.toLocaleString()} joined in the last ${range} days`} />
-        <StatCard href="/admin/courses" icon={BookOpen} label="Published courses" value={overview.publishedCourses} note={`${metrics.totals.newEnrollments.toLocaleString()} new enrollments in ${range} days`} accent="blue" />
-        <StatCard href="/admin/organizations" icon={Building2} label="Organizations" value={overview.organizations} note="Manage allocations and integration access" accent="green" />
-        <StatCard href="/admin/requests" icon={ClipboardList} label="Pending requests" value={overview.pendingCourseRequests} note={overview.pendingCourseRequests ? "Needs review" : "The review queue is clear"} accent="amber" />
+      <AttentionBanner pending={overview.pendingCourseRequests} />
+
+      <section aria-label="Key metrics" className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <StatCard
+          href="/admin/users"
+          icon={Users}
+          label="Users"
+          value={users.page.total}
+          note={`${metrics.totals.newUsers.toLocaleString()} joined in ${range} days`}
+        />
+        <StatCard
+          href="/admin/courses"
+          icon={BookOpen}
+          label="Published courses"
+          value={overview.publishedCourses}
+          note={`${metrics.totals.newEnrollments.toLocaleString()} new enrollments in ${range} days`}
+          accent="blue"
+        />
+        <StatCard
+          href="/admin/organizations"
+          icon={Building2}
+          label="Organizations"
+          value={overview.organizations}
+          note="Allocations and integration access"
+          accent="green"
+        />
+        <StatCard
+          href="/admin/requests"
+          icon={ClipboardList}
+          label="Pending requests"
+          value={overview.pendingCourseRequests}
+          note={overview.pendingCourseRequests ? "Needs review" : "Review queue is clear"}
+          accent="amber"
+        />
       </section>
 
-      <section className="grid items-stretch gap-4 xl:grid-cols-[minmax(0,1.7fr)_minmax(340px,0.9fr)]" aria-label="Growth and course requests">
+      <section className="grid items-stretch gap-4 xl:grid-cols-[minmax(0,1.7fr)_minmax(320px,0.9fr)]" aria-label="Growth and course requests">
         <GrowthChart points={metrics.series} range={range} />
         <AdminPanel padding="none">
-          <div className="flex items-start justify-between gap-3 border-b border-border p-5 sm:p-6">
-            <div>
-              <h2 className="text-base font-semibold">Course requests</h2>
-              <p className="mt-1 text-sm text-muted-foreground">{overview.pendingCourseRequests} {overview.pendingCourseRequests === 1 ? "request" : "requests"} need review</p>
-            </div>
-            <Link href="/admin/requests" className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-              View all <ArrowRight className="size-4" aria-hidden />
-            </Link>
-          </div>
+          <SectionHeader
+            title="Course requests"
+            description={`${overview.pendingCourseRequests} ${overview.pendingCourseRequests === 1 ? "request" : "requests"} awaiting review`}
+            action={
+              <Link href="/admin/requests" className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline">
+                View all <ArrowRight className="size-3.5" aria-hidden />
+              </Link>
+            }
+          />
           {requests.pending.length ? (
             <ul className="divide-y divide-border">
               {requests.pending.slice(0, 5).map((request) => (
-                <li key={request.id} className="flex items-center gap-3 p-4 sm:px-5">
+                <li key={request.id} className="flex items-center gap-3 px-5 py-3.5 sm:px-6">
                   <span className="grid size-9 shrink-0 place-items-center rounded-full bg-primary/10 text-xs font-semibold text-primary" aria-hidden>
                     {request.organization.name.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase()}
                   </span>
@@ -217,63 +300,65 @@ export default async function AdminHomePage({
                     <p className="truncate text-xs text-muted-foreground">{request.course.title}</p>
                   </div>
                   <div className="shrink-0 text-right">
-                    <p className="text-xs text-muted-foreground">{timeAgo(request.requestedAt)}</p>
-                    <Link href="/admin/requests" className="mt-1 inline-block text-xs font-semibold text-primary hover:underline">Review</Link>
+                    <p className="text-xs text-muted-foreground tabular-nums">{timeAgo(request.requestedAt)}</p>
+                    <Link href="/admin/requests" className="mt-0.5 inline-block text-xs font-semibold text-primary hover:underline">Review</Link>
                   </div>
                 </li>
               ))}
             </ul>
           ) : (
-            <div className="p-6 text-sm text-muted-foreground">No requests are waiting for review.</div>
+            <div className="px-5 py-10 text-center text-sm text-muted-foreground sm:px-6">No requests are waiting for review.</div>
           )}
         </AdminPanel>
       </section>
 
-      <section className="grid items-stretch gap-4 xl:grid-cols-[minmax(0,1.7fr)_minmax(340px,0.9fr)]" aria-label="Recent activity and quick actions">
+      <section className="grid items-stretch gap-4 xl:grid-cols-[minmax(0,1.7fr)_minmax(320px,0.9fr)]" aria-label="Recent activity and quick actions">
         <AdminPanel padding="none">
-          <div className="flex items-start justify-between gap-3 border-b border-border p-5 sm:p-6">
-            <div>
-              <h2 className="text-base font-semibold">Recent admin activity</h2>
-              <p className="mt-1 text-sm text-muted-foreground">Security-sensitive changes are recorded in the audit log.</p>
-            </div>
-            <Link href="/admin/audit" className="inline-flex shrink-0 items-center gap-1 text-sm font-medium text-primary hover:underline">
-              Audit log <ArrowRight className="size-4" aria-hidden />
-            </Link>
-          </div>
+          <SectionHeader
+            title="Recent admin activity"
+            description="Security-sensitive changes are recorded in the audit log"
+            action={
+              <Link href="/admin/audit" className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-primary hover:underline">
+                Audit log <ArrowRight className="size-3.5" aria-hidden />
+              </Link>
+            }
+          />
           {audit.entries.length ? (
             <ul className="divide-y divide-border">
               {audit.entries.slice(0, 5).map((entry) => (
-                <li key={entry.id} className="grid gap-2 p-4 sm:grid-cols-[minmax(120px,0.8fr)_minmax(160px,1.6fr)_minmax(120px,1fr)_auto] sm:items-center sm:px-5">
+                <li key={entry.id} className="grid gap-1.5 px-5 py-3.5 sm:grid-cols-[minmax(110px,0.8fr)_minmax(0,1.6fr)_minmax(110px,1fr)_auto] sm:items-center sm:gap-4 sm:px-6">
                   <span className="truncate text-sm font-medium">{entry.actorEmail}</span>
                   <span className="text-sm text-muted-foreground">{entry.summary}</span>
-                  <span className="truncate text-xs text-muted-foreground">{entry.targetType}{entry.targetId ? ` · ${entry.targetId}` : ""}</span>
-                  <time dateTime={entry.createdAt} className="text-xs text-muted-foreground sm:text-right">{timeAgo(entry.createdAt)}</time>
+                  <span className="truncate text-xs text-muted-foreground">
+                    {entry.targetType}{entry.targetId ? ` · ${entry.targetId}` : ""}
+                  </span>
+                  <time dateTime={entry.createdAt} className="text-xs text-muted-foreground tabular-nums sm:text-right">{timeAgo(entry.createdAt)}</time>
                 </li>
               ))}
             </ul>
           ) : (
-            <div className="p-6 text-sm text-muted-foreground">Admin actions will appear here as they happen.</div>
+            <div className="px-5 py-10 text-center text-sm text-muted-foreground sm:px-6">Admin actions will appear here as they happen.</div>
           )}
         </AdminPanel>
 
         <AdminPanel padding="none">
-          <div className="border-b border-border p-5 sm:p-6">
-            <h2 className="text-base font-semibold">Quick actions</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Common platform tasks</p>
-          </div>
+          <SectionHeader title="Quick actions" description="Common platform tasks" />
           <div className="divide-y divide-border">
-            <QuickAction href="/admin/organizations/new" icon={Building2} label="Create organization" />
-            <QuickAction href="/admin/users" icon={Users} label="Manage users and admins" />
-            <QuickAction href="/admin/courses" icon={BookOpen} label="Manage course access" />
-            <QuickAction href="/admin/settings/profile" icon={ShieldCheck} label="Review admin security" />
+            <QuickAction href="/admin/organizations/new" icon={Building2} label="Create organization" hint="Set up a new partner" />
+            <QuickAction href="/admin/users" icon={Users} label="Manage users" hint="Roles, access and invites" />
+            <QuickAction href="/admin/courses" icon={BookOpen} label="Manage courses" hint="Publish and allocate content" />
+            <QuickAction href="/admin/settings/profile" icon={ShieldCheck} label="Admin security" hint="Two-factor and account settings" />
           </div>
-          <Link href="/admin/audit" className="m-4 flex items-center gap-3 rounded-xl bg-primary/10 p-4 text-primary transition-colors hover:bg-primary/15">
+          <Link
+            href="/admin/audit"
+            className="m-4 flex items-center gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4 text-primary transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
             <History className="size-5 shrink-0" aria-hidden />
             <span className="min-w-0 flex-1">
-              <span className="block text-sm font-semibold">Security and audit center</span>
+              <span className="block text-sm font-semibold">Audit log</span>
               <span className="mt-0.5 block text-xs text-primary/80">Review recent admin changes</span>
             </span>
-            <ArrowRight className="size-4" aria-hidden />
+            <ArrowRight className="size-4 shrink-0" aria-hidden />
           </Link>
         </AdminPanel>
       </section>
@@ -281,12 +366,30 @@ export default async function AdminHomePage({
   );
 }
 
-function QuickAction({ href, icon: Icon, label }: { href: string; icon: LucideIcon; label: string }) {
+function QuickAction({
+  href,
+  icon: Icon,
+  label,
+  hint,
+}: {
+  href: string;
+  icon: LucideIcon;
+  label: string;
+  hint: string;
+}) {
   return (
-    <Link href={href} className="flex items-center gap-3 p-4 text-sm font-medium transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:px-5">
-      <span className="grid size-9 place-items-center rounded-lg bg-muted text-muted-foreground"><Icon className="size-4" aria-hidden /></span>
-      <span className="flex-1">{label}</span>
-      <ArrowRight className="size-4 text-muted-foreground" aria-hidden />
+    <Link
+      href={href}
+      className="flex items-center gap-3 px-5 py-3.5 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:px-6"
+    >
+      <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
+        <Icon className="size-4" aria-hidden />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-medium">{label}</span>
+        <span className="block truncate text-xs text-muted-foreground">{hint}</span>
+      </span>
+      <ArrowRight className="size-4 shrink-0 text-muted-foreground" aria-hidden />
     </Link>
   );
 }

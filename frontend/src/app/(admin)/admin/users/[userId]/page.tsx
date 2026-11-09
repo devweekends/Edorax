@@ -62,10 +62,10 @@ export default async function AdminUserDetailPage({
   const isSelf = user.id === currentAdmin.id;
 
   return (
-    <div>
+    <div className="space-y-8">
       <AdminBackLink href="/admin/users">← Back to users</AdminBackLink>
 
-      <div className="mt-4">
+      <div>
         <AdminPageHeader
           eyebrow="Account"
           title={user.name ?? user.email}
