@@ -84,13 +84,13 @@ export default async function CourseOverviewPage({
           <Lock className="size-8 text-muted-foreground/50" aria-hidden />
           <p className="mt-3 text-sm font-medium text-foreground">Payment required</p>
           <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-            Request access to unlock chapters and submissions for {course.title}.
+            Complete purchase to unlock chapters and submissions for {course.title}.
           </p>
           <Link
             href={`/courses/${course.slug}/checkout`}
             className={cn(buttonVariants(), "mt-6")}
           >
-            Request access
+            Purchase
           </Link>
         </div>
       </div>

@@ -85,7 +85,20 @@ export type CourseOverview = {
 };
 
 export type Checkout = {
-  course: { id: string; slug: string; title: string; pricingType: CoursePricingType; priceCents: number; currency: string };
+  course: {
+    id: string;
+    slug: string;
+    title: string;
+    description: string | null;
+    coverUrl: string | null;
+    difficulty: string | null;
+    estimatedHours: number | null;
+    projectGoal: string | null;
+    instructorName: string | null;
+    pricingType: CoursePricingType;
+    priceCents: number;
+    currency: string;
+  };
   automaticDiscount: { percentOff: number; label: string } | null;
   organizationDiscount: { percentOff: number; label: string; amountDueCents: number } | null;
   amountDueCents: number;
