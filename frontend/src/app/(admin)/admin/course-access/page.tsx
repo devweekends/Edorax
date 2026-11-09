@@ -10,6 +10,13 @@ import { serverApiFetch } from "@/lib/api-server";
 import { requireRole } from "@/server/auth/guards";
 import { formatPriceCents } from "@/lib/format-price";
 import { Badge } from "@/components/ui/badge";
+import { AdminPagination } from "@/components/admin/admin-pagination";
+import { AdminEmptyState } from "@/components/admin/admin-ui";
+import { AdminQueryForm } from "@/components/admin/admin-query-form";
+import { paginateList } from "@/lib/admin-paginate";
+import { cn } from "@/lib/utils";
+import { buttonVariants } from "@/components/ui/button";
+import Link from "next/link";
 import { AdminPageHeader } from "@/components/admin/admin-ui";
 import type { AdminRevenueReport, AdminWithdrawalRow } from "@/shared/api/admin";
 
@@ -45,7 +52,12 @@ type PayoutRow = {
   instructor: { name: string | null; email: string };
 };
 
-export default async function CourseAccessPage() {
+export default async function CourseAccessPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; wpage?: string; rpage?: string; ppage?: string }>;
+}) {
+  const sp = await searchParams;
   await requireRole("ADMIN");
   const [requests, payouts, withdrawals, revenue, withdrawalConfig] = await Promise.all([
     serverApiFetch<RequestRow[]>("/api/v1/admin/manual-access"),
@@ -55,6 +67,31 @@ export default async function CourseAccessPage() {
     serverApiFetch<{ enabled: boolean }>("/api/v1/admin/withdrawals/config"),
   ]);
 
+  // Search matches learner, instructor, course, or destination text. Each list pages on its own parameter.
+  const q = (sp.q ?? "").trim();
+  const needle = q.toLowerCase();
+  const matches = (...values: Array<string | null | undefined>) =>
+    !needle || values.some((value) => (value ?? "").toLowerCase().includes(needle));
+  const withdrawalRows = withdrawals.filter((w) => matches(w.instructorName, w.instructorEmail, w.note));
+  const requestRows = requests.filter((row) => matches(row.user?.name, row.user?.email, row.course.title));
+  const payoutRows = payouts.filter((row) =>
+    matches(row.course, row.learner?.name, row.learner?.email, row.instructor.name, row.instructor.email)
+  );
+  const withdrawalPage = paginateList(withdrawalRows, sp.wpage, 10);
+  const requestPage = paginateList(requestRows, sp.rpage, 10);
+  const payoutPage = paginateList(payoutRows, sp.ppage, 10);
+
+  const pageHref = (param: "wpage" | "rpage" | "ppage") => (next: number) => {
+    const params = new URLSearchParams();
+    if (q) params.set("q", q);
+    for (const key of ["wpage", "rpage", "ppage"] as const) {
+      const value = key === param ? next : Number(sp[key]) || 1;
+      if (value > 1) params.set(key, String(value));
+    }
+    const value = params.toString();
+    return `/admin/course-access${value ? `?${value}` : ""}`;
+  };
+
   return (
     <div className="space-y-8 sm:space-y-10">
       <AdminPageHeader
@@ -62,6 +99,29 @@ export default async function CourseAccessPage() {
         title="Financials & course access"
         description="Manage learner course access, platform revenue reports, instructor payouts, and withdrawal requests."
       />
+
+      <AdminQueryForm basePath="/admin/course-access" className="flex flex-col gap-3 sm:flex-row sm:items-end">
+        <label className="flex w-full flex-col gap-1 text-xs font-medium text-muted-foreground sm:w-96">
+          Search learner, instructor, course, or destination
+          <input
+            type="search"
+            name="q"
+            defaultValue={q}
+            placeholder="e.g. learner@ or course title"
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          />
+        </label>
+        <div className="flex items-center gap-3">
+          <button type="submit" className={cn(buttonVariants({ variant: "outline", size: "default" }))}>
+            Search
+          </button>
+          {q ? (
+            <Link href="/admin/course-access" className="text-xs font-medium text-muted-foreground underline-offset-4 hover:underline">
+              Clear
+            </Link>
+          ) : null}
+        </div>
+      </AdminQueryForm>
 
       {/* Platform Revenue Summary */}
       <section className="space-y-3">
@@ -101,20 +161,19 @@ export default async function CourseAccessPage() {
       </section>
 
       {/* Instructor Withdrawal Requests */}
-      <section className="space-y-4">
-        <div>
-          <h2 className="text-lg font-semibold tracking-tight">Instructor Withdrawal Requests</h2>
-          <p className="text-sm text-muted-foreground">
-            Formal requests by instructors to withdraw their accumulated course earnings.
-          </p>
-        </div>
+      <section className="space-y-4 rounded-2xl border border-border/80 bg-card p-5 shadow-[0_1px_2px_rgb(10_15_44/4%)] sm:p-6">
+        <SectionHead title="Instructor Withdrawal Requests" description={"Formal requests by instructors to withdraw their accumulated course earnings."} count={withdrawalRows.length} />
 
-        {!withdrawalConfig.enabled && <p className="text-sm text-muted-foreground">Withdrawal processing is not available yet.</p>}
-        {withdrawals.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No withdrawal requests recorded yet.</p>
+        {!withdrawalConfig.enabled && (
+          <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-200">
+            Withdrawal processing is not available yet.
+          </p>
+        )}
+        {withdrawalRows.length === 0 ? (
+          <AdminEmptyState title={q ? "No matches" : "No withdrawal requests"} description={q ? "Try a different search." : "Instructor withdrawal requests will appear here."} />
         ) : (
           <div className="divide-y divide-border rounded-xl border border-border bg-card overflow-hidden">
-            {withdrawals.map((w) => (
+            {withdrawalPage.items.map((w) => (
               <div key={w.id} className="p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
@@ -179,21 +238,17 @@ export default async function CourseAccessPage() {
             ))}
           </div>
         )}
+        <AdminPagination page={withdrawalPage.page} hrefFor={pageHref("wpage")} />
       </section>
 
       {/* Manual Access Pending */}
-      <section className="space-y-4">
-        <div>
-          <h2 className="text-lg font-semibold tracking-tight">Course Access Requests</h2>
-          <p className="text-sm text-muted-foreground">
-            Contact learners and confirm payment before granting access. This list includes enrollments awaiting manual payment confirmation.
-          </p>
-        </div>
+      <section className="space-y-4 rounded-2xl border border-border/80 bg-card p-5 shadow-[0_1px_2px_rgb(10_15_44/4%)] sm:p-6">
+        <SectionHead title="Course Access Requests" description={"Contact learners and confirm payment before granting access. This list includes enrollments awaiting manual payment confirmation."} count={requestRows.length} />
 
-        {requests.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No enrollments are awaiting payment.</p>
+        {requestRows.length === 0 ? (
+          <AdminEmptyState title={q ? "No matches" : "Nothing awaiting payment"} description={q ? "Try a different search." : "Enrollments waiting for manual payment confirmation will appear here."} />
         ) : (
-          requests.map((row) => (
+          requestPage.items.map((row) => (
             <div key={row.id} className="rounded-xl border border-border bg-card p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <p className="font-semibold">{row.course.title}</p>
@@ -245,22 +300,18 @@ export default async function CourseAccessPage() {
             </div>
           ))
         )}
+        <AdminPagination page={requestPage.page} hrefFor={pageHref("rpage")} />
       </section>
 
       {/* Unified Instructor Payouts Queue */}
-      <section className="space-y-4">
-        <div>
-          <h2 className="text-lg font-semibold tracking-tight">Individual Enrollment Payout Queue</h2>
-          <p className="text-sm text-muted-foreground">
-            Includes all instructor-earning enrollments (manual payments, 100% admin coupons, organization-funded seats, and direct checkout).
-          </p>
-        </div>
+      <section className="space-y-4 rounded-2xl border border-border/80 bg-card p-5 shadow-[0_1px_2px_rgb(10_15_44/4%)] sm:p-6">
+        <SectionHead title="Individual Enrollment Payout Queue" description={"Includes all instructor-earning enrollments (manual payments, 100% admin coupons, organization-funded seats, and direct checkout)."} count={payoutRows.length} />
 
-        {payouts.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No instructor payouts are due.</p>
+        {payoutRows.length === 0 ? (
+          <AdminEmptyState title={q ? "No matches" : "No payouts due"} description={q ? "Try a different search." : "Instructor payouts that are due will appear here."} />
         ) : (
           <div className="space-y-3">
-            {payouts.map((row) => (
+            {payoutPage.items.map((row) => (
               <div key={row.id} className="rounded-xl border border-border bg-card p-4 space-y-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
@@ -310,7 +361,22 @@ export default async function CourseAccessPage() {
             ))}
           </div>
         )}
+        <AdminPagination page={payoutPage.page} hrefFor={pageHref("ppage")} />
       </section>
+    </div>
+  );
+}
+
+function SectionHead({ title, description, count }: { title: string; description: string; count: number }) {
+  return (
+    <div className="flex flex-wrap items-end justify-between gap-3 border-b border-border pb-4">
+      <div className="min-w-0">
+        <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
+        <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">{description}</p>
+      </div>
+      <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-semibold tabular-nums text-muted-foreground">
+        {count.toLocaleString()} {count === 1 ? "item" : "items"}
+      </span>
     </div>
   );
 }
