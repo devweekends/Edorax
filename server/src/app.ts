@@ -8,6 +8,7 @@ import { logger } from "./utils/logger.js";
 import { apiLimiter } from "./middlewares/rate-limit.js";
 import { errorHandler, notFoundHandler } from "./middlewares/error-handler.js";
 import routes from "./routes/index.js";
+import polarWebhookRoutes from "./routes/webhooks/polar.js";
 import { NOTIFICATION_STREAM_PATH } from "./shared/api/notifications.js";
 
 /** Builds the Express app without listening, so tests can drive it with supertest. */
@@ -37,6 +38,9 @@ export function createApp() {
       });
     })
   );
+
+  // Polar signature verification needs the raw body; mount before express.json.
+  app.use("/webhooks/polar", express.raw({ type: "application/json" }), polarWebhookRoutes);
 
   app.use(express.json({ limit: "1mb" }));
   app.use(cookieParser());

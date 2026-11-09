@@ -6,10 +6,25 @@ import { enrollmentGrantsContentAccess } from "./lifecycle.js";
 export async function loadCheckout(courseSlug: string, userId: string): Promise<Checkout> {
   const course = await prisma.course.findUnique({
     where: { slug: courseSlug },
-    select: { id: true, slug: true, title: true, pricingType: true, priceCents: true, currency: true, status: true },
+    select: {
+      id: true,
+      slug: true,
+      title: true,
+      description: true,
+      coverUrl: true,
+      difficulty: true,
+      estimatedHours: true,
+      projectGoal: true,
+      pricingType: true,
+      priceCents: true,
+      currency: true,
+      status: true,
+      mentor: { select: { name: true } },
+    },
   });
   if (!course || course.status !== "PUBLISHED") throw new NotFoundError("Course not found");
-  const { status: _status, ...courseFields } = course;
+  const { status: _status, mentor, ...rest } = course;
+  const courseFields = { ...rest, instructorName: mentor.name };
 
   const enrollment = await prisma.enrollment.findUnique({
     where: { courseId_userId: { courseId: course.id, userId } },
