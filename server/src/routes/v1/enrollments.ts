@@ -12,6 +12,5 @@ router.use(authenticate, requireVerified);
 
 router.post("/", userRateLimit({ scope: "self-enroll", max: 20, windowMs: 60 * 60_000 }), validateBody(selfEnrollBody), enrollments.create);
 router.post("/:enrollmentId/request-access", userRateLimit({ scope: "course-access-request", max: 5, windowMs: 60 * 60_000 }), validateParams(enrollmentParams), enrollments.requestAccess);
-router.post("/:enrollmentId/checkout", userRateLimit({ scope: "polar-checkout", max: 20, windowMs: 60 * 60_000 }), validateParams(enrollmentParams), enrollments.startCheckout);
 
 export default router;
