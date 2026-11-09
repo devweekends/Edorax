@@ -13,6 +13,7 @@ export function ChapterSidebar(props: ChapterSidebarProps) {
   useEffect(() => {
     try {
       const saved = Number(localStorage.getItem("curriculum-sidebar-width"));
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- restores the saved sidebar width from localStorage after mount
       if (saved >= 240 && saved <= 560) setWidth(Math.max(252, saved));
     } catch { /* Keep the default width if storage is unavailable. */ }
   }, []);

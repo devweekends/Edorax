@@ -40,6 +40,7 @@ export function AdminActionForm({
   variant = "default",
   size = "default",
   className,
+  buttonClassName,
   feedbackClassName,
   confirm,
 }: {
@@ -50,6 +51,8 @@ export function AdminActionForm({
   variant?: "default" | "outline" | "secondary" | "ghost" | "destructive";
   size?: "default" | "sm" | "lg";
   className?: string;
+  /** Extra classes for the submit button (e.g. a compact size inside dense tables). */
+  buttonClassName?: string;
   feedbackClassName?: string;
   confirm?: Confirmation;
 }) {
@@ -92,6 +95,7 @@ export function AdminActionForm({
         type="submit"
         variant={variant}
         size={size}
+        className={buttonClassName}
         // With a confirmation, the trigger must skip native validation: the modal's
         // required fields sit inside a closed <dialog>, so the browser would block the
         // submit with "invalid form control is not focusable" and the modal would never

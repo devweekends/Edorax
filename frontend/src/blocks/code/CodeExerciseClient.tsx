@@ -14,7 +14,7 @@ export function CodeExerciseClient(props: Props) {
   return (
     <SharedCodeExerciseClient
       {...props}
-      onRespond={(payload:any) => apiFetch<CheckResult>(`/api/v1/blocks/${props.id}/respond`, { method: "POST", json: payload })}
+      onRespond={(payload: Record<string, unknown>) => apiFetch<CheckResult>(`/api/v1/blocks/${props.id}/respond`, { method: "POST", json: payload })}
       onComplete={() => router.refresh()}
       onFeedback={playFeedback}
     />

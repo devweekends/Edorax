@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { teachCall, type TeachActionFailure } from "./teach-call";
 
-export type CampaignParticipationResult = { ok: true; data: any } | TeachActionFailure;
+export type CampaignParticipationResult = { ok: true; data: unknown } | TeachActionFailure;
 
 export async function setCampaignParticipationAction(
   campaignId: string,

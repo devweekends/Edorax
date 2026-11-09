@@ -167,11 +167,13 @@ export function CoursePreviewShell({
   });
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- resets the view when the active chapter changes
     setView(activeChapter ? initialView : "overview");
   }, [activeChapter, initialView]);
 
   useEffect(() => {
     if (activeChapter) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- opens the module that contains the active chapter
       setOpenModuleIds((prev) => {
         if (prev.has(activeChapter.moduleId)) return prev;
         const next = new Set(prev);

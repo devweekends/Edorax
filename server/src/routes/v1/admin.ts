@@ -41,7 +41,6 @@ import {
   metricsQuery,
   orgIdParams,
   listAuditQuery,
-  pageQuery,
   requestIdParams,
   suspendUserBody,
   totpCodeBody,
