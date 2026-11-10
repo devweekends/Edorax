@@ -230,23 +230,34 @@ export function installIDE(
   }
   ipcMain.handle('ide:bounds', (event, bounds, course) => {
     requireRenderer(event);
-    if (!view || activeCourse !== course) return;
-    if (!bounds) {
-      if (viewVisible) {
-        view.setVisible(false);
-        viewVisible = false;
-      }
+    if (!view) return;
+    // Hiding never depends on the course or the tracked state: any request without a position for the
+    // active course hides the IDE view, so it cannot stay on screen after the learner closes it.
+    if (!bounds || activeCourse !== course) {
+      // Shrink the view as well as hiding it, so it cannot cover the lesson even if hiding fails.
+      view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
+      view.setVisible(false);
+      viewVisible = false;
       return;
     }
-    const { x, y, width, height } = bounds;
+    const { x: cssX, y: cssY, width: cssWidth, height: cssHeight } = bounds;
     if (
-      ![x, y, width, height].every(
+      ![cssX, cssY, cssWidth, cssHeight].every(
         (value) => typeof value === 'number' && Number.isFinite(value),
       )
     )
       throw new Error('Invalid workspace bounds.');
     const window = getWindow();
     if (!window || window.isDestroyed()) return;
+    // The page reports CSS pixels, but views are placed in device-independent pixels. The two differ
+    // once the page is zoomed (Ctrl +/-), so scale the position and keep the IDE at the same zoom.
+    const zoom = event.sender.getZoomFactor() || 1;
+    if (view.webContents.getZoomFactor() !== zoom)
+      view.webContents.setZoomFactor(zoom);
+    const x = cssX * zoom;
+    const y = cssY * zoom;
+    const width = cssWidth * zoom;
+    const height = cssHeight * zoom;
     const [maxWidth, maxHeight] = window.getContentSize();
     const left = Math.max(0, Math.min(maxWidth, Math.floor(x)));
     const top = Math.max(0, Math.min(maxHeight, Math.floor(y)));

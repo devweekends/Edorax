@@ -259,27 +259,13 @@ export function OpenIDEButton({ compact = false }: { compact?: boolean } = {}) {
       <button
         aria-expanded={ide.open}
         aria-controls="course-ide-panel"
-        aria-label={
-          ide.open && ide.selected !== 'terminal' ? 'Close IDE' : 'Open IDE'
-        }
+        aria-label={ide.open ? 'Hide IDE' : 'Open IDE'}
         title={ide.open ? 'Hide IDE' : 'Open IDE'}
-        onClick={() =>
-          ide.open && ide.selected !== 'terminal'
-            ? ide.close()
-            : ide.show('scratch')
-        }
+        onClick={() => (ide.open ? ide.close() : ide.show('scratch'))}
         className={`flex items-center gap-2 rounded-md border border-border text-xs font-medium hover:bg-muted ${compact ? 'p-2' : 'px-3 py-1.5'}`}
       >
-        {ide.open && ide.selected !== 'terminal' ? (
-          <X size={15} />
-        ) : (
-          <Code2 size={15} />
-        )}
-        {!compact && (
-          <span>
-            {ide.open && ide.selected !== 'terminal' ? 'Hide IDE' : 'Open IDE'}
-          </span>
-        )}
+        {ide.open ? <X size={15} /> : <Code2 size={15} />}
+        {!compact && <span>{ide.open ? 'Hide IDE' : 'Open IDE'}</span>}
       </button>
     </div>
   );
@@ -330,7 +316,7 @@ export function CourseIDEPanel({
           ? { width: `${widthPercent}%` }
           : undefined
       }
-      className={`${!ide.open ? 'hidden' : 'flex'} ${ide.focused || smallWindow ? 'min-w-0 flex-1' : widthPercent ? 'min-w-[320px] max-w-[85%]' : 'w-[52%] min-w-[380px] max-w-[900px]'} h-full shrink-0 flex-col border-l border-border bg-background`}
+      className={`${!ide.open ? 'hidden' : 'flex'} ${ide.focused || smallWindow ? 'min-w-0 flex-1' : widthPercent ? 'min-w-[320px] max-w-[85%]' : 'w-[52%] min-w-[380px] max-w-[900px]'} self-stretch shrink-0 flex-col border-l border-border bg-background`}
     >
       <div className="min-h-0 flex-1 overflow-hidden">
         <div hidden={ide.selected !== 'terminal'} className="h-full">
