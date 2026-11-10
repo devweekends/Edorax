@@ -13,8 +13,14 @@ export function App() {
   const [chapter, setChapter] = useState<string | undefined>();
   const [reading, setReading] = useState(false);
   const session = useSession();
-  const { signedIn, setSignedIn, authBusy, authRevision, authChecked, changeSession } =
-    session;
+  const {
+    signedIn,
+    setSignedIn,
+    authBusy,
+    authRevision,
+    authChecked,
+    changeSession,
+  } = session;
   useEffect(() => {
     if (!signedIn) setReading(false);
   }, [signedIn]);
@@ -56,6 +62,41 @@ export function App() {
   const [tab, setTab] = useState<'all' | 'mine'>('all');
 
   const catalogGeneration = useRef(0);
+  const [restoredView, setRestoredView] = useState(false);
+  useEffect(() => {
+    if (restoredView || !authChecked || !courses.length) return;
+    setRestoredView(true);
+    try {
+      const raw = sessionStorage.getItem('buildment-view');
+      if (!raw) return;
+      const view = JSON.parse(raw) as {
+        slug?: string;
+        reading?: boolean;
+        chapter?: string;
+      };
+      if (!view.slug) return;
+      const course = courses.find((entry) => entry.slug === view.slug);
+      if (!course) return;
+      setSelected(course);
+      if (view.chapter) setChapter(view.chapter);
+      if (view.reading && signedIn) setReading(true);
+    } catch {
+      /* A broken saved view just opens the catalog. */
+    }
+  }, [authChecked, courses, signedIn, restoredView]);
+  useEffect(() => {
+    if (!restoredView) return;
+    try {
+      if (!selected) sessionStorage.removeItem('buildment-view');
+      else
+        sessionStorage.setItem(
+          'buildment-view',
+          JSON.stringify({ slug: selected.slug, reading, chapter }),
+        );
+    } catch {
+      /* Persistence is best effort. */
+    }
+  }, [selected, reading, chapter, restoredView]);
   async function load() {
     const request = ++catalogGeneration.current;
     setLoading(courses.length === 0);
@@ -97,17 +138,39 @@ export function App() {
     });
   }
 
-  if (!authChecked) return <div className="flex h-screen items-center justify-center text-sm text-muted-foreground" role="status">Opening Edorax…</div>;
-  if (!signedIn) return (
-    <main className="flex min-h-screen items-center justify-center bg-background px-5 text-foreground">
-      <div className="w-full max-w-xl">
-        <p className="font-display text-4xl font-semibold">Welcome to Edorax</p>
-        <p className="mt-3 text-sm text-muted-foreground">Sign in to access your courses. Your browser will open securely, then bring you back here.</p>
-        <SignInPrompt busy={authBusy} onSignIn={() => void changeSession(true)} firstScreen />
-        {session.authError && <p role="alert" className="mt-4 text-sm text-destructive">{session.authError}</p>}
+  if (!authChecked)
+    return (
+      <div
+        className="flex h-screen items-center justify-center text-sm text-muted-foreground"
+        role="status"
+      >
+        Opening Edorax…
       </div>
-    </main>
-  );
+    );
+  if (!signedIn)
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-background px-5 text-foreground">
+        <div className="w-full max-w-xl">
+          <p className="font-display text-4xl font-semibold">
+            Welcome to Edorax
+          </p>
+          <p className="mt-3 text-sm text-muted-foreground">
+            Sign in to access your courses. Your browser will open securely,
+            then bring you back here.
+          </p>
+          <SignInPrompt
+            busy={authBusy}
+            onSignIn={() => void changeSession(true)}
+            firstScreen
+          />
+          {session.authError && (
+            <p role="alert" className="mt-4 text-sm text-destructive">
+              {session.authError}
+            </p>
+          )}
+        </div>
+      </main>
+    );
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
