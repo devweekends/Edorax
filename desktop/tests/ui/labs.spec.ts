@@ -236,7 +236,10 @@ test('code workspace is inside its course and preserves course grading', async (
                 percentComplete: 0,
                 chaptersCompleted: 0,
                 pendingReviews: 0,
+                status: 'IN_PROGRESS',
               },
+              rating: null,
+              ratingDismissed: false,
               syllabus: {
                 modules: modules(),
                 chapterCount: 2,
@@ -280,6 +283,10 @@ test('code workspace is inside its course and preserves course grading', async (
     const projectFiles: Record<string, string> = { 'README.md': '# Project' };
     const folders = new Set<string>();
     window.buildment.labs = {
+      prepareTerminal: async () => ({
+        blockId: 'course:systems',
+        folder: '/tmp/edorax-test',
+      }),
       configure: async (_id, mode) => ({
         mode,
         folder: mode === 'local' ? '/test/project' : undefined,

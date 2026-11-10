@@ -153,7 +153,12 @@ test('variant choice uses the shared picker and saves through the desktop bridge
   const variant = family.variants[0];
   const overview = {
     ...courseOverview,
-    enrollment: { percentComplete: 0, chaptersCompleted: 0, pendingReviews: 0 },
+    enrollment: {
+      percentComplete: 0,
+      chaptersCompleted: 0,
+      pendingReviews: 0,
+      status: 'IN_PROGRESS' as const,
+    },
     track: {
       familySlug: family.slug,
       family,
@@ -193,6 +198,7 @@ test('completed learners see review and can choose a specialisation', async ({
       percentComplete: 100,
       chaptersCompleted: 3,
       pendingReviews: 0,
+      status: 'IN_PROGRESS' as const,
     },
     track: {
       familySlug: family.slug,
@@ -271,8 +277,9 @@ test('enrolled course scroll stays inside the viewport with no blank document ta
   expect(geometry.overscroll).toBe('none');
 });
 
-
-test('enrolled overview preserves the organization coupon banner', async ({ page }) => {
+test('enrolled overview preserves the organization coupon banner', async ({
+  page,
+}) => {
   await setup(page, {
     ...courseOverview,
     coupon: {
@@ -283,5 +290,9 @@ test('enrolled overview preserves the organization coupon banner', async ({ page
     },
   });
   await expect(page.getByText('Organization scholarship')).toBeVisible();
-  await expect(page.getByText('Access through Learning team — no payment needed for this enrollment.')).toBeVisible();
+  await expect(
+    page.getByText(
+      'Access through Learning team — no payment needed for this enrollment.',
+    ),
+  ).toBeVisible();
 });
