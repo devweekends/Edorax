@@ -85,7 +85,9 @@ export default function ChapterReaderError({
             <RotateCcw className="size-3.5" aria-hidden />
             Try again
           </Button>
-          {continueHref && continueHref !== `/courses/${courseSlug}/${chapterSlug}` ? (
+          {continueHref &&
+          continueHref !== `/courses/${courseSlug}/${chapterSlug}` &&
+          continueHref !== `/courses/${courseSlug}/${chapterSlug.replace(/--[a-z0-9]+$/i, "")}` ? (
             <Link
               href={continueHref}
               className="inline-flex h-8 items-center gap-1.5 rounded-md bg-muted px-3 text-sm font-medium text-foreground hover:bg-accent"

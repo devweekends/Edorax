@@ -3,8 +3,11 @@ import type { Prisma } from "../../generated/prisma/index.js";
 import { prisma } from "../../db/prisma.js";
 import { resolveCourseFamily, type CourseFamily } from "../../shared/lib/course-tracks.js";
 import { NotFoundError } from "../../utils/errors.js";
+import { cleanChapterSlug } from "../chapters/chapter-slug.js";
 import { recomputeEnrollmentRollup } from "../progress/compute.js";
 import { canonical } from "../teach/course-update-matching.js";
+
+export { cleanChapterSlug } from "../chapters/chapter-slug.js";
 
 export type ReleaseChapter = {
   id: string; key: string | null; slug: string; title: string; order: number;
@@ -63,10 +66,16 @@ export async function releaseForEnrollment(courseId: string, enrollment: { relea
   const release = await prisma.courseRelease.findFirst({ where: { id: releaseId, courseId } });
   if (!release) throw new NotFoundError("Course release not found.");
   const content = release.content as unknown as ReleaseContent;
-  const variant = variantForRelease(resolveCourseFamily(familySlug, course.variantFamily), enrollment.variantSlug);
-  const modules = content.variants[variant];
-  if (!modules) throw new NotFoundError("Course variant not found in this release.");
-  return { release, variant, modules };
+  const family = resolveCourseFamily(familySlug, course.variantFamily);
+  const requested = variantForRelease(family, enrollment.variantSlug);
+  const fallback = family?.defaultVariantSlug ?? "default";
+  // Prefer the learner's variant; if a release dropped it (or they hold a retired slug), keep the
+  // overview/reader alive on the family default instead of 404ing the whole course.
+  const variant = content.variants[requested] ? requested
+    : content.variants[fallback] ? fallback
+    : Object.keys(content.variants)[0];
+  if (!variant || !content.variants[variant]) throw new NotFoundError("Course variant not found in this release.");
+  return { release, variant, modules: content.variants[variant]! };
 }
 
 /** Build the existing syllabus shape from a pinned release. Chapter and block rows are immutable once referenced. */
@@ -95,10 +104,6 @@ export async function assertEnrollmentChapter(tx: Prisma.TransactionClient, enro
   const modules = content.variants[variant];
   if (!modules) throw new NotFoundError("Course variant not found in this release.");
   if (!modules.some(module => module.chapters.some(chapter => chapter.id === chapterId))) throw new NotFoundError("Chapter is not in this learner's course release.");
-}
-
-export function cleanChapterSlug(slug: string): string {
-  return slug.replace(/--[a-z0-9]+$/i, "").trim().toLowerCase();
 }
 
 /**

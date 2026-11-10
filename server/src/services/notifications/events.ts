@@ -1,11 +1,16 @@
 import type { Prisma } from "../../generated/prisma/index.js";
 import { prisma } from "../../db/prisma.js";
+import { cleanChapterSlug } from "../chapters/chapter-slug.js";
 import { appBaseUrl } from "../email/send.js";
 import { escapeHtml, formatMessagePreview } from "../email/format.js";
 import { renderEmailTemplate } from "../email/render.js";
 import { listAdminRecipients } from "../email/admin-recipients.js";
 import { notify, type NotificationRecipient } from "./service.js";
 import { loadSuggestableCourses, rankCourseSuggestions } from "./course-suggestions.js";
+
+function chapterPath(courseSlug: string, chapterSlug: string): string {
+  return `/courses/${courseSlug}/${cleanChapterSlug(chapterSlug)}`;
+}
 
 // Product events → notify(). Each builder loads what the message needs, names the event with a
 // dedupe key, and describes it once for the bell and once for email; channels and preferences are
@@ -181,7 +186,8 @@ export async function notifyMenteeHelpThreadResolved(threadId: string): Promise<
 
   const lesson = chapterLabel(thread.chapter?.title);
   const path =
-    thread.chapter?.slug != null ? `/courses/${thread.course.slug}/${thread.chapter.slug}` : `/my-questions/${threadId}`;
+    thread.chapter?.slug != null ? chapterPath(thread.course.slug, thread.chapter.slug) : `/my-questions/${threadId}`;
+
 
   await notify({
     type: "help.resolved",
@@ -273,7 +279,7 @@ export async function notifyMenteeReviewFeedback(input: {
   const { chapter } = response.block;
   const courseTitle = chapter.course.title;
   const lesson = chapterLabel(chapter.title);
-  const path = `/courses/${chapter.course.slug}/${chapter.slug}`;
+  const path = chapterPath(chapter.course.slug, chapter.slug);
   const approved = input.verdict === "APPROVED";
   const verdictLabel = approved ? "approved your submission" : "asked for a revision";
   const preview = formatMessagePreview(input.feedbackPreview, 400);
