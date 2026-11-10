@@ -102,11 +102,10 @@ export async function loadChapterReader(courseSlug: string, chapterSlug: string,
   );
   let index = findChapterIndex(flatChapters, chapterSlug);
 
-  // Variant-only lessons (e.g. digital-goods-…) 404 when the learner is pinned to another product
-  // track. If the chapter exists in another variant of this release, open that syllabus instead so
-  // bookmarks and notification links keep working after a track change or republish. Align the
-  // enrollment variant too — otherwise ensureChapterStarted rejects the chapter as out of release.
-  if (index === -1 && selectedRelease) {
+  // Variant-only lessons 404 when the learner is on another track. Before the variant is locked,
+  // switch to the track that owns the lesson so bookmarks still work. After lock, keep them on
+  // their chosen track (do not silently move a grocery learner onto digital-goods).
+  if (index === -1 && selectedRelease && !enrollment.variantLockedAt && enrollment.status !== "COMPLETED") {
     const content = selectedRelease.release.content as unknown as ReleaseContent;
     for (const [variantSlug, modules] of Object.entries(content.variants ?? {})) {
       if (variantSlug === selectedRelease.variant) continue;

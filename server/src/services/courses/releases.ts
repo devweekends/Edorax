@@ -59,6 +59,21 @@ export async function ensureBaselineRelease(tx: Prisma.TransactionClient, course
   return release;
 }
 
+/** Prefer the learner's variant; fall back when a release dropped it or they hold a retired slug. */
+export function resolveVariantInRelease(
+  content: ReleaseContent,
+  family: CourseFamily | null,
+  variantSlug: string | null
+): string {
+  const requested = variantForRelease(family, variantSlug);
+  const fallback = family?.defaultVariantSlug ?? "default";
+  const variant = content.variants[requested] ? requested
+    : content.variants[fallback] ? fallback
+    : Object.keys(content.variants)[0];
+  if (!variant || !content.variants[variant]) throw new NotFoundError("Course variant not found in this release.");
+  return variant;
+}
+
 export async function releaseForEnrollment(courseId: string, enrollment: { releaseId: string | null; variantSlug: string | null }, familySlug: string | null) {
   const course = await prisma.course.findUniqueOrThrow({ where: { id: courseId }, select: { activeReleaseId: true, variantFamily: true } });
   const releaseId = enrollment.releaseId ?? course.activeReleaseId;
@@ -67,14 +82,7 @@ export async function releaseForEnrollment(courseId: string, enrollment: { relea
   if (!release) throw new NotFoundError("Course release not found.");
   const content = release.content as unknown as ReleaseContent;
   const family = resolveCourseFamily(familySlug, course.variantFamily);
-  const requested = variantForRelease(family, enrollment.variantSlug);
-  const fallback = family?.defaultVariantSlug ?? "default";
-  // Prefer the learner's variant; if a release dropped it (or they hold a retired slug), keep the
-  // overview/reader alive on the family default instead of 404ing the whole course.
-  const variant = content.variants[requested] ? requested
-    : content.variants[fallback] ? fallback
-    : Object.keys(content.variants)[0];
-  if (!variant || !content.variants[variant]) throw new NotFoundError("Course variant not found in this release.");
+  const variant = resolveVariantInRelease(content, family, enrollment.variantSlug);
   return { release, variant, modules: content.variants[variant]! };
 }
 
@@ -99,10 +107,11 @@ export async function assertEnrollmentChapter(tx: Prisma.TransactionClient, enro
   const id = enrollment.releaseId ?? enrollment.course.activeReleaseId;
   if (!id) return;
   const release = await tx.courseRelease.findFirstOrThrow({ where: { id, courseId: enrollment.courseId } });
-  const variant = variantForRelease(resolveCourseFamily(enrollment.course.familySlug, enrollment.course.variantFamily), enrollment.variantSlug);
   const content = release.content as unknown as ReleaseContent;
-  const modules = content.variants[variant];
-  if (!modules) throw new NotFoundError("Course variant not found in this release.");
+  const family = resolveCourseFamily(enrollment.course.familySlug, enrollment.course.variantFamily);
+  // Same fallback as releaseForEnrollment so overview/reader and chapter-start never disagree.
+  const variant = resolveVariantInRelease(content, family, enrollment.variantSlug);
+  const modules = content.variants[variant]!;
   if (!modules.some(module => module.chapters.some(chapter => chapter.id === chapterId))) throw new NotFoundError("Chapter is not in this learner's course release.");
 }
 
@@ -135,12 +144,9 @@ export async function upgradeEnrollmentToRelease(
   });
 
   const content = targetRelease.content as unknown as ReleaseContent;
-  const variant = variantForRelease(
-    resolveCourseFamily(enrollment.course.familySlug, enrollment.course.variantFamily),
-    enrollment.variantSlug
-  );
-  const modules = content?.variants?.[variant];
-  if (!modules) throw new NotFoundError("Course variant not found in this release.");
+  const family = resolveCourseFamily(enrollment.course.familySlug, enrollment.course.variantFamily);
+  const variant = resolveVariantInRelease(content, family, enrollment.variantSlug);
+  const modules = content.variants[variant]!;
   const targetChapters: ReleaseChapter[] = modules.flatMap((m) => m.chapters);
 
   const targetById = new Map(targetChapters.map((c) => [c.id, c]));

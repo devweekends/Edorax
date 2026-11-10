@@ -96,4 +96,112 @@ describe("stale chapter --ulid links after republish", () => {
     expect(view.chapter.id).toBe(currentId);
     expect(view.chapter.slug).toBe(logicalSlug);
   });
+
+  it("does not move a locked learner onto another product track", async () => {
+    const digitalOnlySlug = "digital-goods-only-lesson";
+    const digitalOnly = await prisma.chapter.create({
+      data: {
+        courseId: fx.course.id,
+        moduleId: fx.chapterA.moduleId,
+        slug: `${digitalOnlySlug}--01m5digitalonly000000000001`,
+        title: "Digital only",
+        order: 50,
+        source: "# Digital only",
+        publishedAt: new Date(),
+        contentKey: "digital-goods-only",
+      },
+    });
+    const course = await prisma.course.findUniqueOrThrow({ where: { id: fx.course.id } });
+    const release = await prisma.courseRelease.findUniqueOrThrow({ where: { id: course.activeReleaseId! } });
+    const content = structuredClone(release.content as unknown as ReleaseContent);
+    const grocery = content.variants.grocery;
+    content.variants["digital-goods"] = [
+      {
+        ...grocery[0]!,
+        id: `mod-digital-${fx.tag}`,
+        key: "digital-only-module",
+        chapters: [
+          {
+            id: digitalOnly.id,
+            key: "digital-goods-only",
+            slug: digitalOnlySlug,
+            title: "Digital only",
+            order: 1,
+            estimatedMinutes: null,
+            readerMode: "DEFAULT",
+            isMilestone: false,
+            quizPassingScore: 70,
+          },
+        ],
+      },
+    ];
+    await prisma.courseRelease.update({
+      where: { id: release.id },
+      data: { content: content as unknown as object },
+    });
+    await prisma.enrollment.update({
+      where: { id: fx.enrollment.id },
+      data: { variantSlug: "grocery", variantLockedAt: new Date() },
+    });
+
+    const res = await request(app)
+      .get(`/api/v1/courses/${fx.course.slug}/chapters/${encodeURIComponent(digitalOnlySlug)}`)
+      .set(auth());
+    expect(res.status).toBe(404);
+
+    const enrollment = await prisma.enrollment.findUniqueOrThrow({ where: { id: fx.enrollment.id } });
+    expect(enrollment.variantSlug).toBe("grocery");
+  });
+
+  it("starts a chapter when the enrollment variant was retired from the release", async () => {
+    const course = await prisma.course.findUniqueOrThrow({ where: { id: fx.course.id } });
+    const release = await prisma.courseRelease.findUniqueOrThrow({ where: { id: course.activeReleaseId! } });
+    const content = structuredClone(release.content as unknown as ReleaseContent);
+    // Leave grocery (family default) with the rematched lesson; drop the retired track key.
+    delete content.variants["retired-track"];
+    for (const key of Object.keys(content.variants)) {
+      if (key !== "grocery" && key !== "digital-goods") delete content.variants[key];
+    }
+    // Ensure grocery still has the rematched lesson after earlier digital-only edits.
+    const groceryHasLesson = content.variants.grocery.some((module) =>
+      module.chapters.some((chapter) => chapter.id === currentId || chapter.slug === logicalSlug)
+    );
+    if (!groceryHasLesson) {
+      content.variants.grocery = content.variants.grocery.map((module, moduleIndex) =>
+        moduleIndex !== 0
+          ? module
+          : {
+              ...module,
+              chapters: [
+                ...module.chapters,
+                {
+                  id: currentId,
+                  key: "digital-goods-m1-01",
+                  slug: logicalSlug,
+                  title: "Digital goods intro",
+                  order: 1,
+                  estimatedMinutes: null,
+                  readerMode: "DEFAULT" as const,
+                  isMilestone: false,
+                  quizPassingScore: 70,
+                },
+              ],
+            }
+      );
+    }
+    await prisma.courseRelease.update({
+      where: { id: release.id },
+      data: { content: content as unknown as object },
+    });
+    await prisma.enrollment.update({
+      where: { id: fx.enrollment.id },
+      data: { variantSlug: "retired-track", variantLockedAt: new Date() },
+    });
+    const view = await loadChapterReader(fx.course.slug, logicalSlug, fx.learner);
+    expect(view.chapter.id).toBe(currentId);
+    expect(view.content?.source).toContain("Digital goods intro");
+    const enrollment = await prisma.enrollment.findUniqueOrThrow({ where: { id: fx.enrollment.id } });
+    // Stored slug may remain retired; reader/start use the shared release fallback.
+    expect(enrollment.variantSlug).toBe("retired-track");
+  });
 });
