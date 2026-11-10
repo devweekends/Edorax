@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 export function AdminPageHeader({
-  eyebrow = "Platform admin",
+  eyebrow = "Admin console",
   title,
   description,
   actions,
@@ -16,15 +16,15 @@ export function AdminPageHeader({
   return (
     <header className="flex flex-wrap items-end justify-between gap-4 border-b border-border pb-6">
       <div className="min-w-0 max-w-2xl">
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">
           {eyebrow}
         </p>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">{title}</h1>
+        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">{title}</h1>
         {description ? (
           <p className="mt-2 text-sm leading-6 text-muted-foreground">{description}</p>
         ) : null}
       </div>
-      {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div> : null}
+      {actions ? <div className="flex w-full shrink-0 flex-wrap items-center gap-2 sm:w-auto">{actions}</div> : null}
     </header>
   );
 }
@@ -57,7 +57,7 @@ export function AdminSection({
     <section className={cn("mt-10", className)}>
       <div className={cn(action && "flex flex-wrap items-end justify-between gap-3")}>
         <div>
-          <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
+          <h2 className="text-base font-semibold tracking-tight text-foreground">{title}</h2>
           {description ? <p className="mt-1 text-sm text-muted-foreground">{description}</p> : null}
         </div>
         {action ? <div>{action}</div> : null}
@@ -79,8 +79,8 @@ export function AdminPanel({
   return (
     <div
       className={cn(
-        "overflow-hidden rounded-2xl border border-border bg-card text-card-foreground shadow-sm",
-        padding === "default" && "p-5 sm:p-6",
+        "overflow-hidden rounded-2xl border border-border/80 bg-card text-card-foreground shadow-[0_1px_2px_rgb(10_15_44/4%)]",
+        padding === "default" && "p-4 sm:p-6",
         className
       )}
     >
@@ -97,7 +97,7 @@ export function AdminTable({
   minWidth?: string;
 }) {
   return (
-    <div className="overflow-x-auto rounded-2xl border border-border bg-card shadow-sm">
+    <div className="overflow-x-auto rounded-2xl border border-border/80 bg-card shadow-[0_1px_2px_rgb(10_15_44/4%)]">
       <table
         className="w-full text-left text-sm"
         style={minWidth ? { minWidth } : undefined}
@@ -110,7 +110,7 @@ export function AdminTable({
 
 export function AdminTableHead({ children }: { children: ReactNode }) {
   return (
-    <thead className="border-b border-border bg-muted/40 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+    <thead className="border-b border-border bg-muted/40 text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
       {children}
     </thead>
   );
@@ -151,7 +151,7 @@ export function AdminTableRow({
   className?: string;
 }) {
   return (
-    <tr className={cn("transition-colors hover:bg-muted/30", className)}>{children}</tr>
+    <tr className={cn("transition-colors hover:bg-primary/[0.03]", className)}>{children}</tr>
   );
 }
 
@@ -167,7 +167,7 @@ export function AdminTableCell({
   return (
     <td
       className={cn(
-        "px-4 py-3.5 align-middle",
+        "px-4 py-3 align-middle",
         align === "right" && "text-right",
         align === "center" && "text-center",
         className
@@ -208,7 +208,7 @@ export function AdminEmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center rounded-2xl border border-dashed border-border bg-muted/20 px-6 py-14 text-center">
+    <div className="flex flex-col items-center rounded-2xl border border-dashed border-border bg-card px-6 py-14 text-center">
       <p className="text-sm font-semibold">{title}</p>
       {description ? (
         <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">{description}</p>

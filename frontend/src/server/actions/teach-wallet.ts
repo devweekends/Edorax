@@ -3,10 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { teachCall, type TeachActionFailure } from "./teach-call";
 
-export type RequestWithdrawalResult = { ok: true; data: any } | TeachActionFailure;
+export type RequestWithdrawalResult = { ok: true; data: unknown } | TeachActionFailure;
 
 export async function requestWithdrawalAction(
-  _prev: any,
+  _prev: unknown,
   formData: FormData
 ): Promise<RequestWithdrawalResult> {
   const note = String(formData.get("note") ?? "").trim();

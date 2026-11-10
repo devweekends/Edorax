@@ -40,7 +40,7 @@ import {
   listUsersQuery,
   metricsQuery,
   orgIdParams,
-  pageQuery,
+  listAuditQuery,
   requestIdParams,
   suspendUserBody,
   totpCodeBody,
@@ -223,7 +223,7 @@ router.post("/admins", validateBody(grantAdminBody), admin.grantAdmin);
 router.post("/instructor-access-requests/:requestId/approve", validateParams(requestIdParams), admin.approveInstructorRequest);
 router.post("/instructor-access-requests/:requestId/reject", validateParams(requestIdParams), admin.rejectInstructorRequest);
 
-router.get("/audit", validateQuery(pageQuery), admin.listAudit);
+router.get("/audit", validateQuery(listAuditQuery), admin.listAudit);
 router.get("/audit/export", admin.exportAuditCsv);
 
 export default router;

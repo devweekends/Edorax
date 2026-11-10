@@ -64,7 +64,10 @@ export async function createSelfEnrollment(
         throw new SelfEnrollmentError("COUPON_NOT_APPLICABLE", "This enrollment already has an organization discount assigned.");
       }
     }
-    if (existing && existing.lifecycle !== "PAYMENT_REQUIRED") {
+    // A dropped or cancelled row can be re-enrolled by the learner at their own cost. The same row is
+    // reused because (courseId, userId) is unique; any organization link is released.
+    const dropped = Boolean(existing && (existing.lifecycle === "CANCELLED" || existing.status === "DROPPED"));
+    if (existing && !dropped && existing.lifecycle !== "PAYMENT_REQUIRED") {
       throw new SelfEnrollmentError("ALREADY_ENROLLED", "You are already enrolled in this course.");
     }
     if (existing && await tx.instructorCouponRedemption.findUnique({ where: { enrollmentId: existing.id }, select: { id: true } })) {
@@ -126,6 +129,7 @@ export async function createSelfEnrollment(
       const accessGranted = lifecycle === "ACTIVE";
       const row = await tx.enrollment.update({ where: { id: existing.id }, data: {
         lifecycle, status: accessGranted ? "IN_PROGRESS" : "ASSIGNED", startedAt: accessGranted ? existing.startedAt ?? new Date() : null,
+        ...(dropped ? { organizationId: null, source: "SELF" as const, externalAssignmentId: null, externalMentorId: null } : {}),
       } });
       if (existing.payment) await tx.payment.update({ where: { enrollmentId: existing.id }, data: settlement.payment });
       else await tx.payment.create({

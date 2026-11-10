@@ -164,6 +164,13 @@ export const pageQuery = z.object({
 });
 export type PageQuery = z.infer<typeof pageQuery>;
 
+/** The audit log accepts a free-text search and an optional target type. */
+export const listAuditQuery = pageQuery.extend({
+  query: z.string().trim().max(120).optional(),
+  targetType: z.string().trim().max(40).optional(),
+});
+export type ListAuditQuery = z.infer<typeof listAuditQuery>;
+
 export const listOrganizationsQuery = pageQuery.extend({
   query: z.string().trim().max(120).optional(),
 });

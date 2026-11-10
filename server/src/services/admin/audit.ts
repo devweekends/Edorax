@@ -76,11 +76,32 @@ export function recordAdminAction(tx: Pick<Prisma.TransactionClient, "adminAudit
 
 const AUDIT_EXPORT_LIMIT = 10_000;
 
-export async function listRecentAudit(filters: PageQuery = {}): Promise<AdminAuditView> {
-  const total = await prisma.adminAuditLog.count();
+export type AuditListFilters = PageQuery & { query?: string; targetType?: string };
+
+/** Builds the audit where-clause: free text over who/what/where, and an optional target type. */
+function auditWhere(filters: AuditListFilters): Prisma.AdminAuditLogWhereInput {
+  const where: Prisma.AdminAuditLogWhereInput = {};
+  const text = typeof filters.query === "string" ? filters.query.trim().slice(0, 120) : "";
+  if (text) {
+    where.OR = [
+      { actorEmail: { contains: text, mode: "insensitive" } },
+      { summary: { contains: text, mode: "insensitive" } },
+      { targetId: { contains: text, mode: "insensitive" } },
+      { action: { contains: text, mode: "insensitive" } },
+    ];
+  }
+  const targetType = typeof filters.targetType === "string" ? filters.targetType.trim().slice(0, 40) : "";
+  if (targetType) where.targetType = targetType;
+  return where;
+}
+
+export async function listRecentAudit(filters: AuditListFilters = {}): Promise<AdminAuditView> {
+  const where = auditWhere(filters);
+  const total = await prisma.adminAuditLog.count({ where });
   const paging = resolvePaging(filters, total);
 
   const entries = await prisma.adminAuditLog.findMany({
+    where,
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     skip: paging.skip,
     take: paging.take,

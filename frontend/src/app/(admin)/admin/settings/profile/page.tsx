@@ -5,6 +5,7 @@ import { requireRole } from "@/server/auth/guards";
 import { AdminProfileForms } from "@/components/admin/admin-profile-forms";
 import { AdminMfaCard } from "@/components/admin/admin-mfa-card";
 import { NotificationPreferencesForm } from "@/components/notifications/notification-preferences-form";
+import { AdminPageHeader } from "@/components/admin/admin-ui";
 
 export default async function AdminProfilePage() {
   const user = await requireRole("ADMIN");
@@ -13,11 +14,12 @@ export default async function AdminProfilePage() {
     serverApiFetch<NotificationPreferences>("/api/v1/notifications/preferences"),
   ]);
   return (
-    <div className="max-w-2xl space-y-6">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Profile settings</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Manage your admin account, alerts, and sign-in details.</p>
-      </header>
+    <div className="max-w-3xl space-y-6 sm:space-y-8">
+      <AdminPageHeader
+        eyebrow="Account"
+        title="Profile settings"
+        description="Manage your admin account, alerts, and sign-in details."
+      />
       <AdminProfileForms
         name={user.name ?? ""}
         email={user.email}

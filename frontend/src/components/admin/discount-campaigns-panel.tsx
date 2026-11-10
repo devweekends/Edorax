@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { BadgePercent, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,19 @@ import { createDiscountCampaign, setDiscountCampaignActive } from "@/server/acti
 type Scope = "ALL" | "CATEGORY" | "SUBCATEGORY" | "TAG" | "SELECTED_COURSES";
 type Campaign = { id: string; label: string; code: string | null; scope: Scope; category: "TECH" | "SOFT_SKILLS" | null; subcategory: string | null; tag: string | null; courseIds: string[]; percentOff: number; maxRedemptions: number; redemptionCount: number; autoApply: boolean; active: boolean; expiresAt: string | null; courseCount: number; createdAt: string };
 
-export function DiscountCampaignsPanel({ campaigns, subcategories, tags }: { campaigns: Campaign[]; subcategories: string[]; tags: string[] }) {
+export function DiscountCampaignsPanel({
+  campaigns,
+  subcategories,
+  tags,
+  listControls,
+  pagination,
+}: {
+  campaigns: Campaign[];
+  subcategories: string[];
+  tags: string[];
+  listControls?: ReactNode;
+  pagination?: ReactNode;
+}) {
   const router = useRouter();
   const [scope, setScope] = useState<Exclude<Scope, "SELECTED_COURSES">>("ALL");
   const [category, setCategory] = useState<"TECH" | "SOFT_SKILLS">("TECH");
@@ -61,11 +73,13 @@ export function DiscountCampaignsPanel({ campaigns, subcategories, tags }: { cam
 
     <section>
       <h2 className="text-lg font-semibold">Discount campaigns</h2>
+      {listControls ? <div className="mt-4">{listControls}</div> : null}
       <div className="mt-4 divide-y rounded-xl border bg-card">
         {campaigns.length ? campaigns.map((campaign) => <article key={campaign.id} className="flex flex-wrap items-center justify-between gap-4 p-4">
           <div className="min-w-0"><p className="font-semibold">{campaign.label} <span className="font-normal text-muted-foreground">· {campaign.percentOff}% off{campaign.autoApply ? " · Auto-applied" : ""}</span></p><p className="mt-1 text-xs text-muted-foreground">{scopeDescription(campaign)} · {campaign.code ? `Code ${campaign.code} · ` : "Automatic offer · "}{campaign.courseCount} participating courses · {campaign.redemptionCount}/{campaign.maxRedemptions} used · {campaign.active ? "Active" : "Paused"}{campaign.expiresAt ? ` · expires ${new Date(campaign.expiresAt).toLocaleDateString()}` : ""}</p></div>
           <div className="flex gap-2">{campaign.code ? <Button size="sm" variant="outline" onClick={async () => { await navigator.clipboard.writeText(campaign.code!); setMessage("Campaign code copied."); }}><Copy /> Copy code</Button> : null}<Button size="sm" variant="ghost" onClick={async () => { const result = await setDiscountCampaignActive({ id: campaign.id, active: !campaign.active }); setMessage(result.message); if (result.ok) router.refresh(); }}>{campaign.active ? "Pause" : "Activate"}</Button></div>
         </article>) : <p className="p-5 text-sm text-muted-foreground">No campaigns yet.</p>}
+      {pagination}
       </div>
     </section>
   </div>;

@@ -6,18 +6,16 @@ import { AdminBackLink, AdminPageHeader, AdminPanel } from "@/components/admin/a
 
 export default function NewOrganizationPage() {
   return (
-    <div>
+    <div className="space-y-6 sm:space-y-8">
       <AdminBackLink href="/admin/organizations">← Back to organizations</AdminBackLink>
 
-      <div className="mt-4">
       <AdminPageHeader
         eyebrow="Tenants"
         title="New organization"
         description="A default API credential pair is created automatically. You will see the secret once after creation."
       />
-      </div>
 
-      <AdminPanel className="mt-8 max-w-lg">
+      <AdminPanel className="max-w-xl">
         <AdminActionForm
           action={createOrganizationAction}
           submitLabel="Create organization"

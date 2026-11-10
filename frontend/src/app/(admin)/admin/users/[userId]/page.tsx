@@ -17,7 +17,6 @@ import {
   AdminActionRow,
   AdminBackLink,
   AdminEmptyState,
-  AdminPageHeader,
   AdminPanel,
   AdminSection,
   AdminTable,
@@ -29,11 +28,11 @@ import {
   adminSelectClassName,
 } from "@/components/admin/admin-ui";
 
-function DetailItem({ label, value }: { label: string; value: React.ReactNode }) {
+function StatTile({ label, value }: { label: string; value: string | number }) {
   return (
-    <div>
-      <dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</dt>
-      <dd className="mt-1 text-sm">{value}</dd>
+    <div className="rounded-2xl border border-border/80 bg-card p-4 shadow-sm sm:p-5">
+      <p className="text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">{label}</p>
+      <p className="mt-2 text-2xl font-semibold tabular-nums tracking-tight">{value}</p>
     </div>
   );
 }
@@ -60,29 +59,41 @@ export default async function AdminUserDetailPage({
   );
 
   const isSelf = user.id === currentAdmin.id;
+  const displayName = user.name ?? user.email;
+  const initials =
+    displayName
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0])
+      .join("")
+      .toUpperCase() || "?";
 
   return (
-    <div>
+    <div className="space-y-8">
       <AdminBackLink href="/admin/users">← Back to users</AdminBackLink>
 
-      <div className="mt-4">
-        <AdminPageHeader
-          eyebrow="Account"
-          title={user.name ?? user.email}
-          description={<span className="font-mono text-xs">{user.email}</span>}
-          actions={
-            <div className="flex flex-wrap gap-2">
-              <Badge variant="outline">{user.role}</Badge>
-              {user.emailVerified ? (
-                <Badge variant="secondary">Verified</Badge>
-              ) : (
-                <Badge variant="outline">Unverified</Badge>
-              )}
-              {user.suspended ? <Badge variant="destructive">Suspended</Badge> : null}
-            </div>
-          }
-        />
-      </div>
+      <section className="flex flex-col gap-5 rounded-2xl border border-border/80 bg-card p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-6">
+        <div className="flex min-w-0 items-center gap-4">
+          <span aria-hidden className="grid size-14 shrink-0 place-items-center rounded-2xl bg-primary/10 text-lg font-semibold text-primary">
+            {initials}
+          </span>
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">Account</p>
+            <h1 className="mt-0.5 truncate text-2xl font-semibold tracking-tight sm:text-3xl">{displayName}</h1>
+            <p className="truncate font-mono text-xs text-muted-foreground">{user.email}</p>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="outline">{user.role}</Badge>
+          {user.emailVerified ? (
+            <Badge variant="secondary">Verified</Badge>
+          ) : (
+            <Badge variant="outline">Unverified</Badge>
+          )}
+          {user.suspended ? <Badge variant="destructive">Suspended</Badge> : null}
+        </div>
+      </section>
 
       {user.suspended ? (
         <AdminPanel className="mt-6 border-destructive/30 bg-destructive/5">
@@ -94,16 +105,20 @@ export default async function AdminUserDetailPage({
         </AdminPanel>
       ) : null}
 
-      <AdminPanel className="mt-8">
-        <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <DetailItem label="Created" value={new Date(user.createdAt).toLocaleDateString()} />
-          <DetailItem label="Enrollments" value={<span className="tabular-nums">{user.enrollmentCount}</span>} />
-          <DetailItem label="Courses owned" value={<span className="tabular-nums">{user.courseCount}</span>} />
-          <DetailItem label="Active sessions" value={<span className="tabular-nums">{user.activeSessions}</span>} />
-          <DetailItem label="ZIP import" value={user.zipImportEnabled ? "Enabled" : "Disabled"} />
-          <DetailItem label="Tester" value={user.testerEnabled ? "Enabled (skips sequential locks)" : "Disabled"} />
-        </dl>
-      </AdminPanel>
+      <section aria-label="Account summary" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatTile label="Joined" value={new Date(user.createdAt).toLocaleDateString()} />
+        <StatTile label="Enrollments" value={user.enrollmentCount} />
+        <StatTile label="Courses owned" value={user.courseCount} />
+        <StatTile label="Active sessions" value={user.activeSessions} />
+      </section>
+
+      <section aria-label="Access settings" className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <span className="font-medium text-foreground">Access</span>
+        <Badge variant="outline">ZIP import {user.zipImportEnabled ? "on" : "off"}</Badge>
+        <Badge variant="outline">
+          Tester {user.testerEnabled ? "on (skips sequential locks)" : "off"}
+        </Badge>
+      </section>
 
       <AdminSection title="Account actions" description="Changes take effect immediately.">
         <AdminPanel>

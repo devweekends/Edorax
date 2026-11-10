@@ -29,6 +29,7 @@ export function ProfileSettingsTabs({
   useEffect(() => {
     if (typeof window === "undefined") return;
     const fromHash = window.location.hash.replace(/^#/, "");
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reads the initial tab from the URL hash, which only exists in the browser
     if (fromHash && tabs.some((tab) => tab.id === fromHash)) setActive(fromHash);
   }, [tabs]);
 

@@ -70,10 +70,10 @@ export function AdminLiveFilterBar({
         if (timer.current) clearTimeout(timer.current);
         navigate(event.currentTarget);
       }}
-      className="mt-6 flex flex-wrap items-end gap-3"
+      className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-end"
     >
       {fields.map((field) => (
-        <label key={field.name} className="flex min-w-40 flex-col gap-1 text-xs font-medium text-muted-foreground">
+        <label key={field.name} className="flex min-w-0 flex-col gap-1 text-xs font-medium text-muted-foreground lg:min-w-40">
           {field.label}
           {field.kind === "search" ? (
             <input
@@ -94,7 +94,7 @@ export function AdminLiveFilterBar({
           )}
         </label>
       ))}
-      <div className="flex items-center gap-3 pb-0.5">
+      <div className="flex items-center gap-3 pb-0.5 sm:col-span-2 lg:col-auto">
         <Button type="submit" size="sm" variant="outline" loading={pending} loadingLabel="Filtering…">
           Apply filters
         </Button>

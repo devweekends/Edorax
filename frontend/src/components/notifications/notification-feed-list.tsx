@@ -27,6 +27,7 @@ export function NotificationFeedList() {
   useEffect(() => {
     if (seededFilter.current || status !== "ready") return;
     seededFilter.current = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time seed of the unread filter once notifications load
     if (unreadCount > 0) setUnreadOnly(true);
   }, [status, unreadCount]);
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect } from "react";
+import { useActionState } from "react";
 import { requestWithdrawalAction } from "@/server/actions/teach-wallet";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, CheckCircle2 } from "lucide-react";

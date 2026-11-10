@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useId, useRef, useState, useTransition } from "react";
+import { UserCheck, UserX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/app-toast";
 import { cn } from "@/lib/utils";
@@ -22,6 +23,8 @@ export function AdminBulkBar({
   confirm,
   noteField,
   approveFields,
+  showWhen,
+  icon,
 }: {
   action: (state: AdminActionState, formData: FormData) => Promise<AdminActionState>;
   submitLabel: string;
@@ -30,6 +33,14 @@ export function AdminBulkBar({
   confirm: { question: string; description: string; confirmLabel: string };
   noteField?: { label: string; placeholder: string };
   approveFields?: { maxEnrollments: number; expiresAt: string };
+  /**
+   * Show only while the checked rows match: "active" = every checked row is not
+   * suspended, "suspended" = every checked row is suspended. Rows opt in with
+   * `data-suspended="true" | "false"`. Omit to keep the bar always visible.
+   */
+  showWhen?: "active" | "suspended";
+  /** Named icon, so the server page can pass it without serialising a component. */
+  icon?: "suspend" | "reinstate";
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [open, setOpen] = useState(false);
@@ -37,6 +48,25 @@ export function AdminBulkBar({
   const [state, setState] = useState<AdminActionState>(initial);
   const titleId = useId();
   const descriptionId = useId();
+  const [selection, setSelection] = useState({ count: 0, allActive: false, allSuspended: false });
+
+  const readSelection = useCallback(() => {
+    const boxes = Array.from(document.querySelectorAll<HTMLInputElement>("input[data-bulk-id]:checked"));
+    const suspended = boxes.filter((box) => box.dataset.suspended === "true").length;
+    setSelection({
+      count: boxes.length,
+      allActive: boxes.length > 0 && suspended === 0,
+      allSuspended: boxes.length > 0 && suspended === boxes.length,
+    });
+  }, []);
+
+  useEffect(() => {
+    document.addEventListener("change", readSelection);
+    return () => document.removeEventListener("change", readSelection);
+  }, [readSelection]);
+
+  const visible =
+    showWhen === "active" ? selection.allActive : showWhen === "suspended" ? selection.allSuspended : true;
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -65,6 +95,7 @@ export function AdminBulkBar({
           input.checked = false;
         }
         void selection;
+        readSelection();
       }
       setOpen(false);
     });
@@ -86,11 +117,13 @@ export function AdminBulkBar({
 
   return (
     <>
+      {visible ? (
       <div className="flex flex-wrap items-center gap-2">
         <Button
           type="button"
           size="sm"
           variant={variant}
+          className="gap-1.5"
           onClick={() => {
             const count = selectedIds().length;
             if (count === 0) {
@@ -101,6 +134,8 @@ export function AdminBulkBar({
             setOpen(true);
           }}
         >
+          {icon === "suspend" ? <UserX className="size-4" aria-hidden /> : null}
+          {icon === "reinstate" ? <UserCheck className="size-4" aria-hidden /> : null}
           {submitLabel}
         </Button>
         {state.message ? (
@@ -112,6 +147,7 @@ export function AdminBulkBar({
           </p>
         ) : null}
       </div>
+      ) : null}
 
       <dialog
         ref={dialogRef}
