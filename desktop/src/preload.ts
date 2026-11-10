@@ -55,12 +55,33 @@ const api: DesktopAPI = {
       };
     },
   },
+  remote: {
+    request: (path, method, body) =>
+      ipcRenderer.invoke('remote:request', path, method, body),
+  },
+  openWeb: (path) => ipcRenderer.invoke('app:open-web', path),
+  quizLockdown: (active) => ipcRenderer.invoke('quiz:lockdown', active),
+  onQuizScreens: (listener) => {
+    const receive = (_event: Electron.IpcRendererEvent, state: { screens: number }) => listener(state);
+    ipcRenderer.on('quiz:screens', receive);
+    return () => {
+      ipcRenderer.removeListener('quiz:screens', receive);
+    };
+  },
   platform: process.platform,
   offline: {
     status: (slug) => ipcRenderer.invoke('offline:status', slug),
     download: (slug) => ipcRenderer.invoke('offline:download', slug),
     remove: (slug) => ipcRenderer.invoke('offline:remove', slug),
     sync: () => ipcRenderer.invoke('offline:sync'),
+    onStatus: (listener) => {
+      const receive = (_event: Electron.IpcRendererEvent, status: unknown) =>
+        listener(status as Parameters<typeof listener>[0]);
+      ipcRenderer.on('offline:sync-status', receive);
+      return () => {
+        ipcRenderer.removeListener('offline:sync-status', receive);
+      };
+    },
   },
   webOrigin: () => ipcRenderer.invoke('app:web-origin'),
   integrityRequest: (path, method, body) =>
@@ -89,8 +110,20 @@ const api: DesktopAPI = {
   startLearning: (slug) => ipcRenderer.invoke('course:start-learning', slug),
   enroll: (courseId) => ipcRenderer.invoke('enrollment:create', courseId),
   listCourses: () => ipcRenderer.invoke('catalog:list'),
+  audiobooks: {
+    library: () => ipcRenderer.invoke('audiobooks:library'),
+    download: (slug) => ipcRenderer.invoke('audiobooks:download', slug),
+    remove: (slug) => ipcRenderer.invoke('audiobooks:remove', slug),
+  },
   courseDetail: (slug) => ipcRenderer.invoke('catalog:detail', slug),
   learnerProfile: () => ipcRenderer.invoke('learner:profile'),
+  home: () => ipcRenderer.invoke('learner:home'),
+  progress: () => ipcRenderer.invoke('learner:progress'),
+  leaderboard: {
+    context: () => ipcRenderer.invoke('leaderboard:context'),
+    hub: (selection: unknown) => ipcRenderer.invoke('leaderboard:hub', selection),
+    setOptIn: (optIn: boolean) => ipcRenderer.invoke('leaderboard:opt-in', optIn),
+  },
   signIn: () => ipcRenderer.invoke('auth:sign-in'),
   authStatus: () => ipcRenderer.invoke('auth:status'),
   cancelSignIn: () => ipcRenderer.invoke('auth:cancel-sign-in'),
