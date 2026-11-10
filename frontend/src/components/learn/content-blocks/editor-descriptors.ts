@@ -61,6 +61,7 @@ export const contentBlockDescriptors: JsxComponentDescriptor[] = [
     false
   ),
   createFlowDescriptor("CheckpointIntro", [{ name: "title" }, { name: "content" }], false),
+  createFlowDescriptor("GoDeeper", [{ name: "title" }], true),
   createFlowDescriptor("BigWordAlert", [
     { name: "term", required: true },
     { name: "plainEnglish", required: true },

@@ -1,8 +1,9 @@
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { alongRoute, checkMap, cutOff, edgeFraction, effectsOf, failedLinks, linkKey, mapLinks, stopIndex } from "@buildment/learning-ui/canvas/models/block-map";
-import { MAP_CARD_H, MAP_CARD_W } from "@buildment/learning-ui/canvas/primitives/block-map";
+import { alongRoute, checkMap, cutOff, edgeFraction, effectsOf, failedLinks, linkKey, mapLinks, stopIndex, toMapLink } from "@buildment/learning-ui/canvas/models/block-map";
+import { blockMapDataSchema, parsePortable } from "@buildment/learning-ui/canvas/models/portable";
+import { BlockMap, MAP_CARD_H, MAP_CARD_W } from "@buildment/learning-ui/canvas/primitives/block-map";
 import { DAFTAR_BLOCKS, DAFTAR_EXTRA_LINKS, sysdesignM1BlockMap } from "@buildment/learning-ui/canvas/sysdesign-m1-block-map/data";
 
 const links = mapLinks(DAFTAR_BLOCKS, DAFTAR_EXTRA_LINKS);
@@ -110,5 +111,46 @@ describe("sysdesign-m1-block-map", () => {
     expect(html).toContain("ElastiCache");
     expect(html).toContain("Break it");
     expect(html.match(/aria-pressed/g)?.length).toBeGreaterThanOrEqual(DAFTAR_BLOCKS.length);
+  });
+});
+
+// A chapter writes the links between blocks as { from, to }. They used to reach
+// linkKey(...l) as objects, and the spread threw, so the whole chapter block
+// rendered as "could not be displayed".
+describe("a map written in a chapter", () => {
+  const data = {
+    title: "The nine parts of Docker",
+    purpose: "Tap a part to light the path a command takes to reach it.",
+    limits: "One card stands for a whole program.",
+    height: 252,
+    defaultSelected: "daemon",
+    cloudLabel: "Command that shows it",
+    blocks: [
+      { id: "client", label: "Client", kind: "user", x: 66, y: 146, role: "your commands", does: "The docker command you type.", fails: "It can work while the daemon is off.", cloud: "docker version", path: ["client"] },
+      { id: "daemon", label: "Daemon", kind: "server", x: 210, y: 76, role: "does the work", does: "The engine program, dockerd.", fails: "It normally runs as root.", cloud: "docker info", path: ["client", "daemon"], failure: { verdict: "Daemon down: engine commands fail", affects: [{ block: "client", status: "cannot connect" }] } },
+      { id: "image", label: "Image", kind: "database", x: 354, y: 146, role: "the package", does: "Layers of files plus a description.", fails: "A tag is a movable label.", cloud: "docker image inspect alpine", path: ["client", "daemon", "image"] },
+      { id: "container", label: "Container", kind: "server", x: 354, y: 216, role: "the running one", does: "An image plus a thin writable layer.", fails: "Removing it deletes its writable layer.", cloud: "docker ps -a", path: ["client", "daemon", "container"], needs: ["image"], failure: { verdict: "Container exits: its process is gone" } },
+    ],
+    links: [{ from: "container", to: "image" }],
+  };
+
+  it("reads an extra link written either way", () => {
+    expect(toMapLink({ from: "container", to: "image" })).toEqual(["container", "image"]);
+    expect(toMapLink(["container", "image"])).toEqual(["container", "image"]);
+  });
+
+  it("draws an extra link written as { from, to }", () => {
+    const drawn = mapLinks(data.blocks as never, data.links as never);
+    expect(keys(drawn).has(linkKey("container", "image"))).toBe(true);
+    expect(failedLinks(data.blocks as never, drawn, "image").has(linkKey("container", "image"))).toBe(true);
+  });
+
+  it("renders the picture from the data a chapter carries", () => {
+    const parsed = parsePortable(blockMapDataSchema, data);
+    expect(parsed.ok ? [] : parsed.problems).toEqual([]);
+    const html = renderToString(createElement(BlockMap, (parsed.ok ? parsed.value : {}) as never));
+    expect(html).toContain("<svg");
+    expect(html).toContain("The nine parts of Docker");
+    expect(html).toContain("Break it");
   });
 });

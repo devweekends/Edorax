@@ -19,7 +19,7 @@ import {
   pathLinks,
   stopIndex,
   type MapBlock,
-  type MapLink,
+  type MapLinkInput,
   type Point,
 } from "../models/block-map";
 
@@ -33,7 +33,7 @@ import {
 export type BlockMapConfig = {
   blocks: MapBlock[];
   /** Links that are not a step on any block's path, for example workers to file storage. */
-  links?: MapLink[];
+  links?: MapLinkInput[];
   /** viewBox height; the width is always 420. */
   height: number;
   /** The block selected when the picture first shows. */

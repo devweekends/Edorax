@@ -86,15 +86,9 @@ describe("AI review drafts", () => {
     ).rejects.toThrow();
   });
 
-  it("fails before making a request when no server key is configured", async () => {
-    const originalKey = process.env.OPENROUTER_API_KEY;
-    delete process.env.OPENROUTER_API_KEY;
-    try {
-      await expect(generateReviewDraft(context, { apiKey: "" })).rejects.toThrow(
-        "OpenRouter key in Settings",
-      );
-    } finally {
-      if (originalKey) process.env.OPENROUTER_API_KEY = originalKey;
-    }
+  it("fails before making a request when no instructor key is provided", async () => {
+    await expect(generateReviewDraft(context, { apiKey: "" })).rejects.toThrow(
+      "OpenRouter key in Settings",
+    );
   });
 });
