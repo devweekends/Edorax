@@ -80,7 +80,7 @@ describe("/api/v1/teach/review", () => {
     const res = await request(app).post(`/api/v1/teach/review/${responseId}/ai-draft`).set(mentor());
     expect(res.status).toBe(422);
     expect(res.body.code).toBe("AI_DRAFT_UNAVAILABLE");
-    expect(res.body.message).toMatch(/OPENROUTER_API_KEY/);
+    expect(res.body.message).toMatch(/OpenRouter key in Settings/);
   });
 
   it("records the verdict, caps the score and clears the pending counters", async () => {
