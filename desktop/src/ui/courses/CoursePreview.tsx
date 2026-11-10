@@ -193,9 +193,9 @@ export function CoursePreview({
             </div>
           </section>
           {current.projectGoal && (
-            <section className="mt-6 rounded-2xl border border-border bg-ok-soft/40 p-6">
+            <section className="mt-6 rounded-2xl border border-border bg-secondary/40 p-6">
               <div className="mb-3 flex items-center gap-2">
-                <Target size={18} className="text-ok" />
+                <Target size={18} className="text-primary" />
                 <h2 className="font-semibold">What you’ll build</h2>
               </div>
               <p className="whitespace-pre-line text-sm leading-7 text-muted-foreground">
@@ -270,6 +270,15 @@ export function CoursePreview({
               Enrollment started. Complete payment on the Edorax website to
               access this course.
             </p>
+          )}
+          {signedIn && detail?.access === 'payment_required' && (
+            <button
+              type="button"
+              onClick={() => void window.buildment.openWeb(`/courses/${current.slug}/checkout`)}
+              className={button + ' mt-3 w-full'}
+            >
+              Complete checkout on the website
+            </button>
           )}
           {signedIn && enrollError && (
             <p role="alert" className="mt-3 text-sm text-muted-foreground">

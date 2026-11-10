@@ -80,41 +80,45 @@ export function TheiaWorkspace({
   }, [api, courseSlug]);
 
   useEffect(() => {
-    const update = () => {
+    // Layout shifts (the lesson header settling, Full screen, Hide IDE) do not fire resize or scroll,
+    // so check the host's position every frame and send it only when it changes.
+    let frame = 0;
+    let last = '';
+    const send = () => {
       const rect = host.current?.getBoundingClientRect();
-      if (
-        !active ||
-        busy ||
-        !session ||
-        !rect ||
-        !host.current?.getClientRects().length
-      ) {
-        void api.bounds(null, courseSlug);
-        return;
+      const shown = !!host.current?.getClientRects().length;
+      const next =
+        !active || busy || !session || !rect || !shown
+          ? null
+          : {
+              x: Math.round(rect.x),
+              y: Math.round(rect.y),
+              width: Math.round(rect.width),
+              height: Math.round(rect.height),
+            };
+      const key = next
+        ? `${next.x},${next.y},${next.width},${next.height},${window.devicePixelRatio}`
+        : '';
+      if (key === last) return;
+      last = key;
+      void api.bounds(next, courseSlug).catch(report);
+    };
+    const tick = () => {
+      try {
+        send();
+      } finally {
+        // Keep checking even if one update fails, so the IDE never stops following the page.
+        frame = window.requestAnimationFrame(tick);
       }
-      void api
-        .bounds(
-          {
-            x: rect.x,
-            y: rect.y,
-            width: rect.width,
-            height: rect.height,
-          },
-          courseSlug,
-        )
-        .catch(report);
     };
-    const observer = new ResizeObserver(update);
-    if (host.current) observer.observe(host.current);
-    window.addEventListener('resize', update);
-    window.addEventListener('scroll', update, true);
-    update();
-    return () => {
-      observer.disconnect();
-      window.removeEventListener('resize', update);
-      window.removeEventListener('scroll', update, true);
-    };
+    tick();
+    return () => window.cancelAnimationFrame(frame);
   }, [api, courseSlug, active, session, busy]);
+
+  // Hide the IDE view as soon as the IDE closes, independent of the position loop.
+  useEffect(() => {
+    if (!active) void api.bounds(null, courseSlug).catch(report);
+  }, [api, courseSlug, active]);
 
   useEffect(() => {
     if (

@@ -86,6 +86,14 @@ function ResultBanner({
     optionLabelToId.set(normalizeLabel(option.label), option.id);
   }
 
+  // Show only the explanation for the option the learner picked. If no line matches the pick,
+  // fall back to the full list so the learner still sees feedback.
+  const pickedLines = parsedLines.filter((line) => {
+    const optionId = optionLabelToId.get(normalizeLabel(line.optionLabel));
+    return optionId ? selectedSet.has(optionId) : false;
+  });
+  const visibleLines = pickedLines.length > 0 ? pickedLines : parsedLines;
+
   return (
     <div
       className={cn(
@@ -120,7 +128,7 @@ function ResultBanner({
           </div>
           {result.explanation && isStructured && parsedLines.length > 0 ? (
             <ul className="mt-3 space-y-3">
-              {parsedLines.map((line, index) => {
+              {visibleLines.map((line, index) => {
                 const optionId = optionLabelToId.get(normalizeLabel(line.optionLabel));
                 const isSelected = optionId ? selectedSet.has(optionId) : false;
                 const isCorrectOption = optionId ? correctSet.has(optionId) : false;

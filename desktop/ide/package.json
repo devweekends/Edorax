@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "theia build --mode production && theia download:plugins --ignore-errors",
-    "download:plugins": "theia download:plugins --ignore-errors",
-    "start": "theia start --hostname=127.0.0.1 --plugins=local-dir:plugins"
+    "build": "node node_modules/@theia/cli/bin/theia.js build --mode production",
+    "download:plugins": "node node_modules/@theia/cli/bin/theia.js download:plugins --ignore-errors",
+    "start": "node node_modules/@theia/cli/bin/theia.js start --hostname=127.0.0.1 --plugins=local-dir:plugins"
   },
   "theia": {
     "target": "browser",
@@ -108,7 +108,6 @@
     "@theia/vsx-registry": "1.76.0",
     "@theia/workspace": "1.76.0",
     "edorax-ide-extension": "file:./edorax-extension",
-    "node": "24.8.0",
     "decompress": "file:vendor/decompress-cjs"
   },
   "devDependencies": {

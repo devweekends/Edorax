@@ -12,9 +12,9 @@ export function SignInPrompt({
   return (
     <section
       aria-labelledby="ready-title"
-      className="mt-8 flex flex-wrap items-center gap-5 rounded-2xl border border-border bg-ok-soft/40 p-6 shadow-sm"
+      className="mt-8 flex flex-wrap items-center gap-5 rounded-2xl border border-border bg-secondary/60 p-6 shadow-sm"
     >
-      <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-ok-soft text-ok shadow-xs">
+      <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-card text-primary shadow-xs">
         <Sprout size={24} />
       </span>
       <div className="min-w-48 flex-1">

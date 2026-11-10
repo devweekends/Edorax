@@ -31,7 +31,10 @@ const config: ForgeConfig = {
       './ide',
     ],
   },
-  rebuildConfig: {},
+  // TEMPORARY: node-pty's Electron rebuild needs a working Visual Studio install, which this machine
+  // does not have yet. An empty onlyModules list skips native rebuilds so the app can start.
+  // Remove this line (back to rebuildConfig: {}) once the Build Tools are detected.
+  rebuildConfig: { onlyModules: [] },
   makers: [
     new MakerSquirrel({}),
     new MakerZIP({}, ['darwin']),

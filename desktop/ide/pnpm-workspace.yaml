@@ -1,0 +1,14 @@
+nodeLinker: hoisted
+allowBuilds:
+  '@parcel/watcher': true
+  drivelist: false
+  esbuild: true
+  keytar: true
+  msgpackr-extract: true
+  node-pty: true
+  '@theia/ffmpeg': false
+  node: false
+  puppeteer: false
+overrides:
+  '@vscode/windows-ca-certs': file:./vendor/windows-ca-certs
+  drivelist: file:./vendor/drivelist

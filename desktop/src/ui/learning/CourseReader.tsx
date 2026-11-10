@@ -5,6 +5,8 @@ import {
   useCourseIDE,
 } from '../labs/CourseIDE';
 import { playFeedback } from '../../lib/sound-feedback';
+import { useToast } from '../toast/Toast';
+import { useDotVoice } from '../mascot/DotVoice';
 import { DesktopToolbar } from '../layout/DesktopToolbar';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Lesson } from '../../domain/learning';
@@ -59,6 +61,9 @@ function CourseReaderBody({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [queuedChapter, setQueuedChapter] = useState<string | null>(null);
+  const toast = useToast();
+  const { track: trackDot } = useDotVoice();
   const [quiz, setQuiz] = useState<QuizChapterState | null>(null);
   const [sidebarClosed, setSidebarClosed] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(() => {
@@ -118,6 +123,16 @@ function CourseReaderBody({
     setError(result.message);
     if (result.code === 'AUTH_REQUIRED') onSignedOut();
   }
+  // Errors that happen while a lesson is open show as a toast with a retry action.
+  useEffect(() => {
+    if (!error || !lesson) return;
+    toast.error('Something went wrong', {
+      description: error,
+      action: { label: 'Try again', onClick: () => void load(lesson.chapter.slug, true) },
+    });
+    // The toast should fire once per error message, not on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [error]);
   async function load(chapter: string, refresh = false) {
     const request = ++generation.current;
     if (!refresh) {
@@ -212,16 +227,23 @@ function CourseReaderBody({
     setBusy(true);
     setError('');
     try {
-      const result = await window.buildment.learning.complete(
-        lesson.chapter.id,
-      );
-      if (!result.ok) fail(result);
-      else {
+      const result = await window.buildment.learning.complete(lesson.chapter.id);
+      if (!result.ok) {
+        fail(result);
+      } else if ((result.data as { queued?: boolean } | null)?.queued) {
+        // Offline: the completion is queued and syncs in the background, so reloading would only fail.
+        setQueuedChapter(lesson.chapter.id);
+        toast.info('Saved offline', { description: 'This lesson will be marked complete when you are back online.' });
+      } else {
         playFeedback('completion');
+        void trackDot({ type: 'chapter_completed', chapterId: lesson.chapter.id });
         await load(lesson.chapter.slug, true);
       }
     } catch {
-      setError('Could not save lesson completion. Try again.');
+      toast.error('Could not save lesson completion', {
+        description: 'Try again in a moment.',
+        action: { label: 'Try again', onClick: () => void complete() },
+      });
     } finally {
       setBusy(false);
     }
@@ -233,6 +255,7 @@ function CourseReaderBody({
     <CourseNavigationProvider onNavigate={navigate}>
       <VariantThemeScope variant={variantForTrack(lesson?.track ?? null)}>
         <div className="course-overview-surface flex h-full flex-col overflow-hidden bg-background">
+          {!quiz && (
           <DesktopToolbar>
             <div className="flex min-w-0 items-center gap-2">
               <SidebarToggle
@@ -268,22 +291,20 @@ function CourseReaderBody({
               <AccountMenu session={session} />
             </div>
           </DesktopToolbar>
+          )}
           {session.authError && (
             <p role="alert" className="m-5 rounded border border-border p-4">
               {session.authError}
             </p>
           )}
-          {error && (
-            <div
-              role="alert"
-              className="mb-5 rounded-xl border border-border p-4"
-            >
-              <p>{error}</p>
+          {error && !lesson && !loading && (
+            <div role="alert" className="m-auto max-w-md rounded-xl border border-border bg-card p-6 text-center">
+              <p className="font-semibold text-foreground">This lesson did not load</p>
+              <p className="mt-1 text-sm text-muted-foreground">{error}</p>
               <button
-                className="mt-2 underline"
-                onClick={() =>
-                  lesson ? void load(lesson.chapter.slug) : void start()
-                }
+                type="button"
+                className="mt-4 rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground"
+                onClick={() => void start()}
               >
                 Try again
               </button>
@@ -293,6 +314,7 @@ function CourseReaderBody({
           {lesson && !loading && (
             <div className="flex min-h-0 flex-1 overflow-hidden">
               <div className={ide.open ? 'hidden' : 'contents'}>
+                {lesson.chapter.readerMode !== 'QUIZ' && (
                 <ChapterSidebar
                   courseSlug={courseSlug}
                   courseTitle={lesson.course.title}
@@ -304,6 +326,7 @@ function CourseReaderBody({
                   onWidthChange={resizeSidebar}
                   onToggle={() => setSidebarClosed(true)}
                 />
+                )}
               </div>
               <div
                 className={`${ide.open && (ide.focused || smallWindow) ? 'hidden' : ''} min-w-0 flex-1 overflow-y-auto`}
@@ -367,6 +390,7 @@ function CourseReaderBody({
                               state={quiz}
                               complete={lesson.content.chapterComplete}
                               onSaved={refresh}
+                              onExit={onBack}
                             />
                           ) : (
                             <p role="status">Loading quiz…</p>
@@ -420,15 +444,17 @@ function CourseReaderBody({
                               </button>
                             )}
                             <button
-                              disabled={busy || !lesson.content.canMarkComplete}
+                              disabled={busy || !lesson.content.canMarkComplete || queuedChapter === lesson.chapter.id}
                               onClick={() => void complete()}
                               className="rounded-lg bg-primary px-4 py-2 text-primary-foreground disabled:opacity-50"
                             >
                               {lesson.content.chapterComplete
                                 ? 'Lesson completed'
-                                : busy
-                                  ? 'Saving…'
-                                  : 'Mark lesson complete'}
+                                : queuedChapter === lesson.chapter.id
+                                  ? 'Saved offline'
+                                  : busy
+                                    ? 'Saving…'
+                                    : 'Mark lesson complete'}
                             </button>
                             {lesson.next && (
                               <button

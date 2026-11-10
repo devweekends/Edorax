@@ -22,7 +22,7 @@ export function LessonLoading() {
               {[0, 1, 2].map((row) => (
                 <div
                   key={row}
-                  className={`flex items-center gap-3 rounded-lg px-3 py-3 ${group === 0 && row === 0 ? 'border-l-2 border-ok/40 bg-ok/5' : ''}`}
+                  className={`flex items-center gap-3 rounded-lg px-3 py-3 ${group === 0 && row === 0 ? 'border-l-2 border-primary/40 bg-primary/5' : ''}`}
                 >
                   <div className="size-3 shrink-0 rounded-full border border-border" />
                   <div
@@ -38,7 +38,7 @@ export function LessonLoading() {
         <div className="mb-8 flex items-center gap-2.5 text-xs text-muted-foreground">
           <span
             aria-hidden="true"
-            className="size-1.5 rounded-full bg-ok motion-safe:animate-pulse"
+            className="size-1.5 rounded-full bg-primary motion-safe:animate-pulse"
           />
           Loading your lesson…
         </div>

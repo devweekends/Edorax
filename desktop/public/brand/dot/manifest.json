@@ -1,0 +1,155 @@
+{
+  "voice": {
+    "provider": "ElevenLabs",
+    "model": "eleven_v3",
+    "voiceName": "Kai",
+    "voiceId": "S0ypc51SmsvcKXTWvjqJ"
+  },
+  "rules": [
+    "Sound is off until the learner turns it on, and follows the phone's silent mode.",
+    "Never play during a quiz.",
+    "Each line plays once per moment; the words always show on screen too."
+  ],
+  "moods": [
+    {
+      "mood": "happy",
+      "alt": "Dot smiling",
+      "svg": "/brand/dot/happy.svg",
+      "png": "/brand/dot/happy.png"
+    },
+    {
+      "mood": "wave",
+      "alt": "Dot waving hello",
+      "svg": "/brand/dot/wave.svg",
+      "png": "/brand/dot/wave.png"
+    },
+    {
+      "mood": "think",
+      "alt": "Dot thinking, eyes up",
+      "svg": "/brand/dot/think.svg",
+      "png": "/brand/dot/think.png"
+    },
+    {
+      "mood": "determined",
+      "alt": "Dot ready to try again",
+      "svg": "/brand/dot/determined.svg",
+      "png": "/brand/dot/determined.png"
+    },
+    {
+      "mood": "cheer",
+      "alt": "Dot cheering with arms up",
+      "svg": "/brand/dot/cheer.svg",
+      "png": "/brand/dot/cheer.png"
+    },
+    {
+      "mood": "wink",
+      "alt": "Dot winking",
+      "svg": "/brand/dot/wink.svg",
+      "png": "/brand/dot/wink.png"
+    },
+    {
+      "mood": "oops",
+      "alt": "Dot surprised, a little worried",
+      "svg": "/brand/dot/oops.svg",
+      "png": "/brand/dot/oops.png"
+    },
+    {
+      "mood": "sleep",
+      "alt": "Dot asleep",
+      "svg": "/brand/dot/sleep.svg",
+      "png": "/brand/dot/sleep.png"
+    },
+    {
+      "mood": "miss",
+      "alt": "Dot overjoyed to see you, happy tears",
+      "svg": "/brand/dot/miss.svg",
+      "png": "/brand/dot/miss.png"
+    }
+  ],
+  "clips": [
+    {
+      "key": "welcome",
+      "text": "Hey, welcome to Edorax! I'm Dot, your learning buddy!",
+      "when": "First visit",
+      "mood": "cheer",
+      "file": "/brand/dot/voice/welcome.mp3"
+    },
+    {
+      "key": "yep",
+      "text": "Yep!",
+      "when": "Right answer on the first try",
+      "mood": "wink",
+      "file": "/brand/dot/voice/yep.mp3"
+    },
+    {
+      "key": "got-it",
+      "text": "You got it!",
+      "when": "Right answer after two or more misses",
+      "mood": "cheer",
+      "file": "/brand/dot/voice/got-it.mp3"
+    },
+    {
+      "key": "not-quite",
+      "text": "Hmm, not quite!",
+      "when": "First wrong try on a question",
+      "mood": "think",
+      "file": "/brand/dot/voice/not-quite.mp3"
+    },
+    {
+      "key": "need-a-hint",
+      "text": "Need a hint?",
+      "when": "Two misses or a long pause on one question",
+      "mood": "think",
+      "file": "/brand/dot/voice/need-a-hint.mp3"
+    },
+    {
+      "key": "want-to-listen",
+      "text": "Want to listen?",
+      "when": "Far longer on a page than it should take",
+      "mood": "wave",
+      "file": "/brand/dot/voice/want-to-listen.mp3"
+    },
+    {
+      "key": "look-again",
+      "text": "Let's look again!",
+      "when": "Quiz score under the pass line",
+      "mood": "determined",
+      "file": "/brand/dot/voice/look-again.mp3"
+    },
+    {
+      "key": "you-passed",
+      "text": "You passed!",
+      "when": "Quiz passed",
+      "mood": "cheer",
+      "file": "/brand/dot/voice/you-passed.mp3"
+    },
+    {
+      "key": "lesson-done",
+      "text": "Lesson done!",
+      "when": "Lesson finished",
+      "mood": "cheer",
+      "file": "/brand/dot/voice/lesson-done.mp3"
+    },
+    {
+      "key": "streak-7",
+      "text": "Seven days! Wow!",
+      "when": "Seven days in a row (record 30 and 100 the same way)",
+      "mood": "wink",
+      "file": "/brand/dot/voice/streak-7.mp3"
+    },
+    {
+      "key": "missed-you",
+      "text": "You're back! I missed you!",
+      "when": "First visit after three or more days away",
+      "mood": "miss",
+      "file": "/brand/dot/voice/missed-you.mp3"
+    },
+    {
+      "key": "you-did-it",
+      "text": "You did it!",
+      "when": "Course finished",
+      "mood": "cheer",
+      "file": "/brand/dot/voice/you-did-it.mp3"
+    }
+  ]
+}
