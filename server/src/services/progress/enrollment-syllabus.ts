@@ -1,6 +1,7 @@
 import type { ProgressStatus } from "../../generated/prisma/index.js";
 import { prisma } from "../../db/prisma.js";
 import type { SyllabusChapter, SyllabusModule } from "../../types/syllabus.js";
+import { cleanChapterSlug } from "../chapters/chapter-slug.js";
 import { decorateSyllabus } from "./syllabus.js";
 import { isCompletableBlock } from "./rules.js";
 import { releaseForEnrollment, releaseModulesWithBlocks } from "../courses/releases.js";
@@ -57,7 +58,7 @@ export function resolveContinueChapterPath(
   flatChapters: Pick<SyllabusChapter, "slug" | "title" | "status" | "locked">[]
 ) {
   const target = pickContinueTarget(flatChapters);
-  return target ? `/courses/${courseSlug}/${target.slug}` : null;
+  return target ? `/courses/${courseSlug}/${cleanChapterSlug(target.slug)}` : null;
 }
 
 export async function syllabusForEnrollment(
@@ -103,7 +104,7 @@ export async function syllabusForEnrollment(
         const blockCount = chapter.blocks.filter((block) => isCompletableBlock(block)).length;
         return {
           id: chapter.id,
-          slug: chapter.slug,
+          slug: cleanChapterSlug(chapter.slug),
           title: chapter.title,
           order: chapter.order,
           blockCount,

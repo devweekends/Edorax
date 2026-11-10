@@ -8,9 +8,9 @@ type State = { message: string | null };
 /**
  * Keeps one failing block from blanking a whole chapter. Every uppercase MDX
  * component is wrapped in this boundary by compile.tsx, so a throw renders an
- * inline card naming the block instead of taking out the page. Errors raised
- * while MDX itself compiles happen before any block renders; the
- * chapter-level boundary around <MDXRemote> catches those.
+ * inline card naming the block instead of taking out the page. MDX compile
+ * failures are handled separately via MDXRemote's onError prop in compile.tsx
+ * (client boundaries do not catch RSC compile errors).
  */
 export class MdxBlockBoundary extends Component<Props, State> {
   state: State = { message: null };
