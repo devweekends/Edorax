@@ -91,7 +91,7 @@ describe("AI review drafts", () => {
     delete process.env.OPENROUTER_API_KEY;
     try {
       await expect(generateReviewDraft(context, { apiKey: "" })).rejects.toThrow(
-        "OPENROUTER_API_KEY",
+        "Add your OpenRouter key",
       );
     } finally {
       if (originalKey) process.env.OPENROUTER_API_KEY = originalKey;
