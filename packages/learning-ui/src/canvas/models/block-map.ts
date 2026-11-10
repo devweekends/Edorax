@@ -45,6 +45,13 @@ export type MapBlock = {
 };
 
 export type MapLink = [string, string];
+/** Chapter data writes an extra link as { from, to }; canvases in code write a tuple. Both are read. */
+export type MapLinkInput = MapLink | { from: string; to: string };
+
+/** One extra link as a tuple, whichever way it was written. */
+export function toMapLink(link: MapLinkInput): MapLink {
+  return Array.isArray(link) ? [link[0], link[1]] : [link.from, link.to];
+}
 
 export const linkKey = (a: string, b: string) => [a, b].sort().join("~");
 
@@ -56,10 +63,13 @@ export function pathLinks(path: string[]): MapLink[] {
 }
 
 /** Every link to draw: each step of every path, plus any extra links, without repeats. */
-export function mapLinks(blocks: MapBlock[], extra: MapLink[] = []): MapLink[] {
+export function mapLinks(blocks: MapBlock[], extra: MapLinkInput[] = []): MapLink[] {
   const seen = new Map<string, MapLink>();
   for (const b of blocks) for (const l of pathLinks(b.path)) seen.set(linkKey(...l), l);
-  for (const l of extra) seen.set(linkKey(...l), l);
+  for (const raw of extra) {
+    const l = toMapLink(raw);
+    seen.set(linkKey(...l), l);
+  }
   return [...seen.values()];
 }
 
