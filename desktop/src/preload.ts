@@ -3,11 +3,12 @@ import type { DesktopAPI } from './domain/catalog';
 
 const api: DesktopAPI = {
   ide: {
-    status: () => ipcRenderer.invoke('ide:status'),
-    open: (create) => ipcRenderer.invoke('ide:open', create),
-    importSnippet: (source, filename) =>
-      ipcRenderer.invoke('ide:snippet', source, filename),
-    bounds: (value) => ipcRenderer.invoke('ide:bounds', value),
+    status: (course) => ipcRenderer.invoke('ide:status', course),
+    resume: (course) => ipcRenderer.invoke('ide:resume', course),
+    open: (create, course) => ipcRenderer.invoke('ide:open', create, course),
+    importSnippet: (source, filename, course) =>
+      ipcRenderer.invoke('ide:snippet', source, filename, course),
+    bounds: (value, course) => ipcRenderer.invoke('ide:bounds', value, course),
     stop: () => ipcRenderer.invoke('ide:stop'),
     newTerminal: () => ipcRenderer.invoke('ide:terminal'),
     revealExplorer: () => ipcRenderer.invoke('ide:revealExplorer'),
@@ -17,6 +18,8 @@ const api: DesktopAPI = {
       ipcRenderer.invoke('ide:open-with-menu', position),
   },
   labs: {
+    prepareTerminal: (course) =>
+      ipcRenderer.invoke('labs:prepare-terminal', course),
     configure: (blockId, mode, createProject) =>
       ipcRenderer.invoke('labs:configure', blockId, mode, createProject),
     listFiles: (blockId) => ipcRenderer.invoke('labs:files', blockId),

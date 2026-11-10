@@ -157,3 +157,23 @@ npm --prefix desktop run package
 
 The real Docker test uses its own integration scope and skips existing resources.
 Local filesystem/PTY tests use temporary folders and remove only their own files.
+
+### Course folders and standalone terminal
+
+Each course remembers its native-selected project folder across app restarts.
+The IDE toolbar always exposes **Open folder** and **New project**; new projects
+start empty. Switching courses restores that course's folder when the IDE opens.
+A missing/moved folder shows a recovery message rather than opening another course.
+Only one Theia backend is active: switching to another course's IDE closes the
+previous backend (save your work first).
+
+**Terminal** in the lesson toolbar opens a separate local xterm panel without
+starting Theia. It starts in the course folder, or the user's home directory when
+no folder has been selected. Hiding the panel preserves the shell; leaving the
+course closes its connection. Changing the course project folder restarts the
+terminal in the new folder when it is next opened.
+
+Shell snippets expose **Run in terminal**, which submits their contents to the
+local shell. The existing Docker exercise workspace remains separate from this
+standalone terminal. New local projects start empty; no course template is generated.
+The lesson toolbar keeps Close, Focus, Open folder, and New project accessible.

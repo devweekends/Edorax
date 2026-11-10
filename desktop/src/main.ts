@@ -1,5 +1,7 @@
 import { installIDE } from './ide/controller';
+import { CourseFolders, validateCourse } from './ide/course-folders';
 import { createRequire } from 'node:module';
+import { createHash } from 'node:crypto';
 import { mkdir, realpath } from 'node:fs/promises';
 
 // Prevent npm lifecycle environment variables from leaking to child processes and breaking tools like nvm
@@ -102,6 +104,9 @@ const apiBase =
   'https://buildment-eca06ffd3e8f.herokuapp.com';
 const previewClient = createPreviewClient(apiBase);
 const offline = new OfflineStore();
+const courseFolders = new CourseFolders(
+  path.join(app.getPath('userData'), 'course-folders.json'),
+);
 const connectionFailure = (result: { ok: boolean; code?: string }) =>
   !result.ok && result.code === 'CONNECTION_ERROR';
 async function courseOverview(slug: string) {
@@ -162,7 +167,11 @@ function syncPending() {
       await offline.shiftPending();
     }
     const pending = offline.pending().length;
-    return { pending, message: pending ? 'New changes are still waiting to sync.' : null, code: null };
+    return {
+      pending,
+      message: pending ? 'New changes are still waiting to sync.' : null,
+      code: null,
+    };
   })().finally(() => {
     syncTask = null;
   });
@@ -440,7 +449,38 @@ else {
       applicationVersion: app.getVersion(),
     });
     installApplicationMenu();
-    ideController = installIDE(() => mainWindow, requireRenderer);
+    ideController = installIDE(
+      () => mainWindow,
+      requireRenderer,
+      courseFolders,
+    );
+    ipcMain.handle('labs:prepare-terminal', async (event, course) => {
+      requireRenderer(event);
+      validateCourse(course);
+      const blockId = `terminal-${createHash('sha256').update(course).digest('hex')}`;
+      let folder: string;
+      try {
+        folder = (await courseFolders.get(course)) ?? app.getPath('home');
+      } catch {
+        // A missing or moved course folder never blocks the terminal.
+        folder = app.getPath('home');
+      }
+      if (locals.get(blockId)?.root !== folder) {
+        locals.get(blockId)?.dispose();
+        const pty = runtimeRequire(
+          path.join(app.getAppPath(), 'node_modules/node-pty'),
+        );
+        locals.set(
+          blockId,
+          new LocalRuntime(folder, pty, (data) => {
+            if (mainWindow && !mainWindow.isDestroyed())
+              mainWindow.webContents.send('labs:terminal-data', data);
+          }),
+        );
+      }
+      await locals.get(blockId)!.start();
+      return { blockId, folder };
+    });
     ipcMain.handle(
       'labs:configure',
       async (event, blockId, mode, createProject) => {

@@ -12,12 +12,13 @@ import {
   type IpcMainInvokeEvent,
 } from 'electron';
 import { execFile } from 'node:child_process';
-import { access, mkdir, readdir, realpath, writeFile } from 'node:fs/promises';
+import { access, mkdir, realpath } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { dialog } from 'electron';
 import { TheiaRuntime } from './runtime';
+import { CourseFolders, validateCourse } from './course-folders';
 
 const execFileAsync = promisify(execFile);
 const OPEN_WITH_APPS: Record<string, { name: string; label: string }> = {
@@ -85,6 +86,7 @@ async function openFolderWith(appId: string, folder: string) {
 export function installIDE(
   getWindow: () => BrowserWindow | null,
   requireRenderer: (event: IpcMainInvokeEvent) => void,
+  folders: CourseFolders,
 ) {
   const directory = app.isPackaged
     ? path.join(process.resourcesPath, 'ide')
@@ -129,40 +131,63 @@ export function installIDE(
     view.setVisible(false);
     viewVisible = false;
   };
-  ipcMain.handle('ide:status', (event) => {
+  let activeCourse: string | null = null;
+  let switching: Promise<unknown> = Promise.resolve();
+  function sequential<T>(action: () => Promise<T>): Promise<T> {
+    const task = switching.then(action);
+    switching = task.catch(() => {});
+    return task;
+  }
+  ipcMain.handle('ide:status', (event, course) => {
     requireRenderer(event);
-    return runtime.status();
+    validateCourse(course);
+    return activeCourse === course ? runtime.status() : null;
   });
-  ipcMain.handle('ide:open', async (event, createProject) => {
+  ipcMain.handle('ide:resume', (event, course) => {
     requireRenderer(event);
+    validateCourse(course);
+    return sequential(async () => {
+      if (activeCourse === course && runtime.status() && view)
+        return runtime.status();
+      hide();
+      await stop();
+      activeCourse = null;
+      const folder = await folders.get(course);
+      return folder ? launch(course, folder) : null;
+    });
+  });
+  ipcMain.handle('ide:open', (event, createProject, course) => {
+    requireRenderer(event);
+    validateCourse(course);
+    return sequential(async () => {
+      const window = getWindow();
+      if (!window) throw new Error('The Edorax window is closed.');
+      let folder: string;
+      if (createProject === true) {
+        const choice = await dialog.showSaveDialog(window, {
+          title: 'Create local project',
+          buttonLabel: 'Create project',
+          defaultPath: path.join(app.getPath('documents'), 'edorax-project'),
+        });
+        if (choice.canceled || !choice.filePath) return null;
+        await mkdir(choice.filePath);
+        folder = await realpath(choice.filePath);
+      } else {
+        const choice = await dialog.showOpenDialog(window, {
+          title: 'Open local project',
+          properties: ['openDirectory', 'createDirectory'],
+        });
+        if (choice.canceled || !choice.filePaths[0]) return null;
+        folder = await realpath(choice.filePaths[0]);
+      }
+      await folders.set(course, folder);
+      return launch(course, folder);
+    });
+  });
+  async function launch(course: string, folder: string) {
     const window = getWindow();
     if (!window) throw new Error('The Edorax window is closed.');
-    let folder: string;
-    if (createProject === true) {
-      const choice = await dialog.showSaveDialog(window, {
-        title: 'Create local project',
-        buttonLabel: 'Create project',
-        defaultPath: path.join(app.getPath('documents'), 'edorax-project'),
-      });
-      if (choice.canceled || !choice.filePath) return null;
-      await mkdir(choice.filePath, { recursive: true });
-      folder = await realpath(choice.filePath);
-      const entries = await readdir(folder);
-      if (entries.length === 0) {
-        await writeFile(
-          path.join(folder, 'index.js'),
-          '// Welcome to your project\nconsole.log("Ready to build!");\n',
-          { flag: 'wx' },
-        ).catch(() => {});
-      }
-    } else {
-      const choice = await dialog.showOpenDialog(window, {
-        title: 'Open local project',
-        properties: ['openDirectory', 'createDirectory'],
-      });
-      if (choice.canceled || !choice.filePaths[0]) return null;
-      folder = await realpath(choice.filePaths[0]);
-    }
+    activeCourse = null;
     closeView();
     const current = await runtime.start(
       folder,
@@ -200,11 +225,12 @@ export function installIDE(
     await view.webContents.loadURL(
       `${current.url}#${encodeURI(current.folder)}`,
     );
+    activeCourse = course;
     return current;
-  });
-  ipcMain.handle('ide:bounds', (event, bounds) => {
+  }
+  ipcMain.handle('ide:bounds', (event, bounds, course) => {
     requireRenderer(event);
-    if (!view) return;
+    if (!view || activeCourse !== course) return;
     if (!bounds) {
       if (viewVisible) {
         view.setVisible(false);
@@ -335,9 +361,10 @@ export function installIDE(
       `window.dispatchEvent(new CustomEvent('edorax:reveal-explorer'))`,
     );
   });
-  ipcMain.handle('ide:snippet', async (event, source, filename) => {
+  ipcMain.handle('ide:snippet', async (event, source, filename, course) => {
     requireRenderer(event);
-    if (!view) throw new Error('Open a local project first.');
+    if (!view || activeCourse !== course)
+      throw new Error('Open this course’s project first.');
     const result = await runtime.importSnippet(source, filename);
     // Only a main-created file URI crosses into the IDE; course source is never evaluated.
     await view.webContents.executeJavaScript(

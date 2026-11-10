@@ -22,7 +22,6 @@ const { ThemeService } = require('@theia/core/lib/browser/theming');
 const {
   WorkspaceService,
 } = require('@theia/workspace/lib/browser/workspace-service');
-const { FileService } = require('@theia/filesystem/lib/browser/file-service');
 const {
   FileNavigatorContribution,
 } = require('@theia/navigator/lib/browser/navigator-contribution');
@@ -42,42 +41,16 @@ exports.default = new ContainerModule((bind) => {
           }
         };
 
-        const revealAndExpandExplorer = async (openStarterFile = false) => {
+        const hideExplorerAndExpandTerminal = async () => {
           try {
             const workspaceService = container.get(WorkspaceService);
             await workspaceService.ready;
-            const navContribution = container.get(FileNavigatorContribution);
             const shell = container.get(ApplicationShell);
-            await navContribution.openView({ activate: true, reveal: true });
-            shell.expandPanel('left');
-
-            if (openStarterFile && shell.getWidgets('main').length === 0) {
-              const roots = workspaceService.tryGetRoots();
-              if (roots && roots[0]) {
-                const fileService = container.get(FileService);
-                const stat = await fileService.resolve(roots[0].resource);
-                if (stat && stat.children && stat.children.length > 0) {
-                  const preferred = [
-                    'index.js',
-                    'index.ts',
-                    'app.js',
-                    'main.js',
-                    'main.py',
-                    'README.md',
-                  ];
-                  const files = stat.children.filter(
-                    (c) => !c.isDirectory && !c.name.startsWith('.'),
-                  );
-                  let target =
-                    files.find((f) => preferred.includes(f.name)) || files[0];
-                  if (target) {
-                    await open(container.get(OpenerService), target.resource);
-                  }
-                }
-              }
-            }
+            shell.collapsePanel('left');
+            shell.expandPanel('bottom');
+            execute('workbench.action.terminal.toggleTerminal');
           } catch (err) {
-            console.error('Failed to reveal and expand explorer:', err);
+            console.error('Failed to open terminal workspace:', err);
           }
         };
 
@@ -93,7 +66,10 @@ exports.default = new ContainerModule((bind) => {
           execute('workbench.action.terminal.toggleTerminal');
         });
         window.addEventListener('edorax:reveal-explorer', () => {
-          void revealAndExpandExplorer(false);
+          void container
+            .get(FileNavigatorContribution)
+            .openView({ activate: true, reveal: true });
+          container.get(ApplicationShell).expandPanel('left');
         });
         window.addEventListener('edorax:select-theme', () => {
           execute('workbench.action.selectTheme');
@@ -118,7 +94,7 @@ exports.default = new ContainerModule((bind) => {
             } catch (err) {
               console.error('Failed to set classic menuBarVisibility:', err);
             }
-            void revealAndExpandExplorer(true);
+            void hideExplorerAndExpandTerminal();
           });
         } catch (err) {
           console.error('Failed to hook ready state:', err);

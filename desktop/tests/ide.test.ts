@@ -17,13 +17,10 @@ test('TheiaRuntime snippet import requires an active session', async () => {
 test('TheiaRuntime fails cleanly if the ide application bundle is missing', async () => {
   const dir = await mkdtemp(path.join(tmpdir(), 'edorax-ide-missing-'));
   const runtime = new TheiaRuntime(dir, path.join(dir, '.config'));
-  await assert.rejects(
-    () => runtime.start(dir, 'http://127.0.0.1:3000'),
-    {
-      message:
-        'Theia is not built yet. Run npm --prefix desktop run ide:setup, then reopen the workspace.',
-    },
-  );
+  await assert.rejects(() => runtime.start(dir, 'http://127.0.0.1:3000'), {
+    message:
+      'Theia is not built yet. Run npm --prefix desktop run ide:setup, then reopen the workspace.',
+  });
   await rm(dir, { recursive: true, force: true });
 });
 
@@ -41,17 +38,21 @@ test('TheiaRuntime importSnippet validates snippet source and filename', async (
 
   // Exceeds 64 KB
   const oversized = 'x'.repeat(65 * 1024);
-  await assert.rejects(
-    () => runtime.importSnippet(oversized, 'big.js'),
-    { message: 'Snippet must be text up to 64 KB.' },
-  );
+  await assert.rejects(() => runtime.importSnippet(oversized, 'big.js'), {
+    message: 'Snippet must be text up to 64 KB.',
+  });
 
   // Invalid filenames
-  for (const badName of ['../escape.js', '/root.js', 'no-ext', 'bad*char.js', 'too.many.dots.js.bak']) {
-    await assert.rejects(
-      () => runtime.importSnippet('code', badName),
-      { message: 'Invalid snippet filename.' },
-    );
+  for (const badName of [
+    '../escape.js',
+    '/root.js',
+    'no-ext',
+    'bad*char.js',
+    'too.many.dots.js.bak',
+  ]) {
+    await assert.rejects(() => runtime.importSnippet('code', badName), {
+      message: 'Invalid snippet filename.',
+    });
   }
 
   // Valid snippet import
@@ -72,3 +73,32 @@ test('TheiaRuntime importSnippet validates snippet source and filename', async (
   await rm(tempDir, { recursive: true, force: true });
 });
 
+import { CourseFolders } from '../src/ide/course-folders';
+import { mkdir, realpath } from 'node:fs/promises';
+
+test('course folders remain isolated across courses, replacement and application restart', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'edorax-course-folders-'));
+  try {
+    const a = path.join(root, 'a');
+    const b = path.join(root, 'b');
+    await Promise.all([mkdir(a), mkdir(b)]);
+    const file = path.join(root, 'settings', 'courses.json');
+    const folders = new CourseFolders(file);
+    await Promise.all([folders.set('course-a', a), folders.set('course-b', b)]);
+    const reopened = new CourseFolders(file);
+    assert.equal(await reopened.get('course-a'), await realpath(a));
+    assert.equal(await reopened.get('course-b'), await realpath(b));
+    assert.equal(await reopened.get('new-course'), null);
+    await reopened.set('course-a', b);
+    assert.equal(await reopened.get('course-a'), await realpath(b));
+    assert.equal(await reopened.get('course-b'), await realpath(b));
+    await assert.rejects(() => reopened.get('../invalid'), /Invalid course/);
+    await rm(b, { recursive: true });
+    await assert.rejects(
+      () => reopened.get('course-b'),
+      /saved course folder is unavailable/,
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
