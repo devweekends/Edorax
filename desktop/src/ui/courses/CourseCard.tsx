@@ -1,11 +1,8 @@
-import {
-  EnrollmentBadge,
-  enrollmentLabel,
-} from '@buildment/learning-ui/components/learn/enrollment-badge';
 import { useState } from 'react';
-import { BookOpen, Clock3, Layers3, Code2, ArrowUpRight } from 'lucide-react';
+import { BookOpen, Clock3, Layers3, ArrowUpRight } from 'lucide-react';
 import { coursePrice, type Course } from '../../domain/catalog';
 import { categoryName } from './format';
+import { CoverArt } from './CoverArt';
 export function CourseCard({
   course,
   index,
@@ -34,7 +31,7 @@ export function CourseCard({
   return (
     <article className="group relative flex flex-col overflow-hidden rounded-2xl border border-border bg-card transition-shadow hover:shadow-lg hover:shadow-primary/5 focus-within:ring-2 focus-within:ring-ring">
       <div
-        className={`course-cover relative flex h-40 items-center justify-center overflow-hidden ${index % 2 ? 'bg-muted' : 'bg-ok-soft'}`}
+        className="course-cover relative flex h-40 items-center justify-center overflow-hidden"
       >
         {cover && !imageFailed ? (
           <img
@@ -46,30 +43,15 @@ export function CourseCard({
             className="absolute size-full object-cover"
           />
         ) : (
-          <>
-            <div className="cover-grid absolute inset-0 opacity-40" />
-            <div className="relative flex size-20 -rotate-6 items-center justify-center rounded-2xl border border-border/80 bg-card/65 text-primary shadow-sm">
-              <Code2 size={38} strokeWidth={1.3} />
-            </div>
-            <span className="absolute right-5 bottom-4 font-mono text-[10px] tracking-[0.2em] text-primary/60">
-              EDORAX / {String(index + 1).padStart(2, '0')}
-            </span>
-          </>
+          <CoverArt variant={index} />
         )}
         <span className="absolute left-4 top-4 rounded-full border border-border/60 bg-card/90 px-3 py-1 text-[10px] font-semibold tracking-wide text-primary">
           {categoryName(course.category)}
         </span>
       </div>
       <div className="flex flex-1 flex-col p-5">
-        {course.enrollmentLifecycle && (
-          <div className="mb-3">
-            <EnrollmentBadge
-              label={enrollmentLabel(course.enrollmentLifecycle)}
-            />
-          </div>
-        )}
         <div className="mb-3 flex items-center gap-2 text-[11px] text-muted-foreground">
-          <span className="size-1.5 rounded-full bg-ok" />
+          <span className="size-1.5 rounded-full bg-primary" />
           {course.difficulty || 'All levels'}
           {course.estimatedHours != null && (
             <>
@@ -101,9 +83,16 @@ export function CourseCard({
             <span className="truncate text-xs text-muted-foreground">
               {course.instructorName || 'Edorax'}
             </span>
-            <span className="text-sm font-semibold text-primary">
-              {coursePrice(course)}
-            </span>
+            {enrolled ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1 text-xs font-semibold text-primary">
+                <span className="size-1.5 rounded-full bg-primary" />
+                Enrolled
+              </span>
+            ) : (
+              <span className="text-sm font-semibold text-primary">
+                {coursePrice(course)}
+              </span>
+            )}
           </div>
           <button
             id={`preview-${course.id}`}

@@ -1,12 +1,25 @@
 import { useEffect, useRef, useState } from 'react';
 import { filterCourses, isMyCourse, type Course } from '../domain/catalog';
 import { CourseReader } from './learning/CourseReader';
+import { useDotVoice } from './mascot/DotVoice';
 import { CoursePreview } from './courses/CoursePreview';
 import { CourseCatalog } from './courses/CourseCatalog';
-import { Sidebar } from './layout/Sidebar';
+import { Sidebar, type Section } from './layout/Sidebar';
+import { HomePage } from './home/HomePage';
+import { ProgressPage } from './progress/ProgressPage';
+import { MyLearningPage } from './mylearning/MyLearningPage';
 import { WorkspaceHeader } from './layout/WorkspaceHeader';
 import { useSession } from './auth/useSession';
 import { SignInPrompt } from './auth/SignInPrompt';
+import { AudiobookLibrary } from './audiobooks/AudiobookLibrary';
+import { MiniPlayer } from './audiobooks/MiniPlayer';
+import { VisualLabs } from './visual-labs/VisualLabs';
+import { BrandMark } from './auth/BrandMark';
+import { LeaderboardPage } from './leaderboard/LeaderboardPage';
+import { StreakPopup } from './streak/StreakPopup';
+import type { LeaderboardSelection } from '../domain/leaderboard';
+import { QuestionsPage } from './questions/QuestionsPage';
+import { SettingsPage } from './settings/SettingsPage';
 
 export function App() {
   const [selected, setSelected] = useState<Course | null>(null);
@@ -24,6 +37,10 @@ export function App() {
   useEffect(() => {
     if (!signedIn) setReading(false);
   }, [signedIn]);
+  const { track: trackDot } = useDotVoice();
+  useEffect(() => {
+    if (signedIn) void trackDot({ type: 'session_start' });
+  }, [signedIn, trackDot]);
   const main = useRef<HTMLElement>(null);
   const catalogScroll = useRef(0);
   function openCourse(course: Course) {
@@ -31,6 +48,18 @@ export function App() {
     setSelected(course);
     if (main.current) main.current.scrollTop = 0;
   }
+  const [section, setSection] = useState<Section>('home');
+
+  function navigate(next: Section) {
+    setSection(next);
+    setTab(next === 'mine' ? 'mine' : 'all');
+    backToCourses();
+  }
+  function openBySlug(slug: string) {
+    const course = courses.find((item) => item.slug === slug);
+    if (course) openCourse(course);
+  }
+
   function backToCourses() {
     const id = selected?.id;
     setReading(false);
@@ -138,6 +167,12 @@ export function App() {
     });
   }
 
+  const [leaderboardSeed, setLeaderboardSeed] = useState<LeaderboardSelection | null>(null);
+  function openLeaderboard(selection: LeaderboardSelection) {
+    setLeaderboardSeed(selection);
+    navigate('leaderboard');
+  }
+
   if (!authChecked)
     return (
       <div
@@ -182,12 +217,15 @@ export function App() {
           session={session}
         />
       )}
+      {signedIn && <StreakPopup />}
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {!(reading && signedIn) && (
           <Sidebar
             collapsed={collapsed}
             toggleSidebar={toggleSidebar}
-            backToCourses={backToCourses}
+            section={section}
+            onNavigate={navigate}
+            myCount={courses.filter(isMyCourse).length}
           />
         )}
 
@@ -220,6 +258,28 @@ export function App() {
                 setReading(true);
               }}
             />
+          ) : section === 'home' ? (
+            <HomePage
+              onOpenCourse={openBySlug}
+              onBrowse={() => navigate('courses')}
+              onViewAll={() => navigate('mine')}
+              onOpenProgress={() => navigate('progress')}
+              onOpenLeaderboard={openLeaderboard}
+            />
+          ) : section === 'mine' ? (
+            <MyLearningPage onOpenCourse={openBySlug} onBrowse={() => navigate('courses')} />
+          ) : section === 'questions' ? (
+            <QuestionsPage />
+          ) : section === 'settings' ? (
+            <SettingsPage />
+          ) : section === 'progress' ? (
+            <ProgressPage onOpenCourse={openBySlug} onBrowse={() => navigate('courses')} />
+          ) : section === 'leaderboard' ? (
+            <LeaderboardPage initialSelection={leaderboardSeed ?? undefined} />
+          ) : section === 'audiobooks' ? (
+            <AudiobookLibrary />
+          ) : section === 'labs' ? (
+            <VisualLabs />
           ) : (
             <CourseCatalog
               {...{
@@ -243,6 +303,7 @@ export function App() {
           )}
         </main>
       </div>
+      <MiniPlayer />
     </div>
   );
 }

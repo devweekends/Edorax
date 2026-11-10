@@ -52,10 +52,10 @@ export function CourseCatalog({
           <p className="mb-4 text-[10px] font-semibold uppercase tracking-[0.22em] text-primary/70">
             Learn. Build. Make it yours.
           </p>
-          <h1 className="font-display text-4xl leading-[1.15] tracking-tight text-primary lg:text-[46px]">
+          <h1 className="font-heading text-4xl font-bold leading-[1.15] tracking-tight text-foreground lg:text-[46px]">
             Your next chapter
             <br />
-            <span className="italic">starts here.</span>
+            <span className="italic text-primary">starts here.</span>
           </h1>
           <p className="mt-4 max-w-md text-sm leading-6 text-muted-foreground">
             Explore practical courses. Build your understanding.
@@ -83,14 +83,14 @@ export function CourseCatalog({
         <button
           aria-pressed={tab === 'all'}
           onClick={() => setTab('all')}
-          className={`rounded-lg px-4 py-2.5 text-xs font-medium transition-colors ${tab === 'all' ? 'bg-primary text-primary-foreground' : 'border border-border bg-card text-muted-foreground hover:border-ok'}`}
+          className={`rounded-lg px-4 py-2.5 text-xs font-medium transition-colors ${tab === 'all' ? 'bg-primary text-primary-foreground' : 'border border-border bg-card text-muted-foreground hover:border-primary'}`}
         >
           All courses
         </button>
         <button
           aria-pressed={tab === 'mine'}
           onClick={() => setTab('mine')}
-          className={`rounded-lg px-4 py-2.5 text-xs font-medium transition-colors ${tab === 'mine' ? 'bg-primary text-primary-foreground' : 'border border-border bg-card text-muted-foreground hover:border-ok'}`}
+          className={`rounded-lg px-4 py-2.5 text-xs font-medium transition-colors ${tab === 'mine' ? 'bg-primary text-primary-foreground' : 'border border-border bg-card text-muted-foreground hover:border-primary'}`}
         >
           My courses
         </button>
@@ -139,7 +139,7 @@ export function CourseCatalog({
                   key={value}
                   aria-pressed={category === value}
                   onClick={() => setCategory(value)}
-                  className={`rounded-lg px-4 py-2.5 text-xs font-medium transition-colors ${category === value ? 'bg-primary text-primary-foreground' : 'border border-border bg-card text-muted-foreground hover:border-ok'}`}
+                  className={`rounded-lg px-4 py-2.5 text-xs font-medium transition-colors ${category === value ? 'bg-primary text-primary-foreground' : 'border border-border bg-card text-muted-foreground hover:border-primary'}`}
                 >
                   {value === 'all' ? 'All categories' : categoryName(value)}
                 </button>
@@ -200,7 +200,7 @@ export function CourseCatalog({
             role="status"
             className="rounded-2xl border border-dashed border-border bg-card/50 px-6 py-14 text-center"
           >
-            <UserRound className="mx-auto mb-4 text-ok" size={28} />
+            <UserRound className="mx-auto mb-4 text-primary" size={28} />
             <h3 className="font-semibold">Sign in to see your courses</h3>
             <p className="mt-2 text-sm text-muted-foreground">
               Your enrolled courses and progress will appear here.
@@ -217,7 +217,7 @@ export function CourseCatalog({
             role="status"
             className="rounded-2xl border border-dashed border-border bg-card/50 px-6 py-14 text-center"
           >
-            <BookOpen className="mx-auto mb-4 text-ok" size={28} />
+            <BookOpen className="mx-auto mb-4 text-primary" size={28} />
             <h3 className="font-semibold">You have not joined a course yet</h3>
             <p className="mt-2 text-sm text-muted-foreground">
               Pick one from the list. If a mentor sent you a link, open it to
@@ -239,7 +239,7 @@ export function CourseCatalog({
             role="status"
             className="rounded-2xl border border-dashed border-border bg-card/50 px-6 py-14 text-center"
           >
-            <BookOpen className="mx-auto mb-4 text-ok" size={28} />
+            <BookOpen className="mx-auto mb-4 text-primary" size={28} />
             <h3 className="font-semibold">
               {courses.length
                 ? 'No matching courses'

@@ -1,11 +1,11 @@
 import { createRoot } from 'react-dom/client';
 import { App } from './ui/App';
+import { ToastProvider } from './ui/toast/Toast';
+import { DotVoiceProvider } from './ui/mascot/DotVoice';
+import { PlaybackProvider } from './ui/audiobooks/PlaybackContext';
+import { initTheme } from './ui/lib/theme';
 
-const theme = window.matchMedia('(prefers-color-scheme: dark)');
-const syncTheme = () =>
-  document.documentElement.classList.toggle('dark', theme.matches);
-syncTheme();
-theme.addEventListener('change', syncTheme);
+initTheme();
 
 createRoot(document.getElementById('root')!, {
   onUncaughtError(error) {
@@ -13,4 +13,12 @@ createRoot(document.getElementById('root')!, {
     delete document.documentElement.dataset.appReady;
     window.dispatchEvent(new Event('workspace-startup-error'));
   },
-}).render(<App />);
+}).render(
+  <PlaybackProvider>
+    <ToastProvider>
+      <DotVoiceProvider>
+        <App />
+      </DotVoiceProvider>
+    </ToastProvider>
+  </PlaybackProvider>,
+);
