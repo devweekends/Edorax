@@ -61,7 +61,8 @@ export async function createPathmentEnrollment(
     },
     include: { learnerProfile: true, course: true },
   });
-  if (existing) {
+  const droppedExisting = existing && isDroppedEnrollment(existing) ? existing : null;
+  if (existing && !droppedExisting) {
     return { enrollment: existing, created: false as const };
   }
 
@@ -84,6 +85,10 @@ export async function createPathmentEnrollment(
   assertOrganizationCourseAllocation(allocation);
 
   const linkedUser = await db.user.findUnique({ where: { email } });
+  if (droppedExisting) {
+    const enrollment = await reactivateDroppedPathmentEnrollment(db, droppedExisting, course, input, assignmentId, email, linkedUser?.id ?? null);
+    return { enrollment, created: true as const };
+  }
   if (linkedUser) {
     const byUser = await db.enrollment.findUnique({
       where: { courseId_userId: { courseId: input.courseId, userId: linkedUser.id } },
@@ -94,6 +99,10 @@ export async function createPathmentEnrollment(
           409,
           "Learner is enrolled through a different organization"
         );
+      }
+      if (isDroppedEnrollment(byUser)) {
+        const enrollment = await reactivateDroppedPathmentEnrollment(db, byUser, course, input, assignmentId, email, linkedUser.id);
+        return { enrollment, created: true as const };
       }
       if (
         !byUser.organizationId ||
@@ -293,5 +302,143 @@ export async function createPathmentEnrollment(
     }
 
     return { enrollment, created: true as const };
+  });
+}
+
+function isDroppedEnrollment(row: { lifecycle: EnrollmentLifecycle; status: string }): boolean {
+  return row.lifecycle === "CANCELLED" || row.status === "DROPPED";
+}
+
+type PricingType = Parameters<typeof settleAssignment>[0]["pricingType"];
+type LoadedCourse = {
+  id: string;
+  currency: string;
+  priceCents: number;
+  pricingType: PricingType;
+  instructorPayoutPercent: number;
+  organizationFreeAccesses: { organizationId: string }[];
+};
+
+/**
+ * Re-activates an organization enrollment that was dropped (cancelled, seat and credits released).
+ * Takes a new seat and runs the same pricing, coupon and credit rules as a new Pathment enrollment.
+ */
+async function reactivateDroppedPathmentEnrollment(
+  db: PrismaClient,
+  row: { id: string; userId: string | null; startedAt: Date | null },
+  course: LoadedCourse,
+  input: PathmentEnrollmentInput,
+  assignmentId: string,
+  email: string,
+  linkedUserId: string | null
+) {
+  return db.$transaction(async (tx) => {
+    const allocation = await tx.organizationCourse.findUnique({
+      where: { organizationId_courseId: { organizationId: input.organizationId, courseId: input.courseId } },
+    });
+    assertOrganizationCourseAllocation(allocation!);
+    await consumeEnrollmentSlot(tx, allocation!.id);
+
+    const learnerProfile = await tx.learnerProfile.upsert({
+      where: { email },
+      create: { email, userId: linkedUserId, linkedAt: linkedUserId ? new Date() : null },
+      update: linkedUserId ? { userId: linkedUserId, linkedAt: new Date() } : {},
+    });
+
+    const organizationListed = course.organizationFreeAccesses.length > 0;
+    const preview = settleAssignment({
+      pricingType: course.pricingType,
+      channel: "pathment",
+      organizationListed,
+      originalAmountCents: course.priceCents,
+      instructorPayoutPercent: course.instructorPayoutPercent,
+    });
+    const lifecycle: EnrollmentLifecycle = linkedUserId
+      ? (preview.grantsAccess ? "ACTIVE" : "PAYMENT_REQUIRED")
+      : "PENDING_ACCOUNT";
+    const accessGranted = lifecycle === "ACTIVE";
+
+    let enrollment = await tx.enrollment.update({
+      where: { id: row.id },
+      data: {
+        userId: linkedUserId ?? row.userId,
+        learnerProfileId: learnerProfile.id,
+        organizationId: input.organizationId,
+        source: "PATHMENT",
+        externalMentorId: input.mentorId?.trim() || null,
+        externalAssignmentId: assignmentId,
+        lifecycle,
+        status: accessGranted ? "IN_PROGRESS" : "ASSIGNED",
+        startedAt: accessGranted ? row.startedAt ?? new Date() : null,
+      },
+      include: { course: true, learnerProfile: true },
+    });
+
+    if (preview.priority.fundingSource === "free" || preview.priority.fundingSource === "organization_free") {
+      await tx.payment.upsert({
+        where: { enrollmentId: row.id },
+        create: { enrollmentId: row.id, currency: course.currency, ...preview.payment },
+        update: preview.payment,
+      });
+      return enrollment;
+    }
+
+    const coupon = preview.priority.skipOrganizationCoupon ? null : await issueCouponForEnrollment(tx, {
+      organizationId: input.organizationId,
+      courseId: course.id,
+      enrollmentId: row.id,
+      userId: linkedUserId,
+      learnerEmail: email,
+      assignedById: input.mentorId?.trim() || null,
+    });
+    const priced = settleAssignment({
+      pricingType: course.pricingType,
+      channel: "pathment",
+      organizationListed: false,
+      originalAmountCents: course.priceCents,
+      instructorPayoutPercent: course.instructorPayoutPercent,
+      organizationContributionPercent: coupon?.percentOff,
+    });
+
+    if (coupon && priced.grantsAccess && linkedUserId) {
+      await reserveOrganizationCredits(tx, {
+        organizationId: input.organizationId,
+        enrollmentId: row.id,
+        amountCredits: priced.financials.organizationContributionCents,
+      });
+      await tx.organizationCreditTransaction.updateMany({
+        where: { enrollmentId: row.id, status: "RESERVED" },
+        data: { status: "COMMITTED", committedAt: new Date() },
+      });
+      enrollment = await tx.enrollment.update({
+        where: { id: row.id },
+        data: { lifecycle: "ACTIVE", status: "IN_PROGRESS", startedAt: row.startedAt ?? new Date() },
+        include: { course: true, learnerProfile: true },
+      });
+      await tx.payment.upsert({
+        where: { enrollmentId: row.id },
+        create: { enrollmentId: row.id, currency: course.currency, ...priced.payment },
+        update: priced.payment,
+      });
+      await redeemCouponUsage(tx, row.id);
+      return enrollment;
+    }
+
+    if (lifecycle === "PAYMENT_REQUIRED" || lifecycle === "PENDING_ACCOUNT") {
+      const pending = paymentFromBreakdown(priced.financials, { status: "PENDING" });
+      await tx.payment.upsert({
+        where: { enrollmentId: row.id },
+        create: { enrollmentId: row.id, currency: course.currency, ...pending },
+        update: pending,
+      });
+      if (coupon && linkedUserId) {
+        await reserveOrganizationCredits(tx, {
+          organizationId: input.organizationId,
+          enrollmentId: row.id,
+          amountCredits: priced.financials.organizationContributionCents,
+        });
+      }
+    }
+    return enrollment;
   });
 }
