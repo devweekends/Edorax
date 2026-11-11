@@ -267,3 +267,62 @@ describe("ZIP update preview and approval", () => {
     expect(JSON.stringify(rejected.body)).toContain("Include a key for every supplied module and lesson");
   });
 });
+
+describe("a rewritten lesson in a course without stable keys", () => {
+  const rewritten = "Refunds follow a different path from charges. Look up the original order, confirm the amount with the bank, write the reversal in the ledger and email the buyer a note.";
+  // The course is addressed by file position, the way a repository course without keys is.
+  const unkeyed = async () => {
+    await prisma.module.updateMany({ where: { courseId: course.id }, data: { contentKey: null } });
+    await prisma.chapter.update({ where: { id: payments.id }, data: { contentKey: null, slug: "1-1-lesson" } });
+    await prisma.chapter.update({ where: { id: deployment.id }, data: { contentKey: null, slug: "2-1-lesson" } });
+    currentPlan = plan([{ title: "Checkout", lessons: [lesson("Payments", rewritten)] }, { title: "Operations", lessons: [lesson("Deployment", deploymentText)] }]);
+  };
+  const sharedChapters = async () => {
+    const selected = await releaseForEnrollment(course.id, { releaseId: null, variantSlug: null }, null);
+    return selected!.modules.flatMap(module => module.chapters);
+  };
+
+  it("replaces the chapter at the same address instead of listing the lesson twice", async () => {
+    await unkeyed();
+    const previewed = await preview();
+    // Too different to match by content, so the preview calls it new.
+    expect(previewed.modules[0].chapters[0].action).toBe("added");
+    expect((await approve(previewed.previewId)).status).toBe(200);
+
+    const chapters = await sharedChapters();
+    expect(chapters.map(chapter => chapter.slug)).toEqual(["1-1-lesson", "2-1-lesson"]);
+    expect(chapters[0].id).not.toBe(payments.id);
+    expect((await prisma.chapter.findUniqueOrThrow({ where: { id: chapters[0].id } })).source).toBe(rewritten);
+    // The earlier row stays for learners pinned to the first release.
+    expect(await prisma.chapter.count({ where: { id: payments.id, archivedAt: null } })).toBe(1);
+  });
+
+  it("reads a stored release that holds two chapters at one address as the later one only", async () => {
+    await unkeyed();
+    const previewed = await preview();
+    expect((await approve(previewed.previewId)).status).toBe(200);
+    // Put the pair back the way a publish before this fix stored it.
+    const active = await prisma.course.findUniqueOrThrow({ where: { id: course.id }, select: { activeReleaseId: true } });
+    const release = await prisma.courseRelease.findUniqueOrThrow({ where: { id: active.activeReleaseId! } });
+    const content = structuredClone(release.content) as { variants: Record<string, { chapters: { id: string; slug: string; title: string; order: number }[] }[]> };
+    const replacement = content.variants.default[0].chapters[0];
+    content.variants.default[0].chapters = [{ ...replacement, id: payments.id }, replacement];
+    await prisma.courseRelease.update({ where: { id: release.id }, data: { content } });
+
+    const chapters = await sharedChapters();
+    expect(chapters.map(chapter => chapter.id)).toEqual([replacement.id, chapters[1].id]);
+
+    // A new learner's reader lists the lesson once and opens the current version.
+    const fresh = await prisma.user.create({ data: { email: `zip-fresh-${randomUUID()}@test.local`, role: "MENTEE", emailVerified: new Date() } });
+    try {
+      await prisma.enrollment.create({ data: { courseId: course.id, userId: fresh.id, lifecycle: "ACTIVE" } });
+      const session = await createSession(fresh.id);
+      const reader = await request(app).get(`/api/v1/courses/${course.slug}/chapters/1-1-lesson`).set({ Authorization: `Bearer ${session.sessionToken}` });
+      expect(reader.status, JSON.stringify(reader.body)).toBe(200);
+      expect(reader.body.data.chapter.id).toBe(replacement.id);
+      expect(reader.body.data.modules.flatMap((module: { chapters: { title: string }[] }) => module.chapters.map(chapter => chapter.title))).toEqual(["Payments", "Deployment"]);
+    } finally {
+      await prisma.user.delete({ where: { id: fresh.id } });
+    }
+  });
+});
