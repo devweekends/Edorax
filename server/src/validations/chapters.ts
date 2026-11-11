@@ -24,7 +24,7 @@ export const highlightParams = z.object({ chapterId: id, highlightId: id });
 export const highlightIdParams = z.object({ highlightId: id });
 export const highlightCreateBody = z.object({
   color: highlightColor.optional(),
-  quote: z.string().min(1).max(2000),
+  quote: z.string().min(1).max(500),
   prefix: z.string().max(100).nullable().optional(),
   suffix: z.string().max(100).nullable().optional(),
   occurrence: z.number().int().min(0).max(1000).optional(),

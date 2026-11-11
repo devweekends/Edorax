@@ -187,6 +187,36 @@ export function HighlightsLibrary({ initial }: { initial: UserHighlightView[] })
           </div>
         </div>
 
+        {/* The three-pane layout hides its course and chapter panes on small screens. */}
+        <div className="mb-4 grid grid-cols-2 gap-2 md:hidden">
+          <select
+            aria-label="Filter by course"
+            value={selectedCourse ?? ""}
+            onChange={(event) => selectCourse(event.target.value || null)}
+            className="h-9 w-full rounded-lg border border-border bg-background px-2 text-sm"
+          >
+            <option value="">All courses</option>
+            {courses.map((course) => (
+              <option key={course} value={course}>
+                {course}
+              </option>
+            ))}
+          </select>
+          <select
+            aria-label="Filter by chapter"
+            value={selectedChapter ?? ""}
+            onChange={(event) => setSelectedChapter(event.target.value || null)}
+            className="h-9 w-full rounded-lg border border-border bg-background px-2 text-sm"
+          >
+            <option value="">All chapters</option>
+            {chapters.map((chapter) => (
+              <option key={chapter} value={chapter}>
+                {chapter}
+              </option>
+            ))}
+          </select>
+        </div>
+
         {visible.length === 0 ? (
           <p className="mt-8 text-sm text-muted-foreground">
             {items.length === 0

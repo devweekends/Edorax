@@ -1,5 +1,5 @@
 import { prisma } from "../../db/prisma.js";
-import { NotFoundError, ForbiddenError } from "../../utils/errors.js";
+import { ConflictError, NotFoundError, ForbiddenError } from "../../utils/errors.js";
 import type { SessionUser } from "../../types/auth.js";
 import type { HighlightColor } from "../../generated/prisma/index.js";
 import { requireBlockSubmissionAccess } from "../enrollment/api-learn-access.js";
@@ -68,6 +68,14 @@ export async function createChapterHighlight(
   const { chapter, enrollment } = await chapterAccess(user, input.chapterId);
   const quote = input.quote.trim();
   if (!quote) throw new NotFoundError("Highlight text is required.");
+  const occurrence = input.occurrence ?? 0;
+  const duplicate = await prisma.chapterHighlight.findFirst({
+    where: { userId: user.id, chapterId: chapter.id, quote, occurrence },
+    select: { id: true },
+  });
+  if (duplicate) {
+    throw new ConflictError("This text is already highlighted.", "HIGHLIGHT_EXISTS");
+  }
   const row = await prisma.$transaction(async (tx) => {
     await ensureChapterStarted(tx, enrollment.id, chapter.id);
     return tx.chapterHighlight.create({
@@ -79,7 +87,7 @@ export async function createChapterHighlight(
         quote,
         prefix: input.prefix?.trim() || null,
         suffix: input.suffix?.trim() || null,
-        occurrence: input.occurrence ?? 0,
+        occurrence,
         note: input.note?.trim() || null,
       },
       select: {

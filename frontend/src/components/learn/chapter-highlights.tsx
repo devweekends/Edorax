@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { Highlighter, Trash2, X } from "lucide-react";
 import { saveHighlight, updateHighlight, deleteHighlight } from "@/server/actions/highlights";
 import type { HighlightView, HighlightColor } from "@/server/actions/highlights";
+import { toast } from "@/components/ui/app-toast";
 import { cn } from "@/lib/utils";
 
 const COLOR_CLASSES: Record<HighlightColor, string> = {
@@ -17,12 +18,31 @@ const COLORS: HighlightColor[] = ["YELLOW", "GREEN", "BLUE", "PINK"];
 
 type Highlight = HighlightView;
 
-function findTextRange(container: HTMLElement, quote: string, occurrence: number): Range | null {
-  if (!quote) return null;
+// Interactive chrome inside the article (the "Add a note" buttons, inputs, the
+// highlight toolbar) is not lesson text. Quotes and anchors must skip it, or a
+// selection that crosses a heading would store "Add a note" in the quote.
+const NON_CONTENT_SELECTOR =
+  "button, [role='button'], input, textarea, select, [contenteditable=''], [contenteditable='true'], [data-hl-toolbar]";
+
+function isContentText(text: Text): boolean {
+  const parent = text.parentElement;
+  return Boolean(parent && !parent.closest(NON_CONTENT_SELECTOR));
+}
+
+function contentTextNodes(container: HTMLElement): Text[] {
   const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null);
   const nodes: Text[] = [];
-  let n: Node | null;
-  while ((n = walker.nextNode())) nodes.push(n as Text);
+  let node: Node | null;
+  while ((node = walker.nextNode())) {
+    const text = node as Text;
+    if (isContentText(text)) nodes.push(text);
+  }
+  return nodes;
+}
+
+function findTextRange(container: HTMLElement, quote: string, occurrence: number): Range | null {
+  if (!quote) return null;
+  const nodes = contentTextNodes(container);
   let full = "";
   const offsets: { node: Text; start: number; end: number }[] = [];
   for (const tn of nodes) {
@@ -92,18 +112,15 @@ function renderHighlights(article: HTMLElement, highlights: Highlight[]) {
   const nodeIds = new Map<Text, (string | null)[]>();
 
   const resolved: { h: Highlight; range: Range }[] = [];
+  const unanchored: string[] = [];
   for (const h of highlights) {
     const range = findTextRange(article, h.quote, h.occurrence);
     if (range) resolved.push({ h, range });
+    else unanchored.push(h.id);
   }
 
   for (const { h, range } of resolved) {
-    const walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT, null);
-    const nodes: Text[] = [];
-    let n: Node | null;
-    while ((n = walker.nextNode())) {
-      if (range.intersectsNode(n)) nodes.push(n as Text);
-    }
+    const nodes = contentTextNodes(article).filter((node) => range.intersectsNode(node));
     for (const tn of nodes) {
       if (!nodeColors.has(tn)) {
         const len = tn.nodeValue?.length || 0;
@@ -152,6 +169,30 @@ function renderHighlights(article: HTMLElement, highlights: Highlight[]) {
     }
     parent.replaceChild(frag, tn);
   }
+  return unanchored;
+}
+
+function offsetForBoundary(
+  offsets: { node: Text; start: number; end: number }[],
+  container: Node,
+  offset: number,
+  side: "start" | "end",
+): number | null {
+  if (container.nodeType === Node.TEXT_NODE) {
+    const text = container as Text;
+    const entry = offsets.find((item) => item.node === text);
+    if (entry) return entry.start + offset;
+  }
+  // Element boundary: use the first or last content text node inside it.
+  if (container.nodeType === Node.ELEMENT_NODE) {
+    const inside = contentTextNodes(container as HTMLElement);
+    const target = side === "start" ? inside[0] : inside[inside.length - 1];
+    if (target) {
+      const entry = offsets.find((item) => item.node === target);
+      if (entry) return entry.start + (side === "start" ? 0 : target.nodeValue?.length || 0);
+    }
+  }
+  return null;
 }
 
 function selectionToHighlight(article: HTMLElement, sel: Selection): {
@@ -164,41 +205,41 @@ function selectionToHighlight(article: HTMLElement, sel: Selection): {
   const range = sel.getRangeAt(0);
   if (range.collapsed) return null;
   if (!article.contains(range.commonAncestorContainer)) return null;
-  const quote = range.toString().trim();
-  if (!quote || quote.length > 2000) return null;
-  // occurrence: count prior occurrences of quote in article text
-  const walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT, null);
+
+  const nodes = contentTextNodes(article);
   let full = "";
-  let node: Node | null;
-  while ((node = walker.nextNode())) full += node.nodeValue || "";
-  // find occurrence index by position of range start in full text
-  // Re-walk to find offset of range start
-  const nodes: Text[] = [];
-  const w2 = document.createTreeWalker(article, NodeFilter.SHOW_TEXT, null);
-  while ((node = w2.nextNode())) nodes.push(node as Text);
-  let acc = 0;
-  let startOffset = 0;
+  const offsets: { node: Text; start: number; end: number }[] = [];
   for (const tn of nodes) {
-    if (tn === range.startContainer) {
-      startOffset = acc + range.startOffset;
-      break;
-    }
-    acc += tn.nodeValue?.length || 0;
+    const text = tn.nodeValue || "";
+    offsets.push({ node: tn, start: full.length, end: full.length + text.length });
+    full += text;
   }
+
+  const startOffset = offsetForBoundary(offsets, range.startContainer, range.startOffset, "start");
+  const endOffset = offsetForBoundary(offsets, range.endContainer, range.endOffset, "end");
+  if (startOffset == null || endOffset == null || endOffset <= startOffset) return null;
+
+  const raw = full.slice(startOffset, endOffset);
+  const leading = raw.length - raw.trimStart().length;
+  const quote = raw.trim();
+  if (!quote || quote.length > 500) return null;
+  const quoteStart = startOffset + leading;
+  const quoteEnd = quoteStart + quote.length;
+
   let occurrence = 0;
   let searchFrom = 0;
   while (true) {
     const found = full.indexOf(quote, searchFrom);
-    if (found === -1 || found > startOffset) break;
+    if (found === -1 || found > quoteStart) break;
     occurrence++;
     searchFrom = found + 1;
-    if (found === startOffset) break;
+    if (found === quoteStart) break;
   }
   occurrence = Math.max(0, occurrence - 1);
 
-  const prefixStart = Math.max(0, startOffset - 40);
-  const prefix = full.slice(prefixStart, startOffset);
-  const suffix = full.slice(startOffset + quote.length, startOffset + quote.length + 40);
+  const prefixStart = Math.max(0, quoteStart - 40);
+  const prefix = full.slice(prefixStart, quoteStart);
+  const suffix = full.slice(quoteEnd, quoteEnd + 40);
   return { quote, prefix, suffix, occurrence };
 }
 
@@ -217,20 +258,21 @@ export function ChapterHighlights({
   const [noteDraft, setNoteDraft] = useState("");
   const [panelOpen, setPanelOpen] = useState(false);
   const [pending, setPending] = useState(false);
+  const [unanchored, setUnanchored] = useState<string[]>([]);
   const savedSelection = useRef<ReturnType<typeof selectionToHighlight>>(null);
 
   // Render marks whenever highlights change
   useEffect(() => {
     const article = articleRef.current;
     if (!article) return;
-    renderHighlights(article, highlights);
+    setUnanchored(renderHighlights(article, highlights));
   }, [highlights, articleRef]);
 
   // Also re-render on mount (article may not be ready immediately)
   useEffect(() => {
     const article = articleRef.current;
     if (!article) return;
-    const t = setTimeout(() => renderHighlights(article, highlights), 50);
+    const t = setTimeout(() => setUnanchored(renderHighlights(article, highlights)), 50);
     return () => clearTimeout(t);
   }, [articleRef]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -310,6 +352,8 @@ export function ChapterHighlights({
       setHighlights((prev) => [...prev, res.data]);
       setToolbar(null);
       window.getSelection()?.removeAllRanges();
+    } else {
+      toast(res.error, "error");
     }
   }
 
@@ -447,6 +491,11 @@ export function ChapterHighlights({
               <X className="size-4" />
             </button>
           </div>
+          {unanchored.length > 0 ? (
+            <p className="mb-2 rounded-md border border-border bg-muted/30 px-2 py-1.5 text-xs text-muted-foreground">
+              {unanchored.length} highlight{unanchored.length === 1 ? "" : "s"} could not be found in this version of the chapter.
+            </p>
+          ) : null}
           {highlights.length === 0 ? (
             <p className="text-sm text-muted-foreground">Select text to highlight.</p>
           ) : (
