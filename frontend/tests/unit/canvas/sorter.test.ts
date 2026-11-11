@@ -6,15 +6,18 @@ import {
   checkDeck,
   currentCard,
   dealOrder,
+  fitsOneLine,
   DEFAULT_WHY,
   isDone,
   placeCard,
   sortVerdict,
   startSort,
+  trayLines,
   wrapWords,
   type SortBucket,
   type SortCard,
 } from "@buildment/learning-ui/canvas/models/sorter";
+import { InteractiveCanvas } from "@buildment/learning-ui/canvas/InteractiveCanvas";
 import { REQUIREMENT_BUCKETS, REQUIREMENT_CARDS, sysdesignM1RequirementSorter } from "@buildment/learning-ui/canvas/sysdesign-m1-requirement-sorter/data";
 
 const buckets: SortBucket[] = [
@@ -102,5 +105,41 @@ describe("sysdesign-m1-requirement-sorter", () => {
     expect(html).toContain("Non-functional");
     expect(html).toContain("A student can upload a PDF note for a course.");
     expect(html.match(/<button/g)?.length).toBe(REQUIREMENT_BUCKETS.length);
+  });
+});
+
+describe("sorter tray text", () => {
+  // Three trays share a 420 wide picture, as in a "Finished / Waiting / Failed" sorter.
+  const trayW = (420 - 2 * 10 - 2 * 10) / 3;
+  const three: SortBucket[] = [
+    { id: "done", label: "Finished", sub: "the prompt came back" },
+    { id: "wait", label: "Waiting", sub: "the program is running" },
+    { id: "fail", label: "Failed", sub: "a line says what went wrong" },
+  ];
+
+  it("keeps the roomy one-line layout only when the name and the gloss both fit the tray", () => {
+    expect(fitsOneLine(195, "A", "first")).toBe(true);
+    expect(fitsOneLine(trayW, "Works", "short gloss")).toBe(true);
+    expect(fitsOneLine(trayW, "Failed", "a line says what went wrong")).toBe(false);
+    expect(fitsOneLine(trayW, "Quietly does nothing useful", "no error")).toBe(false);
+  });
+
+  it("wraps a long name and gloss to lines that fit the tray, without losing words", () => {
+    for (const bucket of [...three, { id: "q", label: "Quietly does nothing useful", sub: "no error, but not what you meant" }]) {
+      const lines = trayLines(trayW, bucket.label, bucket.sub);
+      expect(lines.label.join(" "), bucket.label).toBe(bucket.label);
+      expect(lines.sub.join(" "), bucket.sub).toBe(bucket.sub);
+      expect(lines.label.length + lines.sub.length).toBeLessThanOrEqual(4);
+      for (const line of lines.label) expect(line.length * 7, line).toBeLessThanOrEqual(trayW - 8);
+      for (const line of lines.sub) expect(line.length * 5.9, line).toBeLessThanOrEqual(trayW - 8);
+    }
+  });
+
+  it("draws a three-tray sorter with each long gloss on more than one line", () => {
+    const deck: SortCard[] = [{ id: "1", text: "The prompt came back.", answer: "done", why: { wait: "It came back.", fail: "No error line." } }];
+    const html = renderToString(createElement(InteractiveCanvas, { renderer: "sorter", data: { title: "Sorter", limits: "None.", buckets: three, cards: deck, deckLabel: "Screen", prompt: "Waiting, finished or failed?", hint: "Pick one.", endNote: "Done." } })).replaceAll("<!-- -->", "");
+    expect(html).not.toContain(">a line says what went wrong<");
+    expect(html).toContain(">a line says<");
+    expect(html).toContain(">what went wrong<");
   });
 });

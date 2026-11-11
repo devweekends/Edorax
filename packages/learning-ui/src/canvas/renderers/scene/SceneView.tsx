@@ -4,7 +4,7 @@ import { DotGrid, VerdictBanner } from "../../primitives/svg-parts";
 import { SvgNode } from "../../primitives/svg-node";
 import { LABEL_HALO, NEUTRAL, TONES } from "../../primitives/tones";
 import type { SceneFrame } from "./frame";
-import { BOX_W, CHIP_H, chipFade, chipTops, chipWidth, stripX, tagBox, tagRowY, TAG_H, longestWaitLabel, waitPillBox } from "./geometry";
+import { actorBox, CHIP_H, chipFade, chipTops, chipWidth, stripX, tagBox, tagRowY, TAG_H, longestWaitLabel, waitPillBox } from "./geometry";
 import type { Scene } from "./types";
 
 // Draws one frame of a scene on a dotted canvas: links between the actors
@@ -102,11 +102,17 @@ export function SceneView({ scene, frame, title }: { scene: Scene; frame: SceneF
 
       {frame.actors.map((actor) => {
         const kind = scene.actors.find((a) => a.id === actor.id)?.kind;
+        // Sized for every note the story gives this actor, so the box holds its text and never changes size mid-story.
+        const box = actorBox(actor, scene);
         return (
           <SvgNode
             key={actor.id}
             x={actor.x}
             y={actor.y}
+            left={box.left}
+            top={box.top}
+            width={box.right - box.left}
+            height={box.bottom - box.top}
             label={actor.label}
             kind={kind}
             status={actor.sub}
@@ -124,10 +130,11 @@ export function SceneView({ scene, frame, title }: { scene: Scene; frame: SceneF
       {frame.waits.map((wait) => {
         const actor = frame.actors.find((a) => a.id === wait.actor);
         if (!actor) return null;
-        const cx = actor.x + BOX_W / 2 + 16;
+        const boxRight = actorBox(actor, scene).right;
+        const cx = boxRight + 16;
         const cy = actor.y;
         const circumference = 2 * Math.PI * 12;
-        const pill = waitPillBox(actor, longestWaitLabel(scene, wait.actor, wait.label));
+        const pill = waitPillBox(actor, longestWaitLabel(scene, wait.actor, wait.label), boxRight);
         const shown = wait.opacity * visible;
         // The ring and pill come in twice as fast as the text, so the text never shows before the pill that keeps lines off it.
         const solid = Math.min(1, shown * 2);

@@ -1,6 +1,6 @@
 import type { CourseMenteesView, MenteeAttentionKind, MenteeEvaluation } from "../../shared/api/teach.js";
 import { resolveCourseFamily, summarizeLearnerTrack } from "../../shared/lib/course-tracks.js";
-import { type ReleaseContent, variantForRelease } from "../courses/releases.js";
+import { readReleaseContent, variantForRelease } from "../courses/releases.js";
 import { helpUiCopy } from "../../shared/lib/help-ui-copy.js";
 import { prisma } from "../../db/prisma.js";
 import { NotFoundError } from "../../utils/errors.js";
@@ -70,7 +70,7 @@ export async function loadCourseMentees(user: SessionUser, courseSlug: string): 
   });
   const releaseIds = [...new Set([course.activeReleaseId, ...course.enrollments.map(item => item.releaseId)].filter((id): id is string => Boolean(id)))];
   const releases = await prisma.courseRelease.findMany({ where: { id: { in: releaseIds } }, select: { id: true, content: true } });
-  const byRelease = new Map(releases.map(release => [release.id, release.content as unknown as ReleaseContent]));
+  const byRelease = new Map(releases.map(release => [release.id, readReleaseContent(release.content)]));
   const family = resolveCourseFamily(course.familySlug, course.variantFamily);
   const chapterCountFor = (releaseId: string | null, variantSlug: string | null) => {
     const content = byRelease.get(releaseId ?? course.activeReleaseId ?? "");
