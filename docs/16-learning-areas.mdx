@@ -19,7 +19,7 @@ area section is written so one work session can pick it up on its own.
 |---|---|---|---|
 | Courses | `/catalog`, `/my-courses`, `/courses/...` | Open | Full courses: read, play, listen, prove. |
 | Audiobooks | `/audiobooks`, `/audiobooks/[course]` | Open | Every narrated course as an audiobook, with a player that follows you across pages. |
-| Labs | `/labs` | Partly open | Visual labs open; guided and shell labs planned. |
+| Labs | `/labs` | Partly open | Visual and guided labs open; shell labs planned. |
 | Bite-sized practice | `/practice` | Coming soon | One topic a few minutes a day, led by questions. |
 | Puzzles | `/puzzles` | Coming soon | Several kinds of daily puzzle. |
 | On-call tutors | `/voice` | Coming soon | A voice tutor per topic that tracks progress across its modules. |
@@ -29,7 +29,7 @@ Lab kinds, under `/labs`:
 | Kind | Route | Status |
 |---|---|---|
 | Visual labs | `/labs/visual`, `/labs/visual/[slug]` | Open |
-| Guided labs | `/labs/guided` | Coming soon |
+| Guided labs | `/labs/guided` | Open |
 | Shell labs | `/labs/shell` (with the desktop app docs at `#desktop`) | Coming soon, with the desktop app |
 
 ## Information architecture (implemented)
@@ -53,7 +53,7 @@ frontend/src/app/(learn)/(catalog)/
   labs/                    Labs overview: the three kinds, open challenges, how a visual lab works
     visual/                Every visual lab, grouped
       [slug]/              One visual lab, the same board a chapter embeds
-    guided/                Guided labs (coming soon page)
+    guided/                Guided labs (the Dev Weekends tracks, from `lib/guided-labs.ts`)
     shell/                 Shell labs and the desktop app docs (coming soon page)
   practice/                Bite-sized practice (coming soon page)
   puzzles/                 Puzzles (coming soon page)
@@ -147,7 +147,17 @@ Next steps:
 3. Keep the learner's board when entering full screen. Today the board remounts when it moves into
    the full screen portal, so unsaved edits are lost.
 
-### Guided labs (planned)
+### Guided labs (open)
+
+Guided labs are the Dev Weekends take-home tracks: Level 1 (`dw-level-1`), Level 2 (`site-and-outreach`)
+and Level 3 (`dw-level-3`). Each is an ordinary course in the catalog with labs that have tests, a quiz
+after each lab, a capstone repository checked by the AI checker, and a certificate. `/labs/guided`
+lists them from `GUIDED_TRACKS` in `lib/guided-labs.ts`, joined with the live catalog for title, length
+and price. A track whose slug is not in the catalog shows as coming soon with no link and turns into a
+normal card on its own once the course is published. The text below is the earlier plan for in-shell
+guided labs on the desktop app; it is kept as the design for that later work.
+
+#### Planned: guided labs in the shell
 
 A lab split into steps. Each step has a goal, guidance, a hint ladder (nudge, hint, worked example)
 and tests. Everything the learner runs in the shell is checked by tests against the machine state, not
