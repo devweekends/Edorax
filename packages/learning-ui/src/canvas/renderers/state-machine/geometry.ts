@@ -1,3 +1,4 @@
+import { wrapBalanced } from "../scene/geometry";
 import type { MachineEdge, StateMachineSpec } from "./types";
 
 // Two fixed layouts, like the sequence diagram. The wide one draws the grid as
@@ -27,8 +28,33 @@ export function machineGeometry(spec: StateMachineSpec, layout: MachineLayout) {
   const L = LAYOUT[layout];
   const cols = Math.max(1, ...spec.states.map((s) => s.col + 1));
   const rows = Math.max(1, ...spec.states.map((s) => s.row + 1));
-  const halfW = L.pillW / 2;
-  const halfH = L.pillH / 2;
+  // Pills narrow when more of them share the width than the standard pill allows, so they never
+  // overlap or leave the picture. A name or second line wider than its pill wraps, and every pill
+  // grows to the tallest one. The second line is monospace, 0.6 of its size per character.
+  const across = layout === "wide" ? cols : rows;
+  const pillW = Math.min(L.pillW, (L.width - 12 - (across - 1) * 8) / across);
+  const nameChars = Math.max(4, Math.floor((pillW - 12) / (L.nameSize * 0.56)));
+  const subChars = Math.max(4, Math.floor((pillW - 12) / (L.subSize * 0.6)));
+  const nameLh = L.nameSize + 2;
+  const subLh = L.subSize + 2;
+  const wrapped = new Map(spec.states.map((s) => [s.id, { name: wrapBalanced(s.name, nameChars), sub: s.sub ? wrapBalanced(s.sub, subChars) : [] }]));
+  const most = (pick: (w: { name: string[]; sub: string[] }) => number) => Math.max(1, ...[...wrapped.values()].map(pick));
+  const grow = (most((w) => w.name.length) - 1) * nameLh + (most((w) => w.sub.length) - 1) * subLh;
+  const pillH = L.pillH + grow;
+  const gapAlong = L.gapAlong + grow;
+  const halfW = pillW / 2;
+  const halfH = pillH / 2;
+  /** Baselines of one state's lines, centred in its pill as a block. */
+  const stateLines = (id: string, cy: number) => {
+    const w = wrapped.get(id) ?? { name: [], sub: [] };
+    const start = cy - (w.name.length * nameLh + w.sub.length * subLh) / 2;
+    // One word too long to wrap is drawn to the pill's width instead.
+    const held = (text: string, chars: number) => (text.length > chars ? pillW - 12 : undefined);
+    return {
+      name: w.name.map((text, k) => ({ text, y: start + (w.sub.length ? 11.25 : 12.25) + k * nameLh, textLength: held(text, nameChars) })),
+      sub: w.sub.map((text, k) => ({ text, y: start + w.name.length * nameLh + 11.75 + k * subLh, textLength: held(text, subChars) })),
+    };
+  };
 
   let place: (col: number, row: number) => Pt;
   let height: number;
@@ -37,14 +63,15 @@ export function machineGeometry(spec: StateMachineSpec, layout: MachineLayout) {
     const margin = halfW + 8;
     const colGap = cols > 1 ? (L.width - 2 * margin) / (cols - 1) : 0;
     const top = halfH + LOOP_ROOM;
-    place = (col, row) => [cols > 1 ? margin + col * colGap : L.width / 2, top + row * L.gapAlong];
-    height = top + (rows - 1) * L.gapAlong + halfH + 14;
+    place = (col, row) => [cols > 1 ? margin + col * colGap : L.width / 2, top + row * gapAlong];
+    height = top + (rows - 1) * gapAlong + halfH + 14;
   } else {
     // Columns run down the page; rows step to the right.
     const left = halfW + 6;
     const top = halfH + 10;
-    place = (col, row) => [left + row * L.gapAcross, top + col * L.gapAlong];
-    height = top + (cols - 1) * L.gapAlong + halfH + 14;
+    const gapAcross = rows > 1 ? Math.min(L.gapAcross, (L.width - 12 - pillW) / (rows - 1)) : 0;
+    place = (col, row) => [left + row * gapAcross, top + col * gapAlong];
+    height = top + (cols - 1) * gapAlong + halfH + 14;
   }
 
   const byId = new Map(spec.states.map((s) => [s.id, { ...s, at: place(s.col, s.row) }]));
@@ -120,5 +147,5 @@ export function machineGeometry(spec: StateMachineSpec, layout: MachineLayout) {
     return { x, y: shape.mid[1] - h / 2, w, h };
   }
 
-  return { ...L, height, byId, edge, labelBox, halfW, halfH };
+  return { ...L, pillW, pillH, height, byId, edge, labelBox, halfW, halfH, stateLines };
 }
