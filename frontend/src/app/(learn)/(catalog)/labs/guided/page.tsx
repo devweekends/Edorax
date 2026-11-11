@@ -35,7 +35,7 @@ export default async function GuidedLabsPage() {
             { title: "Build it yourself", body: "Write the code on your own computer, or in a GitHub Codespace in your browser. There is no answer to copy." },
             { title: "Tests check the result", body: "Each lab ships with tests that run on your code and say what passes and what is still missing." },
             { title: "A quiz after every lab", body: "A few questions check that you understood what you just built, not only that it runs." },
-            { title: "The capstone is checked automatically", body: "Push your project to your own GitHub repository. Our AI checker reads it against a published list of criteria and tells you what to fix. You get a few checks a day." },
+            { title: "The capstone is checked automatically", body: "Push your project to your own GitHub repository. Our AI checker reads it against a list of criteria you can see, and tells you what to fix. You get a few checks a day." },
             { title: "A certificate to share", body: "When the capstone passes, you get a certificate for the level that you can add to your LinkedIn profile." },
           ]}
         />

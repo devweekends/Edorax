@@ -37,7 +37,6 @@ export function GuidedTrackList({ tracks }: { tracks: GuidedTrackView[] }) {
             <dl className="grid grid-cols-2 gap-4 md:grid-cols-1">
               {length ? <Fact label="Length">{length}</Fact> : null}
               {price ? <Fact label="Price">{price}</Fact> : null}
-              {!open ? <Fact label="Status">Not published yet</Fact> : null}
             </dl>
             {open && href ? (
               <Link
