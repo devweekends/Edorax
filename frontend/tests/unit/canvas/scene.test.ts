@@ -6,7 +6,7 @@ import { canvasRegistry } from "@buildment/learning-ui/canvas/registry";
 import { buildLagScene } from "@buildment/learning-ui/canvas/models/replica-lag-scene";
 import { buildTrueTimeScene } from "@buildment/learning-ui/canvas/models/truetime-scene";
 import { loopTime, sceneFrame } from "@buildment/learning-ui/canvas/renderers/scene/frame";
-import { actorBox, actorsInside, BOX_H, BOX_W, chipBox, chipTops, frameCollisions, longestWaitLabel, MAX_BOX_W, MAX_SUB_CHARS, nodeSize, subCharsAt, SUB_LINE_H, waitLabelBox, waitPillBox, wrapLines } from "@buildment/learning-ui/canvas/renderers/scene/geometry";
+import { actorBox, actorsInside, BOX_H, BOX_W, chipBox, chipTops, frameCollisions, longestWaitLabel, MAX_BOX_W, MAX_SUB_CHARS, nodeSize, subCharsAt, SUB_LINE_H, waitLabelBox, waitPillBox, wrapBalanced, wrapLines } from "@buildment/learning-ui/canvas/renderers/scene/geometry";
 import type { Scene } from "@buildment/learning-ui/canvas/renderers/scene/types";
 import { bandOverlap, clampB } from "@buildment/learning-ui/canvas/sysdesign-band-overlap/model";
 import { clampEpsilon, clockBandFrame } from "@buildment/learning-ui/canvas/sysdesign-clock-band/model";
@@ -260,7 +260,32 @@ describe("actor boxes hold their text", () => {
   it("draw the long note on more than one line", () => {
     const html = renderToString(createElement(InteractiveCanvas, { renderer: "scene", data: { title: "Memory", purpose: "Where the list lives.", limits: "None.", scene: { ...scene, actors: [{ ...scene.actors[0], sub: longNote }, scene.actors[1]] } } })).replaceAll("<!-- -->", "");
     expect(html).not.toContain(`>${longNote}<`);
-    expect(html).toContain(">where a running program<");
-    expect(html).toContain(">keeps its list<");
+    expect(html).toContain(">where a running<");
+    expect(html).toContain(">program keeps its list<");
+  });
+});
+
+describe("balanced wrapping", () => {
+  it("keeps the line count and evens the lines out, so no short word is left alone", () => {
+    expect(wrapLines("files on the disk", 15)).toEqual(["files on the", "disk"]);
+    expect(wrapBalanced("files on the disk", 15)).toEqual(["files on", "the disk"]);
+    expect(wrapBalanced("clock fast", 15)).toEqual(["clock fast"]);
+    expect(wrapBalanced("getText(), markDone()", 15)).toEqual(["getText(),", "markDone()"]);
+    expect(wrapBalanced("", 15)).toEqual([]);
+  });
+});
+
+describe("registered scenes after boxes learned to grow", () => {
+  it("keep a name that fits in the standard box, as designed", () => {
+    expect(nodeSize("Chat server", ["answers"])).toEqual({ w: BOX_W, h: BOX_H });
+    expect(nodeSize("Tracker", ["answers"])).toEqual({ w: BOX_W, h: BOX_H });
+  });
+
+  it("stay inside their picture with no box over another", () => {
+    for (const [slug, spec] of Object.entries(canvasRegistry)) {
+      if (spec.kind !== "scene") continue;
+      expect(actorsInside(spec.scene), slug).toBe(true);
+      for (let t = 0; t <= spec.scene.loop; t += 0.5) expect(frameCollisions(spec.scene, sceneFrame(spec.scene, t)), `${slug} at ${t}s`).toEqual([]);
+    }
   });
 });

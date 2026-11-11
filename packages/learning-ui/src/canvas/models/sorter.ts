@@ -1,3 +1,5 @@
+import { wrapBalanced } from "../renderers/scene/geometry";
+
 // A sorting game as a pure model: cards come one at a time and each belongs
 // in exactly one bucket. A right answer moves to the next card; a wrong one
 // keeps the card, gives a short reason, and marks the card as missed.
@@ -131,7 +133,7 @@ export function trayLines(trayW: number, label: string, sub: string): { label: s
   // A wide tray keeps a little more air at its sides than a narrow one can afford.
   const pad = trayW > 100 ? 16 : 8;
   const labelLines = wrapWords(label, Math.floor((trayW - pad) / 7)).slice(0, 3);
-  const subLines = wrapWords(sub, Math.floor((trayW - pad) / 5.9)).slice(0, Math.max(2, 4 - labelLines.length));
+  const subLines = wrapBalanced(sub, Math.floor((trayW - pad) / 5.9)).slice(0, Math.max(2, 4 - labelLines.length));
   return { label: labelLines, sub: subLines };
 }
 

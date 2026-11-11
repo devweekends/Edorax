@@ -1,7 +1,7 @@
 import type { ComponentType, SVGProps } from "react";
 import { Clock, Cpu, Database, FileText, Globe, ListOrdered, Router, Server, Smartphone, User, Zap } from "lucide-react";
 import { cn } from "../../lib/utils";
-import { BOX_H, BOX_W, SUB_LINE_H, nodeSize, subCharsAt, wrapLines } from "../renderers/scene/geometry";
+import { BOX_H, BOX_W, SUB_LINE_H, nodeSize, subCharsAt, wrapBalanced } from "../renderers/scene/geometry";
 import type { ActorKind } from "../renderers/scene/types";
 import { NEUTRAL, TONES, type Tone } from "./tones";
 
@@ -112,7 +112,7 @@ export function SvgNode({
   const cx = left + w / 2;
   const IconCmp = ICONS[kind];
   const pill = (text: string, tone: Tone | undefined, opacity: number) => {
-    const lines = wrapLines(text, subCharsAt(w));
+    const lines = wrapBalanced(text, subCharsAt(w));
     return (
       <g opacity={opacity}>
         <rect x={left + 7} y={top + 33} width={w - 14} height={20 + (lines.length - 1) * SUB_LINE_H} rx={10} className={tone ? TONES[tone].softFill : "fill-muted"} />

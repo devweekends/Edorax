@@ -139,7 +139,7 @@ describe("sorter tray text", () => {
     const deck: SortCard[] = [{ id: "1", text: "The prompt came back.", answer: "done", why: { wait: "It came back.", fail: "No error line." } }];
     const html = renderToString(createElement(InteractiveCanvas, { renderer: "sorter", data: { title: "Sorter", limits: "None.", buckets: three, cards: deck, deckLabel: "Screen", prompt: "Waiting, finished or failed?", hint: "Pick one.", endNote: "Done." } })).replaceAll("<!-- -->", "");
     expect(html).not.toContain(">a line says what went wrong<");
-    expect(html).toContain(">a line says what<");
-    expect(html).toContain(">went wrong<");
+    expect(html).toContain(">a line says<");
+    expect(html).toContain(">what went wrong<");
   });
 });

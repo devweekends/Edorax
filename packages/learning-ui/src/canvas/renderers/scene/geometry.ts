@@ -14,9 +14,27 @@ export const MAX_BOX_W = 168;
 export const SUB_LINE_H = 14;
 export const TAG_H = 24;
 const PAD = 30;
-/** Rough advance per character: the name at 13px semibold, the note at 11.5px semibold. */
-const LABEL_CHAR_W = 7;
+/** Rough advance per character of the note at 11.5px semibold. */
 const SUB_CHAR_W = 6;
+const LABEL_PX = 13;
+
+/**
+ * The drawn width of a name at 13px semibold, from the shape of each letter
+ * (in ems of DM Sans). An SVG cannot measure its own text on the server, and a
+ * flat average is wrong both ways: "Name server" touches the box edge while
+ * "Chat server", the same length, does not.
+ */
+export function labelWidth(label: string): number {
+  let ems = 0;
+  for (const ch of label) {
+    if (ch === " " || "il.,:;'!|".includes(ch)) ems += 0.27;
+    else if ("frtj()[]/-".includes(ch)) ems += 0.38;
+    else if ("mwMW".includes(ch)) ems += 0.9;
+    else if (ch >= "A" && ch <= "Z") ems += 0.72;
+    else ems += 0.58;
+  }
+  return ems * LABEL_PX * 1.04;
+}
 /** The name starts right of the icon badge; the note pill sits 7 in from each side with 4 of padding. */
 const LABEL_LEFT = 33;
 const SUB_INSET = 22;
@@ -38,6 +56,17 @@ export function wrapLines(text: string, max: number): string[] {
   return lines;
 }
 
+/** The same number of lines as wrapLines, but evened out, so a wrap never leaves one short word alone on the last line. */
+export function wrapBalanced(text: string, max: number): string[] {
+  let best = wrapLines(text, max);
+  for (let width = max - 1; width > 0; width--) {
+    const lines = wrapLines(text, width);
+    if (lines.length !== best.length || lines.some((line) => line.length > width)) break;
+    best = lines;
+  }
+  return best;
+}
+
 export type NodeSize = { w: number; h: number };
 
 /** How many characters of a note fit on one line of a box this wide. */
@@ -52,7 +81,7 @@ export const subCharsAt = (w: number) => Math.floor((w - SUB_INSET) / SUB_CHAR_W
 export function nodeSize(label: string, subs: (string | undefined)[] = []): NodeSize {
   const notes = subs.filter((s): s is string => Boolean(s && s.trim()));
   const longestWord = Math.max(0, ...notes.flatMap((s) => s.split(/\s+/).map((word) => word.length)));
-  const wanted = Math.max(BOX_W, LABEL_LEFT + label.length * LABEL_CHAR_W + 8, longestWord * SUB_CHAR_W + SUB_INSET);
+  const wanted = Math.max(BOX_W, LABEL_LEFT + labelWidth(label) + 1, longestWord * SUB_CHAR_W + SUB_INSET);
   let w = Math.min(MAX_BOX_W, BOX_W + Math.ceil((wanted - BOX_W) / STEP_W) * STEP_W);
   const lineCount = () => Math.max(1, ...notes.map((s) => wrapLines(s, subCharsAt(w)).length));
   while (w < MAX_BOX_W && lineCount() > 2) w += STEP_W;
