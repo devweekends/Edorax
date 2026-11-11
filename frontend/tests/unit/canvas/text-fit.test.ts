@@ -5,6 +5,9 @@ import { InteractiveCanvas } from "@buildment/learning-ui/canvas/InteractiveCanv
 import { MAP_CARD_H, mapLift } from "@buildment/learning-ui/canvas/primitives/block-map";
 import { fitOneLine, sceneLift, textEms } from "@buildment/learning-ui/canvas/renderers/scene/geometry";
 import type { Scene } from "@buildment/learning-ui/canvas/renderers/scene/types";
+import { machineGeometry } from "@buildment/learning-ui/canvas/renderers/state-machine/geometry";
+import type { StateMachineSpec } from "@buildment/learning-ui/canvas/renderers/state-machine/types";
+import { breakLongWords, trayLines } from "@buildment/learning-ui/canvas/models/sorter";
 import { sequenceGeometry } from "@buildment/learning-ui/canvas/renderers/sequence/geometry";
 import type { SequenceSpec } from "@buildment/learning-ui/canvas/renderers/sequence/types";
 
@@ -130,5 +133,43 @@ describe("a scene with a verdict", () => {
     const lift = sceneLift(scene(40));
     expect(40 + lift - 30 - 5).toBeGreaterThanOrEqual(44);
     expect(sceneLift({ ...scene(40), events: [] })).toBe(0);
+  });
+});
+
+describe("state machine pills", () => {
+  const machine = (states: { id: string; name: string; sub?: string; col: number; row: number }[], edges: { from: string; to: string; label: string }[] = []): StateMachineSpec =>
+    ({ kind: "state-machine", title: "t", purpose: "p", summary: "s", limits: "l", states, edges, steps: [] }) as unknown as StateMachineSpec;
+
+  it("are drawn as before when the text fits", () => {
+    const g = machineGeometry(machine([{ id: "a", name: "Draft", sub: "not sent", col: 0, row: 0 }, { id: "b", name: "Sent", col: 1, row: 0 }]), "wide");
+    expect([g.pillW, g.pillH]).toEqual([128, 48]);
+    expect(g.stateLines("a", 100)).toEqual({ name: [{ text: "Draft", y: 97, textLength: undefined }], sub: [{ text: "not sent", y: 113, textLength: undefined }] });
+    expect(g.stateLines("b", 100).name[0].y).toBe(104.5);
+  });
+
+  it("wrap a long second line and grow every pill", () => {
+    const g = machineGeometry(machine([{ id: "a", name: "Terraform's folder", sub: "lock names registry.terraform.io", col: 0, row: 0 }, { id: "b", name: "Plan", col: 1, row: 0 }]), "wide");
+    const lines = g.stateLines("a", 100);
+    expect(lines.sub.length).toBeGreaterThan(1);
+    expect(g.pillH).toBeGreaterThan(48);
+    for (const line of lines.sub) expect(line.textLength ?? line.text.length * g.subSize * 0.6).toBeLessThanOrEqual(g.pillW - 12 + 0.01);
+  });
+
+  it("narrow the pills on a phone when three rows share the width, so none leaves the picture", () => {
+    const states = [0, 1, 2].map((row) => ({ id: `s${row}`, name: "Plan reviewed", sub: "a person read it", col: 0, row }));
+    const g = machineGeometry(machine(states), "narrow");
+    const xs = states.map((s) => g.byId.get(s.id)!.at[0]);
+    expect(Math.min(...xs) - g.halfW).toBeGreaterThanOrEqual(0);
+    expect(Math.max(...xs) + g.halfW).toBeLessThanOrEqual(g.width);
+    expect(xs[1] - xs[0]).toBeGreaterThanOrEqual(g.pillW);
+  });
+});
+
+describe("sorter trays with long identifiers", () => {
+  it("break a word longer than a line after its separators", () => {
+    expect(breakLongWords("replace_because_cannot_update", 12)).toBe("replace_ because_ cannot_ update");
+    expect(breakLongWords("short words stay", 12)).toBe("short words stay");
+    const w = (420 - 2 * 10 - 3 * 10) / 4;
+    for (const line of trayLines(w, "replace_because_cannot_update", "the plan says so").label) expect(line.length * 7).toBeLessThanOrEqual(w - 8);
   });
 });

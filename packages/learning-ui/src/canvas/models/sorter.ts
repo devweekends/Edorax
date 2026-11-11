@@ -132,7 +132,14 @@ export function fitsOneLine(trayW: number, label: string, sub: string): boolean 
 export function trayLines(trayW: number, label: string, sub: string): { label: string[]; sub: string[] } {
   // A wide tray keeps a little more air at its sides than a narrow one can afford.
   const pad = trayW > 100 ? 16 : 8;
-  return { label: wrapWords(label, Math.floor((trayW - pad) / 7)), sub: wrapBalanced(sub, Math.floor((trayW - pad) / 5.9)) };
+  const labelChars = Math.floor((trayW - pad) / 7);
+  const subChars = Math.floor((trayW - pad) / 5.9);
+  return { label: wrapWords(breakLongWords(label, labelChars), labelChars), sub: wrapBalanced(breakLongWords(sub, subChars), subChars) };
+}
+
+/** Lets a word longer than a line (a_long_identifier, a/long/path) break after its separators. */
+export function breakLongWords(text: string, max: number): string {
+  return text.split(/\s+/).filter(Boolean).map((word) => (word.length > max ? word.replace(/([_/.:-])(?=.)/g, "$1 ") : word)).join(" ");
 }
 
 /** The standard tray height, and the height a tray needs for its wrapped name and gloss above the count in its corner. */
