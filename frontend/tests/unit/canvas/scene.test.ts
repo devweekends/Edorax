@@ -6,7 +6,7 @@ import { canvasRegistry } from "@buildment/learning-ui/canvas/registry";
 import { buildLagScene } from "@buildment/learning-ui/canvas/models/replica-lag-scene";
 import { buildTrueTimeScene } from "@buildment/learning-ui/canvas/models/truetime-scene";
 import { loopTime, sceneFrame } from "@buildment/learning-ui/canvas/renderers/scene/frame";
-import { actorBox, actorsInside, BOX_H, chipBox, chipTops, frameCollisions, longestWaitLabel, MAX_SUB_CHARS, waitLabelBox, waitPillBox } from "@buildment/learning-ui/canvas/renderers/scene/geometry";
+import { actorBox, actorsInside, BOX_H, BOX_W, chipBox, chipTops, frameCollisions, longestWaitLabel, MAX_BOX_W, MAX_SUB_CHARS, nodeSize, subCharsAt, SUB_LINE_H, waitLabelBox, waitPillBox, wrapLines } from "@buildment/learning-ui/canvas/renderers/scene/geometry";
 import type { Scene } from "@buildment/learning-ui/canvas/renderers/scene/types";
 import { bandOverlap, clampB } from "@buildment/learning-ui/canvas/sysdesign-band-overlap/model";
 import { clampEpsilon, clockBandFrame } from "@buildment/learning-ui/canvas/sysdesign-clock-band/model";
@@ -202,4 +202,65 @@ describe("system design beat canvases render on the server", () => {
       expect(html, slug).not.toContain("not available right now");
     }
   }, 60_000);
+});
+
+describe("actor boxes hold their text", () => {
+  const longNote = "where a running program keeps its list";
+
+  it("keep the standard size while the name and note fit", () => {
+    expect(nodeSize("Tracker", ["clock fast"])).toEqual({ w: BOX_W, h: BOX_H });
+    expect(nodeSize("Disk", ["x".repeat(MAX_SUB_CHARS)])).toEqual({ w: BOX_W, h: BOX_H });
+    expect(nodeSize("You")).toEqual({ w: BOX_W, h: BOX_H });
+  });
+
+  it("wrap a long note and grow, so every line fits inside the box", () => {
+    for (const [label, note] of [["Memory", longNote], ["Methods", "getText(), markDone()"], ["Outside code", "the rest of the app"], ["Disk", "a-long-file-name.json here"]]) {
+      const size = nodeSize(label, [note]);
+      const lines = wrapLines(note, subCharsAt(size.w));
+      expect(lines.join(" ")).toBe(note);
+      expect(size.w, note).toBeLessThanOrEqual(MAX_BOX_W);
+      expect(size.h, note).toBe(BOX_H + (lines.length - 1) * SUB_LINE_H);
+      for (const line of lines) expect(line.length, `${note}: ${line}`).toBeLessThanOrEqual(subCharsAt(size.w));
+    }
+    expect(nodeSize("Memory", [longNote]).h).toBeGreaterThan(BOX_H);
+  });
+
+  it("widen for a name that is longer than the standard box", () => {
+    expect(nodeSize("rice.markDone()", ["the call"]).w).toBeGreaterThan(BOX_W);
+    expect(nodeSize("Private fields", []).w).toBeGreaterThan(BOX_W);
+  });
+
+  const scene: Scene = {
+    width: 420,
+    height: 200,
+    actors: [
+      { id: "memory", label: "Memory", kind: "note", sub: "empty", x: 375, y: 166 },
+      { id: "you", label: "You", kind: "user", x: 60, y: 60 },
+    ],
+    events: [
+      { kind: "fly", at: 0, dur: 1, from: "you", to: "memory", label: "add rice" },
+      { kind: "say", at: 1, actor: "memory", text: longNote },
+    ],
+    loop: 3,
+  };
+
+  it("size a box for every note the story gives it, and keep it inside the picture", () => {
+    const before = actorBox(sceneFrame(scene, 0).actors[0], scene);
+    const after = actorBox(sceneFrame(scene, 2).actors[0], scene);
+    expect(before).toEqual(after);
+    expect(after.right - after.left).toBeGreaterThan(BOX_W);
+    expect(after.bottom - after.top).toBeGreaterThan(BOX_H);
+    expect(after.right).toBeLessThanOrEqual(scene.width);
+    expect(after.bottom).toBeLessThanOrEqual(scene.height);
+    expect(actorsInside(scene)).toBe(true);
+    // An actor whose text fits is drawn exactly where it was.
+    expect(actorBox(scene.actors[1], scene)).toEqual(actorBox(scene.actors[1]));
+  });
+
+  it("draw the long note on more than one line", () => {
+    const html = renderToString(createElement(InteractiveCanvas, { renderer: "scene", data: { title: "Memory", purpose: "Where the list lives.", limits: "None.", scene: { ...scene, actors: [{ ...scene.actors[0], sub: longNote }, scene.actors[1]] } } })).replaceAll("<!-- -->", "");
+    expect(html).not.toContain(`>${longNote}<`);
+    expect(html).toContain(">where a running program<");
+    expect(html).toContain(">keeps its list<");
+  });
 });

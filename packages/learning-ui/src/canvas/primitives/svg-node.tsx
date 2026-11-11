@@ -1,13 +1,15 @@
 import type { ComponentType, SVGProps } from "react";
 import { Clock, Cpu, Database, FileText, Globe, ListOrdered, Router, Server, Smartphone, User, Zap } from "lucide-react";
 import { cn } from "../../lib/utils";
-import { BOX_H, BOX_W } from "../renderers/scene/geometry";
+import { BOX_H, BOX_W, SUB_LINE_H, nodeSize, subCharsAt, wrapLines } from "../renderers/scene/geometry";
 import type { ActorKind } from "../renderers/scene/types";
 import { NEUTRAL, TONES, type Tone } from "./tones";
 
 // One actor in a beat picture: an icon card with a name and a status pill.
 // Shared by the scene renderer and the custom beat canvases, so a server,
-// a phone or a database looks the same in every course.
+// a phone or a database looks the same in every course. The card keeps its
+// standard size while the text fits; a longer name or status makes it grow
+// (the status wraps), so text never spills out of the card.
 
 export const NODE_W = BOX_W;
 export const NODE_H = BOX_H;
@@ -75,6 +77,12 @@ type SvgNodeProps = {
   previousTone?: Tone;
   /** Opacity for the status text, so it can fade at a loop boundary. */
   layerOpacity?: number;
+  /** The card's size when the caller has worked it out (see nodeSize); otherwise it comes from the text shown now. */
+  width?: number;
+  height?: number;
+  /** The card's top-left corner when the caller has placed it; otherwise the card is centred on x and hangs from the standard top edge. */
+  left?: number;
+  top?: number;
 };
 
 export function SvgNode({
@@ -91,27 +99,40 @@ export function SvgNode({
   previousStatus,
   previousTone,
   layerOpacity = 1,
+  width,
+  height,
+  left: placedLeft,
+  top: placedTop,
 }: SvgNodeProps) {
-  const left = x - NODE_W / 2;
-  const top = y - NODE_H / 2;
+  const fit = nodeSize(label, [status, previousStatus]);
+  const w = width ?? fit.w;
+  const h = height ?? fit.h;
+  const left = placedLeft ?? x - w / 2;
+  const top = placedTop ?? y - NODE_H / 2;
+  const cx = left + w / 2;
   const IconCmp = ICONS[kind];
-  const pill = (text: string, tone: Tone | undefined, opacity: number) => (
-    <g opacity={opacity}>
-      <rect x={left + 7} y={top + 33} width={NODE_W - 14} height={20} rx={10} className={tone ? TONES[tone].softFill : "fill-muted"} />
-      <text x={x} y={top + 47} textAnchor="middle" className={cn(tone ? TONES[tone].text : NEUTRAL.mutedText, "text-[11.5px] font-semibold")}>
-        {text}
-      </text>
-    </g>
-  );
+  const pill = (text: string, tone: Tone | undefined, opacity: number) => {
+    const lines = wrapLines(text, subCharsAt(w));
+    return (
+      <g opacity={opacity}>
+        <rect x={left + 7} y={top + 33} width={w - 14} height={20 + (lines.length - 1) * SUB_LINE_H} rx={10} className={tone ? TONES[tone].softFill : "fill-muted"} />
+        {lines.map((line, i) => (
+          <text key={i} x={cx} y={top + 47 + i * SUB_LINE_H} textAnchor="middle" className={cn(tone ? TONES[tone].text : NEUTRAL.mutedText, "text-[11.5px] font-semibold")}>
+            {line}
+          </text>
+        ))}
+      </g>
+    );
+  };
   return (
     <g>
       {mark ? (
-        <rect x={left - 5} y={top - 5} width={NODE_W + 10} height={NODE_H + 10} rx={19} opacity={markOpacity} className={cn("fill-none", TONES[mark].stroke)} strokeWidth={2.5} />
+        <rect x={left - 5} y={top - 5} width={w + 10} height={h + 10} rx={19} opacity={markOpacity} className={cn("fill-none", TONES[mark].stroke)} strokeWidth={2.5} />
       ) : null}
       {/* A soft drop shadow drawn as an offset shape, without filters. */}
-      <rect x={left} y={top + 3} width={NODE_W} height={NODE_H} rx={14} className="fill-foreground/[0.06]" />
-      <rect x={left} y={top} width={NODE_W} height={NODE_H} rx={14} className={cn(NEUTRAL.surface, NEUTRAL.line)} strokeWidth={1.5} />
-      {arrival > 0 ? <rect x={left} y={top} width={NODE_W} height={NODE_H} rx={14} opacity={arrival} className={cn(TONES.accent.softFill, TONES.accent.stroke)} strokeWidth={2} /> : null}
+      <rect x={left} y={top + 3} width={w} height={h} rx={14} className="fill-foreground/[0.06]" />
+      <rect x={left} y={top} width={w} height={h} rx={14} className={cn(NEUTRAL.surface, NEUTRAL.line)} strokeWidth={1.5} />
+      {arrival > 0 ? <rect x={left} y={top} width={w} height={h} rx={14} opacity={arrival} className={cn(TONES.accent.softFill, TONES.accent.stroke)} strokeWidth={2} /> : null}
       <circle cx={left + 17} cy={top + 16} r={11} className={BADGE[kind]} />
       <IconCmp x={left + 9} y={top + 8} width={16} height={16} strokeWidth={2} className={ICON_COLOUR[kind]} aria-hidden />
       <text x={left + 33} y={top + 21} className={cn(NEUTRAL.text, "text-[13px] font-semibold")}>
