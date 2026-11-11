@@ -264,6 +264,9 @@ type Rect = { x: number; y: number; w: number; h: number };
 const overlaps = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 const contains = (a: Rect, p: Point) => p.x > a.x && p.x < a.x + a.w && p.y > a.y && p.y < a.y + a.h;
 
+/** The cost of a label covering a part or another label; a line under a label costs 1 per sample point. */
+const TEXT_CLASH = 20;
+
 /**
  * Puts each arrow label where it covers no part, no other label and no line.
  * Tries the middle of the arrow on its usual side first, then nearby spots;
@@ -276,23 +279,27 @@ function placeLabels(nodes: SceneNode[], edges: { path: EdgePath; lines: string[
   return edges.map((edge) => {
     if (!edge.lines.length) return undefined;
     let best: { label: SceneLabel; clashes: number } | undefined;
-    for (const t of [0.5, 0.4, 0.6, 0.3, 0.7]) {
-      // A label on one of a pair of arrows stays on its own outer side, or it reads as the other one's.
-      for (const sign of edge.keepSide ? [1] : [1, -1]) {
-        for (const gap of [0, 10, 22]) {
-          const label = edgeLabel(edge.lines, pathPoint(edge.path, t), mul(edge.side, sign), gap);
-          const box = labelBox(label);
-          const pad = { x: box.x - 3, y: box.y - 3, w: box.w + 6, h: box.h + 6 };
-          // Covering text is worse than crossing a line, which the label's halo keeps readable.
-          let clashes = 20 * (solid.filter((rect) => overlaps(pad, rect)).length + placed.filter((rect) => overlaps(pad, rect)).length);
-          samples.forEach((points) => { clashes += points.filter((p) => contains(pad, p)).length; });
-          if (!best || clashes < best.clashes) best = { label, clashes };
-          if (clashes === 0) break;
+    const search = (spots: number[], signs: number[], gaps: number[]) => {
+      for (const t of spots) {
+        for (const sign of signs) {
+          for (const gap of gaps) {
+            const label = edgeLabel(edge.lines, pathPoint(edge.path, t), mul(edge.side, sign), gap);
+            const box = labelBox(label);
+            const pad = { x: box.x - 3, y: box.y - 3, w: box.w + 6, h: box.h + 6 };
+            // Covering text is worse than crossing a line, which the label's halo keeps readable.
+            let clashes = TEXT_CLASH * (solid.filter((rect) => overlaps(pad, rect)).length + placed.filter((rect) => overlaps(pad, rect)).length);
+            samples.forEach((points) => { clashes += points.filter((p) => contains(pad, p)).length; });
+            if (!best || clashes < best.clashes) best = { label, clashes };
+            if (clashes === 0) return;
+          }
         }
-        if (best?.clashes === 0) break;
       }
-      if (best?.clashes === 0) break;
-    }
+    };
+    // A label on one of a pair of arrows stays on its own outer side, or it reads as the other one's.
+    search([0.5, 0.4, 0.6, 0.3, 0.7], edge.keepSide ? [1] : [1, -1], [0, 10, 22]);
+    // Still over a part or another label: look further along the arrow, further out and on either
+    // side. A label on the far side of its arrow reads better than one written over other words.
+    if (best && best.clashes >= TEXT_CLASH) search([0.5, 0.4, 0.6, 0.3, 0.7, 0.2, 0.8, 0.12, 0.88], [1, -1], [0, 10, 22, 36, 52]);
     placed.push(labelBox(best!.label));
     return best!.label;
   });
