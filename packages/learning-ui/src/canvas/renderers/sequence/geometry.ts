@@ -1,3 +1,4 @@
+import { wrapBalanced } from "../scene/geometry";
 import type { SequenceSpec, SequenceStep } from "./types";
 
 // Two fixed layouts instead of one scaled picture: a narrow one for phones
@@ -21,7 +22,29 @@ export function sequenceGeometry(spec: SequenceSpec, layout: SequenceLayout) {
   const span = L.width - 2 * pad;
   const laneX = (i: number) => (n === 1 ? L.width / 2 : pad + (i * span) / (n - 1));
   const headerY = 6;
-  const rowY0 = headerY + L.pillH + 44;
+  // A name or second line wider than its header wraps, and every header grows to the tallest one,
+  // so four or five lanes on a phone never write over each other. The name is semibold; the
+  // second line is monospace, 0.6 of its size per character.
+  const nameChars = Math.max(4, Math.floor((pillW - 8) / (L.nameSize * 0.56)));
+  const subChars = Math.max(4, Math.floor((pillW - 8) / (L.subSize * 0.6)));
+  const headers = spec.actors.map((actor) => ({ name: wrapBalanced(actor.name, nameChars), sub: actor.sub ? wrapBalanced(actor.sub, subChars) : [] }));
+  const nameLh = L.nameSize + 2;
+  const subLh = L.subSize + 2;
+  const pillH = L.pillH + (Math.max(1, ...headers.map((h) => h.name.length)) - 1) * nameLh + (Math.max(1, ...headers.map((h) => h.sub.length)) - 1) * subLh;
+  /** Baselines of one header's lines, centred in the header as a block. */
+  const headerLines = (i: number) => {
+    const h = headers[i] ?? { name: [], sub: [] };
+    const block = h.name.length * nameLh + (h.sub.length ? 2 + h.sub.length * subLh : 0);
+    const top = headerY + (pillH - block) / 2;
+    const first = top + (h.sub.length ? 11 : 12);
+    // One word longer than the header cannot wrap: it is drawn to the header's width instead.
+    const held = (text: string, chars: number) => (text.length > chars ? pillW - 8 : undefined);
+    return {
+      name: h.name.map((text, k) => ({ text, y: first + k * nameLh, textLength: held(text, nameChars) })),
+      sub: h.sub.map((text, k) => ({ text, y: top + h.name.length * nameLh + 13 + k * subLh, textLength: held(text, subChars) })),
+    };
+  };
+  const rowY0 = headerY + pillH + 44;
   const rowY = (i: number) => rowY0 + i * L.rowGap;
   const height = rowY0 + Math.max(spec.steps.length - 1, 0) * L.rowGap + 24;
 
@@ -55,5 +78,5 @@ export function sequenceGeometry(spec: SequenceSpec, layout: SequenceLayout) {
     return { d, mid, badge: mid, label: { x: clampLabelX(mid[0], step.label), y: y - 15, anchor: "middle" } as const };
   }
 
-  return { ...L, pillW, laneX, headerY, rowY, height, arrow };
+  return { ...L, pillH, pillW, laneX, headerY, headerLines, rowY, height, arrow };
 }

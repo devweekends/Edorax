@@ -121,7 +121,7 @@ function SequenceSvg({
         />
       ))}
 
-      {spec.actors.map((actor, i) => {
+      {spec.actors.map((_actor, i) => {
         const on = focus.has(i);
         return (
           <g key={`actor-${i}`}>
@@ -137,27 +137,16 @@ function SequenceSvg({
                 on ? [activeTone.softFill, activeTone.stroke] : [NEUTRAL.surface, NEUTRAL.line]
               )}
             />
-            <text
-              x={g.laneX(i)}
-              y={g.headerY + (actor.sub ? 20 : 28)}
-              textAnchor="middle"
-              fontSize={g.nameSize}
-              fontWeight={600}
-              className={NEUTRAL.text}
-            >
-              {actor.name}
-            </text>
-            {actor.sub ? (
-              <text
-                x={g.laneX(i)}
-                y={g.headerY + 36}
-                textAnchor="middle"
-                fontSize={g.subSize}
-                className={cn("font-mono", on ? activeTone.text : NEUTRAL.mutedText)}
-              >
-                {actor.sub}
+            {g.headerLines(i).name.map((line, k) => (
+              <text key={`n${k}`} x={g.laneX(i)} y={line.y} textAnchor="middle" fontSize={g.nameSize} fontWeight={600} textLength={line.textLength} lengthAdjust={line.textLength ? "spacingAndGlyphs" : undefined} className={NEUTRAL.text}>
+                {line.text}
               </text>
-            ) : null}
+            ))}
+            {g.headerLines(i).sub.map((line, k) => (
+              <text key={`s${k}`} x={g.laneX(i)} y={line.y} textAnchor="middle" fontSize={g.subSize} textLength={line.textLength} lengthAdjust={line.textLength ? "spacingAndGlyphs" : undefined} className={cn("font-mono", on ? activeTone.text : NEUTRAL.mutedText)}>
+                {line.text}
+              </text>
+            ))}
           </g>
         );
       })}
