@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { SITE_SHARE_IMAGE } from "@/lib/site";
 import { LAB_KINDS, areaById } from "@/lib/learn-areas";
 import { visualLabGroups } from "@/lib/visual-labs";
+import { loadGuidedTracks } from "@/lib/guided-labs-server";
 import { LAB_KIND_ICON } from "@/components/areas/area-icon";
 import { AreaHero, AreaPage, CardGrid, InfoCard, StepList } from "@/components/areas/area-page";
 import { FilterChips, pickFilter } from "@/components/areas/filter-chips";
@@ -18,6 +20,8 @@ type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 export default async function LabsPage({ searchParams }: { searchParams: SearchParams }) {
   const area = areaById("labs");
   const groups = visualLabGroups();
+  const guided = await loadGuidedTracks();
+  const guidedOpen = guided.filter((t) => t.open).length;
   const query = await searchParams;
   const kind = pickFilter(query.kind, LAB_KINDS.map((k) => k.id));
   const topic = kind === "guided" || kind === "shell" ? null : pickFilter(query.topic, groups.map((g) => g.id));
@@ -48,7 +52,7 @@ export default async function LabsPage({ searchParams }: { searchParams: SearchP
           params={params}
           options={[
             { value: null, label: "All" },
-            ...LAB_KINDS.map((k) => ({ value: k.id, label: k.name.replace(/ labs$/, ""), count: k.status === "live" ? total : undefined, soon: k.status !== "live" })),
+            ...LAB_KINDS.map((k) => ({ value: k.id, label: k.name.replace(/ labs$/, ""), count: k.status !== "live" ? undefined : k.id === "guided" ? guidedOpen : total, soon: k.status !== "live" })),
           ]}
         />
         {kind === null || kind === "visual" ? (
@@ -77,6 +81,35 @@ export default async function LabsPage({ searchParams }: { searchParams: SearchP
               />
             ))}
           </CardGrid>
+        </section>
+      ) : null}
+
+      {kind === null || kind === "guided" ? (
+        <section aria-labelledby="labs-guided" className="mt-10">
+          <h2 id="labs-guided" className="text-xl tracking-[-0.02em]">
+            Guided labs
+          </h2>
+          <p className="mt-1 max-w-3xl text-base text-muted-foreground">
+            Real projects built step by step, with tests, a quiz after each lab and a capstone checked automatically.{" "}
+            <Link href="/labs/guided" className="font-bold text-primary underline-offset-4 hover:underline">
+              How guided labs work
+            </Link>
+          </p>
+          <div className="mt-4">
+            <CardGrid>
+              {guided.map(({ track, open, title, length, price, href }) => (
+                <InfoCard
+                  key={track.slug}
+                  title={open ? title : `${track.level}: ${track.fallbackTitle}`}
+                  body={track.audience}
+                  href={open && href ? href : undefined}
+                  status={open ? "live" : "coming-soon"}
+                  cta="Open"
+                  meta={[length, price].filter(Boolean).join(" · ") || undefined}
+                />
+              ))}
+            </CardGrid>
+          </div>
         </section>
       ) : null}
 

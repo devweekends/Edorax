@@ -25,7 +25,7 @@ export default function ShellLabsPage() {
         <CardGrid>
           <InfoCard icon={<Terminal className="size-6" />} title="A real terminal" body="Type real commands on a real machine. Nothing is simulated, so what you learn works at work." />
           <InfoCard icon={<Container className="size-6" />} title="Machines that reset" body="Each lab starts from a clean machine or container. Break it as much as you like, then reset." />
-          <InfoCard icon={<FolderOpen className="size-6" />} title="Checked like guided labs" body="Tests look at the machine to see whether the task is done, and explain what is still missing." />
+          <InfoCard icon={<FolderOpen className="size-6" />} title="Checked by tests" body="Tests look at the machine to see whether the task is done, and explain what is still missing." />
         </CardGrid>
       </AreaSection>
 
@@ -58,7 +58,7 @@ export default function ShellLabsPage() {
           <DocBlock icon={<Terminal className="size-5" />} title="What is coming for shell labs">
             <ul className="list-disc space-y-1.5 pl-5">
               <li>Lab machines that a course defines: Linux hosts, containers and small networks.</li>
-              <li>Tests that check the machine after each step, shared with guided labs.</li>
+              <li>Tests that check the machine after each step.</li>
               <li>Progress that syncs to your account, the same as chapters.</li>
             </ul>
           </DocBlock>
