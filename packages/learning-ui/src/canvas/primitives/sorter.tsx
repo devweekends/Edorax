@@ -8,10 +8,12 @@ import { FOCUS_RING, LABEL_HALO, NEUTRAL, TONES, type Tone } from "./tones";
 import {
   bucketCount,
   currentCard,
+  fitsOneLine,
   isDone,
   placeCard,
   sortVerdict,
   startSort,
+  trayLines,
   wrapWords,
   type SortBucket,
   type SortCard,
@@ -215,7 +217,7 @@ export function Sorter({ title, limits, buckets, cards, deckLabel, prompt, hint,
                 {tone ? <rect x={box.x} y={box.y} width={box.w} height={box.h} rx={16} className={TONES[tone].softFill} opacity={0.7} /> : null}
                 {/* The tray's mouth: where cards drop in. */}
                 <rect x={box.x + 18} y={box.y + 8} width={box.w - 36} height={5} rx={2.5} className={NEUTRAL.faintFill} />
-                {dense ? (
+                {dense || !fitsOneLine(box.w, b.label, b.sub) ? (
                   <TrayTextDense box={box} label={b.label} sub={b.sub} shown={shown} pop={pop === 1} />
                 ) : (
                   <>
@@ -301,10 +303,9 @@ export function Sorter({ title, limits, buckets, cards, deckLabel, prompt, hint,
   );
 }
 
-/** Text of a narrow tray: the name and gloss wrap to the tray width, and the count sits in the bottom corner. */
+/** Text of a tray whose words do not fit on one line: the name and gloss wrap to the tray width, and the count sits in the bottom corner. */
 function TrayTextDense({ box, label, sub, shown, pop }: { box: { x: number; y: number; w: number; h: number }; label: string; sub: string; shown: number; pop: boolean }) {
-  const labelLines = wrapWords(label, Math.floor((box.w - 8) / 7)).slice(0, 3);
-  const subLines = wrapWords(sub, Math.floor((box.w - 8) / 5.9)).slice(0, 2);
+  const { label: labelLines, sub: subLines } = trayLines(box.w, label, sub);
   const cx = box.x + box.w / 2;
   const y0 = box.y + 31;
   const subTop = y0 + (labelLines.length - 1) * 14.5 + 15;

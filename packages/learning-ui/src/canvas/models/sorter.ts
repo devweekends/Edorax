@@ -117,6 +117,24 @@ export function wrapWords(text: string, max: number): string[] {
   return lines;
 }
 
+/** Rough advance per character of a tray's name (13.5px bold) and gloss (11.5px medium) on one line. */
+const LABEL_CHAR_W = 7.9;
+const SUB_CHAR_W = 6.2;
+
+/** True when a tray's name and gloss each fit on one line inside the tray, so the roomy layout with the big count can be used. */
+export function fitsOneLine(trayW: number, label: string, sub: string): boolean {
+  return label.length * LABEL_CHAR_W <= trayW - 10 && sub.length * SUB_CHAR_W <= trayW - 10;
+}
+
+/** How a tray's name and gloss wrap to its width: at most four lines in all, so they stay clear of the count. */
+export function trayLines(trayW: number, label: string, sub: string): { label: string[]; sub: string[] } {
+  // A wide tray keeps a little more air at its sides than a narrow one can afford.
+  const pad = trayW > 100 ? 16 : 8;
+  const labelLines = wrapWords(label, Math.floor((trayW - pad) / 7)).slice(0, 3);
+  const subLines = wrapWords(sub, Math.floor((trayW - pad) / 5.9)).slice(0, Math.max(2, 4 - labelLines.length));
+  return { label: labelLines, sub: subLines };
+}
+
 /** Problems in a deck that would break the game: unknown answers, duplicate ids, missing reasons. */
 export function checkDeck(cards: SortCard[], buckets: SortBucket[]): string[] {
   const ids = new Set(buckets.map((b) => b.id));
