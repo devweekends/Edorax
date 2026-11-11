@@ -23,6 +23,8 @@ const INNER = W - 2 * SIDE;
 const PILL_H = 40;
 const HIT_H = 52;
 const PITCH = 70;
+/** Line height of a wrapped question or choice. */
+const CHOICE_LINE = 16;
 const FACTORS_TOP = 58;
 const OPTION_GAP = 10;
 const ROW_GAP = 20;
@@ -44,16 +46,27 @@ export function ContextPicker({ title, limits, question, factors, options, rules
   const cardW = (INNER - OPTION_GAP * (cols - 1)) / cols;
   const labelChars = Math.max(6, Math.floor((cardW - 16) / 7.9));
   const subChars = Math.max(6, Math.floor((cardW - 16) / 6.9));
-  const texts = options.map((o) => ({ label: wrapWords(o.label, labelChars).slice(0, 2), sub: o.sub ? wrapWords(o.sub, subChars).slice(0, 2) : [] }));
+  const texts = options.map((o) => ({ label: wrapWords(o.label, labelChars), sub: o.sub ? wrapWords(o.sub, subChars) : [] }));
   const cardH = Math.max(52, ...texts.map((t) => 26 + (t.label.length - 1) * 17 + (t.sub.length ? 4 + t.sub.length * 16 : 0) + 12));
-  const optionsTop = FACTORS_TOP + factors.length * PITCH + 8;
+  // The question and each choice wrap to their width: a long question makes its chip taller, and a row of
+  // choices is as tall as its longest choice. Nothing is cut and no choice writes over the next one.
+  const questionLines = wrapWords(question, Math.floor((INNER - 36) / 8.4));
+  const questionExtra = (questionLines.length - 1) * CHOICE_LINE;
+  const rowsOf = factors.map((f) => {
+    const n = Math.max(1, f.choices.length);
+    const pw = (INNER - 8 * (n - 1)) / n;
+    const labels = f.choices.map((choice) => wrapWords(choice.label, Math.max(4, Math.floor((pw - 14) / 7.2))));
+    return { pw, labels, pillH: PILL_H + (Math.max(1, ...labels.map((l) => l.length)) - 1) * CHOICE_LINE };
+  });
+  const rowTop = rowsOf.map((_, i) => FACTORS_TOP + questionExtra + rowsOf.slice(0, i).reduce((sum, row) => sum + PITCH + row.pillH - PILL_H, 0));
+  const optionsTop = FACTORS_TOP + questionExtra + rowsOf.reduce((sum, row) => sum + PITCH + row.pillH - PILL_H, 0) + 8;
   const cards = options.map((_, i) => ({ x: SIDE + (i % cols) * (cardW + OPTION_GAP), y: optionsTop + Math.floor(i / cols) * (cardH + ROW_GAP) }));
   const rows = Math.ceil(options.length / cols);
   const bannerY = optionsTop + rows * cardH + (rows - 1) * ROW_GAP + 18;
-  const whyLines = wrapWords(result.why, BANNER_CHARS).slice(0, 3);
+  const whyLines = wrapWords(result.why, BANNER_CHARS);
   const H = bannerY + wrapBannerHeight(whyLines.length) + 12;
 
-  const qW = Math.min(INNER, question.length * 8.4 + 36);
+  const qW = Math.min(INNER, Math.max(...questionLines.map((line) => line.length)) * 8.4 + 36);
   const summary = factors.map((f) => `${f.label}: ${f.choices.find((c) => c.id === context[f.id])?.label ?? "none"}`).join(", ");
   const atStart = factors.every((f) => context[f.id] === initial[f.id]);
   const move = "transition-transform duration-300 ease-out motion-reduce:transition-none";
@@ -64,14 +77,15 @@ export function ContextPicker({ title, limits, question, factors, options, rules
         <DotGrid width={W} height={H} />
 
         {/* The question, as a chip. */}
-        <rect x={(W - qW) / 2} y={10} width={qW} height={32} rx={16} className={cn(NEUTRAL.surface, NEUTRAL.line)} strokeWidth={1.5} />
-        <text x={W / 2} y={31} textAnchor="middle" className={cn(NEUTRAL.text, "text-[14px] font-bold")}>{question}</text>
+        <rect x={(W - qW) / 2} y={10} width={qW} height={32 + questionExtra} rx={16} className={cn(NEUTRAL.surface, NEUTRAL.line)} strokeWidth={1.5} />
+        {questionLines.map((line, i) => (
+          <text key={i} x={W / 2} y={31 + i * CHOICE_LINE} textAnchor="middle" className={cn(NEUTRAL.text, "text-[14px] font-bold")}>{line}</text>
+        ))}
 
         {/* One row of pills per fact. */}
         {factors.map((f, fi) => {
-          const y0 = FACTORS_TOP + fi * PITCH;
-          const n = f.choices.length;
-          const pw = (INNER - 8 * (n - 1)) / Math.max(1, n);
+          const y0 = rowTop[fi];
+          const { pw, labels, pillH } = rowsOf[fi];
           return (
             <g key={f.id} role="group" aria-label={f.label}>
               <text x={SIDE + 2} y={y0 + 12} className={cn(NEUTRAL.mutedText, "text-[13px] font-semibold")}>{f.label}</text>
@@ -79,19 +93,21 @@ export function ContextPicker({ title, limits, question, factors, options, rules
                 const x = SIDE + ci * (pw + 8);
                 const on = context[f.id] === c.id;
                 return (
-                  <SvgButton key={c.id} x={x} y={y0 + 20 + PILL_H / 2 - HIT_H / 2} width={pw} height={HIT_H} rx={20} label={`${f.label}: ${c.label}`} pressed={on} onPress={() => setContext((cur) => ({ ...cur, [f.id]: c.id }))}>
+                  <SvgButton key={c.id} x={x} y={y0 + 20 + pillH / 2 - (pillH + HIT_H - PILL_H) / 2} width={pw} height={pillH + HIT_H - PILL_H} rx={20} label={`${f.label}: ${c.label}`} pressed={on} onPress={() => setContext((cur) => ({ ...cur, [f.id]: c.id }))}>
                     <rect
                       x={x}
                       y={y0 + 20}
                       width={pw}
-                      height={PILL_H}
+                      height={pillH}
                       rx={PILL_H / 2}
                       strokeWidth={1.5}
                       className={cn("transition-colors duration-200 motion-reduce:transition-none", on ? "fill-blue-600 stroke-blue-600 dark:fill-blue-400 dark:stroke-blue-400" : cn(NEUTRAL.surface, NEUTRAL.line, "group-hover:fill-muted"))}
                     />
-                    <text x={x + pw / 2} y={y0 + 20 + PILL_H / 2 + 4.5} textAnchor="middle" className={cn("text-[13px] font-semibold", on ? "fill-white dark:fill-blue-950" : NEUTRAL.text)}>
-                      {c.label}
-                    </text>
+                    {labels[ci].map((line, li) => (
+                      <text key={li} x={x + pw / 2} y={y0 + 20 + pillH / 2 + 4.5 + (li - (labels[ci].length - 1) / 2) * CHOICE_LINE} textAnchor="middle" className={cn("text-[13px] font-semibold", on ? "fill-white dark:fill-blue-950" : NEUTRAL.text)}>
+                        {line}
+                      </text>
+                    ))}
                   </SvgButton>
                 );
               })}

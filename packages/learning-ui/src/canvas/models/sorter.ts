@@ -128,13 +128,29 @@ export function fitsOneLine(trayW: number, label: string, sub: string): boolean 
   return label.length * LABEL_CHAR_W <= trayW - 10 && sub.length * SUB_CHAR_W <= trayW - 10;
 }
 
-/** How a tray's name and gloss wrap to its width: at most four lines in all, so they stay clear of the count. */
+/** How a tray's name and gloss wrap to its width. Every word is kept; a tray with many lines grows (see trayHeight). */
 export function trayLines(trayW: number, label: string, sub: string): { label: string[]; sub: string[] } {
   // A wide tray keeps a little more air at its sides than a narrow one can afford.
   const pad = trayW > 100 ? 16 : 8;
-  const labelLines = wrapWords(label, Math.floor((trayW - pad) / 7)).slice(0, 3);
-  const subLines = wrapBalanced(sub, Math.floor((trayW - pad) / 5.9)).slice(0, Math.max(2, 4 - labelLines.length));
-  return { label: labelLines, sub: subLines };
+  const labelChars = Math.floor((trayW - pad) / 7);
+  const subChars = Math.floor((trayW - pad) / 5.9);
+  return { label: wrapWords(breakLongWords(label, labelChars), labelChars), sub: wrapBalanced(breakLongWords(sub, subChars), subChars) };
+}
+
+/** Lets a word longer than a line (a_long_identifier, a/long/path) break after its separators. */
+export function breakLongWords(text: string, max: number): string {
+  return text.split(/\s+/).filter(Boolean).map((word) => (word.length > max ? word.replace(/([_/.:-])(?=.)/g, "$1 ") : word)).join(" ");
+}
+
+/** The standard tray height, and the height a tray needs for its wrapped name and gloss above the count in its corner. */
+export const TRAY_H = 104;
+export function trayHeight(trayW: number, buckets: { label: string; sub: string }[], dense: boolean): number {
+  const needs = buckets.map((bucket) => {
+    if (!dense && fitsOneLine(trayW, bucket.label, bucket.sub)) return TRAY_H;
+    const lines = trayLines(trayW, bucket.label, bucket.sub);
+    return 31 + (lines.label.length - 1) * 14.5 + 15 + Math.max(0, lines.sub.length - 1) * 13 + 6 + 22;
+  });
+  return Math.max(TRAY_H, ...needs.map(Math.ceil));
 }
 
 /** Problems in a deck that would break the game: unknown answers, duplicate ids, missing reasons. */

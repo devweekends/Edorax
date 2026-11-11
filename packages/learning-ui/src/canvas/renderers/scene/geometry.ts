@@ -25,15 +25,32 @@ const LABEL_PX = 13;
  * "Chat server", the same length, does not.
  */
 export function labelWidth(label: string): number {
+  return textEms(label) * LABEL_PX * 1.04;
+}
+
+/** The width of semibold text in ems, from the shape of each letter. */
+export function textEms(text: string): number {
   let ems = 0;
-  for (const ch of label) {
+  for (const ch of text) {
     if (ch === " " || "il.,:;'!|".includes(ch)) ems += 0.27;
     else if ("frtj()[]/-".includes(ch)) ems += 0.38;
     else if ("mwMW".includes(ch)) ems += 0.9;
     else if (ch >= "A" && ch <= "Z") ems += 0.72;
     else ems += 0.58;
   }
-  return ems * LABEL_PX * 1.04;
+  return ems;
+}
+
+/**
+ * The font size at which one line of semibold text fits `room`: the given size
+ * when it fits, smaller down to four fifths of it, and past that a fixed
+ * drawn length, so the words are squeezed a little instead of leaving their box.
+ */
+export function fitOneLine(text: string, px: number, room: number): { size: number; textLength?: number } {
+  const width = textEms(text) * px * 1.04;
+  if (width <= room) return { size: px };
+  const size = Math.max(px * 0.8, (px * room) / width);
+  return size * width > px * room + 0.01 ? { size, textLength: room } : { size };
 }
 /** The name starts right of the icon badge; the note pill sits 7 in from each side with 4 of padding. */
 const LABEL_LEFT = 33;
@@ -227,6 +244,19 @@ export function frameCollisions(scene: Scene, frame: SceneFrame): [string, strin
   const out: [string, string][] = [];
   for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) if (overlaps(boxes[i], boxes[j])) out.push([boxes[i].label, boxes[j].label]);
   return out;
+}
+
+/** The verdict banner ends at 38; a box and its highlight ring start no higher than this. */
+const VERDICT_CLEAR = 44;
+
+/**
+ * How far to move a scene's picture down so its verdict banner covers no actor.
+ * Zero for a scene with no verdict, or whose top box is already clear.
+ */
+export function sceneLift(scene: Scene): number {
+  if (!scene.events.some((e) => e.kind === "verdict") || scene.actors.length === 0) return 0;
+  const top = Math.min(...scene.actors.map((a) => actorBox(a, scene).top - 5));
+  return Math.max(0, Math.ceil(VERDICT_CLEAR - top));
 }
 
 /** True when every actor box sits fully inside the picture. */

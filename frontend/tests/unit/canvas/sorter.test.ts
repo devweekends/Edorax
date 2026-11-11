@@ -12,6 +12,8 @@ import {
   placeCard,
   sortVerdict,
   startSort,
+  TRAY_H,
+  trayHeight,
   trayLines,
   wrapWords,
   type SortBucket,
@@ -129,7 +131,6 @@ describe("sorter tray text", () => {
       const lines = trayLines(trayW, bucket.label, bucket.sub);
       expect(lines.label.join(" "), bucket.label).toBe(bucket.label);
       expect(lines.sub.join(" "), bucket.sub).toBe(bucket.sub);
-      expect(lines.label.length + lines.sub.length).toBeLessThanOrEqual(4);
       for (const line of lines.label) expect(line.length * 7, line).toBeLessThanOrEqual(trayW - 8);
       for (const line of lines.sub) expect(line.length * 5.9, line).toBeLessThanOrEqual(trayW - 8);
     }
@@ -141,5 +142,23 @@ describe("sorter tray text", () => {
     expect(html).not.toContain(">a line says what went wrong<");
     expect(html).toContain(">a line says<");
     expect(html).toContain(">what went wrong<");
+  });
+
+  it("keeps every word of a long gloss in a four-tray sorter and grows the trays for it", () => {
+    const four: SortBucket[] = [
+      { id: "deny", label: "Explicit deny", sub: "a Deny matched, the walk ended" },
+      { id: "cap", label: "Boundary cap", sub: "an Allow exists, the cap removed it" },
+      { id: "ok", label: "Allowed", sub: "an Allow, no Deny, nothing capping it" },
+      { id: "none", label: "No policy mentions it", sub: "no Allow was written anywhere" },
+    ];
+    const w = (420 - 2 * 10 - 3 * 10) / 4;
+    for (const bucket of four) expect(trayLines(w, bucket.label, bucket.sub).sub.join(" ")).toBe(bucket.sub);
+    expect(trayHeight(w, four, true)).toBeGreaterThan(TRAY_H);
+    expect(trayHeight(w, [{ label: "A", sub: "first" }, { label: "B", sub: "second" }], true)).toBe(TRAY_H);
+    const deck: SortCard[] = [{ id: "1", text: "A case.", answer: "deny", why: { cap: "No.", ok: "No.", none: "No." } }];
+    const html = renderToString(createElement(InteractiveCanvas, { renderer: "sorter", data: { title: "Sorter", limits: "None.", buckets: four, cards: deck, deckLabel: "Cases", prompt: "Which layer decided?", hint: "Pick one.", endNote: "Done." } })).replaceAll("<!-- -->", "");
+    expect(html).toContain(">walk ended<");
+    expect(html).toContain(">anywhere<");
+    expect(Number(html.match(/viewBox="0 0 420 (\d+)"/)?.[1])).toBeGreaterThan(300);
   });
 });

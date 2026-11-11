@@ -16,14 +16,43 @@ import { wrapWords } from "../models/sorter";
 // shows how many matched on the first try.
 
 const W = 420;
-const CARD = { x: 24, y: 52, w: 372, h: 246 };
-const H = CARD.y + CARD.h + 16;
-const CX = CARD.x + CARD.w / 2;
+const CARD_BOX = { x: 24, y: 52, w: 372, h: 246 };
+const CX = CARD_BOX.x + CARD_BOX.w / 2;
 const FLIP_MS = 200;
-const FRONT_CHARS = 34;
 const BACK_CHARS = 46;
+/** Sizes for the words on a card's front, largest first: a longer text steps down until it fits. */
+const FRONT_FITS = [
+  { size: 17, chars: 34, lh: 25 },
+  { size: 15, chars: 40, lh: 21 },
+  { size: 13.5, chars: 46, lh: 19 },
+  { size: 12.5, chars: 50, lh: 17 },
+] as const;
+/** Room on the card that is not for its main text: the header above and the line under it. */
+const FRONT_CHROME = 84;
+
+/** The front of a card: the largest size whose lines fit a card this tall, else the smallest. */
+export function frontFit(text: string, cardH: number) {
+  for (const fit of FRONT_FITS) {
+    const lines = wrapWords(text, fit.chars);
+    if (lines.length * fit.lh <= cardH - FRONT_CHROME) return { ...fit, lines };
+  }
+  const last = FRONT_FITS[FRONT_FITS.length - 1];
+  return { ...last, lines: wrapWords(text, last.chars) };
+}
+
+/** A deck's card height: the standard card, or taller when a front, a back or the end note needs the room. No text is cut. */
+export function deckCardHeight(cards: { front: string; back: string }[], endNote: string): number {
+  const last = FRONT_FITS[FRONT_FITS.length - 1];
+  const fronts = cards.map((card) => wrapWords(card.front, last.chars).length * last.lh + FRONT_CHROME);
+  const backs = cards.map((card) => 140 + wrapWords(card.back, BACK_CHARS).length * 19 + 34);
+  const end = 66 + 2 * 28 + 22 + wrapWords(endNote, BACK_CHARS).length * 20;
+  return Math.max(CARD_BOX.h, end, ...fronts, ...backs);
+}
 
 export function FlipDeck({ title, limits, verdicts, cards, deckLabel, prompt, hint, endNote }: FlipDeckConfig & { title: string; limits: string }) {
+  // One height for the whole deck, from its longest text, so the card does not jump between cards.
+  const CARD = { ...CARD_BOX, h: deckCardHeight(cards, endNote) };
+  const H = CARD.y + CARD.h + 16;
   const [state, setState] = useState<FlipState>(startFlip);
   // What the picture shows. It follows `state` after the card has narrowed to an edge, so the face swaps while the card is thin.
   const [shown, setShown] = useState<FlipState>(state);
@@ -87,19 +116,20 @@ export function FlipDeck({ title, limits, verdicts, cards, deckLabel, prompt, hi
 
   let face;
   if (card && !flipped) {
-    const lines = wrapWords(card.front, FRONT_CHARS);
+    const fit = frontFit(card.front, CARD.h);
+    const lines = fit.lines;
     const mid = CARD.y + CARD.h / 2 - 6;
     face = (
       <>
         {header(deckLabel, `Card ${shown.index + 1} of ${n}`)}
         {lines.map((line, i) => (
-          <text key={i} x={CX} y={mid + 6 + (i - (lines.length - 1) / 2) * 25} textAnchor="middle" className={cn(NEUTRAL.text, "text-[17px] font-bold")}>{line}</text>
+          <text key={i} x={CX} y={mid + 6 + (i - (lines.length - 1) / 2) * fit.lh} textAnchor="middle" fontSize={fit.size} className={cn(NEUTRAL.text, "font-bold")}>{line}</text>
         ))}
         <text x={CX} y={CARD.y + CARD.h - 20} textAnchor="middle" className={cn(NEUTRAL.mutedText, "text-[13px] font-medium")}>What does the evidence say?</text>
       </>
     );
   } else if (card) {
-    const lines = wrapWords(card.back, BACK_CHARS).slice(0, 5);
+    const lines = wrapWords(card.back, BACK_CHARS);
     const match = hit ? "Matches the evidence" : `Evidence says: ${label(card.answer)}`;
     const matchW = Math.min(340, Math.ceil(match.length * 7 + 22));
     const srcW = Math.min(340, Math.ceil(card.source.length * 7.1 + 22));
@@ -120,7 +150,7 @@ export function FlipDeck({ title, limits, verdicts, cards, deckLabel, prompt, hi
   } else {
     const tally = `${total} of ${n} matched the evidence on the first try`;
     const tl = wrapWords(tally, 26);
-    const nl = wrapWords(endNote, BACK_CHARS).slice(0, 4);
+    const nl = wrapWords(endNote, BACK_CHARS);
     face = (
       <>
         {header("Deck finished")}
