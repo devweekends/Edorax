@@ -17,6 +17,28 @@ export type ReleaseChapter = {
 export type ReleaseModule = { id: string; key: string | null; title: string; order: number; chapters: ReleaseChapter[] };
 export type ReleaseContent = { variants: Record<string, ReleaseModule[]> };
 
+/**
+ * A release names each lesson by its public slug, so two chapters at one slug cannot both be read:
+ * the reader opens the first and the curriculum lists both. A publish could store such a pair when
+ * a changed lesson was not matched to its earlier version (publishCourseRelease now replaces by
+ * slug). The publisher appends the replacement, so the later entry is the current lesson and the
+ * earlier one is dropped.
+ */
+export function withoutSupersededChapters(modules: ReleaseModule[]): ReleaseModule[] {
+  const current = new Map<string, string>();
+  for (const module of modules) for (const chapter of module.chapters) current.set(cleanChapterSlug(chapter.slug), chapter.id);
+  if (current.size === modules.reduce((sum, module) => sum + module.chapters.length, 0)) return modules;
+  return modules.map(module => ({ ...module,
+    chapters: module.chapters.filter(chapter => current.get(cleanChapterSlug(chapter.slug)) === chapter.id) }));
+}
+
+/** Read a stored release. Always go through this, so every caller sees each lesson once. */
+export function readReleaseContent(raw: unknown): ReleaseContent {
+  const content = raw as ReleaseContent;
+  if (!content?.variants) return content;
+  return { ...content, variants: Object.fromEntries(Object.entries(content.variants).map(([slug, modules]) => [slug, withoutSupersededChapters(modules)])) };
+}
+
 export function variantForRelease(familySlug: string | CourseFamily | null, variantSlug: string | null): string {
   return variantSlug ?? (typeof familySlug === "object" && familySlug ? familySlug : resolveCourseFamily(familySlug))?.defaultVariantSlug ?? "default";
 }
@@ -80,7 +102,7 @@ export async function releaseForEnrollment(courseId: string, enrollment: { relea
   if (!releaseId) return null;
   const release = await prisma.courseRelease.findFirst({ where: { id: releaseId, courseId } });
   if (!release) throw new NotFoundError("Course release not found.");
-  const content = release.content as unknown as ReleaseContent;
+  const content = readReleaseContent(release.content);
   const family = resolveCourseFamily(familySlug, course.variantFamily);
   const variant = resolveVariantInRelease(content, family, enrollment.variantSlug);
   return { release, variant, modules: content.variants[variant]! };
@@ -107,7 +129,7 @@ export async function assertEnrollmentChapter(tx: Prisma.TransactionClient, enro
   const id = enrollment.releaseId ?? enrollment.course.activeReleaseId;
   if (!id) return;
   const release = await tx.courseRelease.findFirstOrThrow({ where: { id, courseId: enrollment.courseId } });
-  const content = release.content as unknown as ReleaseContent;
+  const content = readReleaseContent(release.content);
   const family = resolveCourseFamily(enrollment.course.familySlug, enrollment.course.variantFamily);
   // Same fallback as releaseForEnrollment so overview/reader and chapter-start never disagree.
   const variant = resolveVariantInRelease(content, family, enrollment.variantSlug);
@@ -143,7 +165,7 @@ export async function upgradeEnrollmentToRelease(
     where: { id: targetReleaseId, courseId: enrollment.courseId },
   });
 
-  const content = targetRelease.content as unknown as ReleaseContent;
+  const content = readReleaseContent(targetRelease.content);
   const family = resolveCourseFamily(enrollment.course.familySlug, enrollment.course.variantFamily);
   const variant = resolveVariantInRelease(content, family, enrollment.variantSlug);
   const modules = content.variants[variant]!;

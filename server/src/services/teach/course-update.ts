@@ -8,7 +8,7 @@ import { requireCourseById } from "./access.js";
 import { parseCourseZip, type CourseZipSource, type ImportPlan } from "./course-import.js";
 import { canonical, matchCourseUpdate, type UpdateMapping } from "./course-update-matching.js";
 import { publishCourseRelease } from "./publish-course-release.js";
-import { type ReleaseContent, variantForRelease } from "../courses/releases.js";
+import { readReleaseContent, variantForRelease } from "../courses/releases.js";
 import { resolveCourseFamily } from "../../shared/lib/course-tracks.js";
 
 const fingerprint = (value: unknown) => createHash("sha256").update(canonical(value)).digest("hex");
@@ -21,7 +21,7 @@ async function snapshot(db: Prisma.TransactionClient, courseId: string) {
   } });
   if (!course.activeReleaseId) return { ...course, revision: null };
   const release = await db.courseRelease.findUniqueOrThrow({ where: { id: course.activeReleaseId } });
-  const modules = (release.content as unknown as ReleaseContent).variants[variantForRelease(resolveCourseFamily(course.familySlug, course.variantFamily), null)] ?? [];
+  const modules = readReleaseContent(release.content).variants[variantForRelease(resolveCourseFamily(course.familySlug, course.variantFamily), null)] ?? [];
   const moduleById = new Map(course.modules.map(module => [module.id, module]));
   const chapterById = new Map(course.chapters.map(chapter => [chapter.id, chapter]));
   return { ...course, revision: release.id,
@@ -44,7 +44,7 @@ export async function previewCourseZipUpdate(user: SessionUser, courseId: string
   }
   const result = matchCourseUpdate(plan, current.modules, current.chapters);
   const activeRelease = current.revision ? await prisma.courseRelease.findUniqueOrThrow({ where: { id: current.revision } }) : null;
-  const effective = activeRelease?.content as unknown as ReleaseContent | undefined;
+  const effective = (activeRelease ? readReleaseContent(activeRelease.content) : undefined);
   const variantSlugs = effective ? Object.keys(effective.variants) :
     resolveCourseFamily(current.familySlug, current.variantFamily)?.variants.map(variant => variant.slug) ?? ["default"];
   const learnerCounts = await prisma.enrollment.groupBy({ by: ["variantSlug"], where: { courseId, lifecycle: "ACTIVE" }, _count: { _all: true } });

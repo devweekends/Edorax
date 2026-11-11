@@ -3,7 +3,7 @@ import { prisma } from "../../db/prisma.js";
 import { NotFoundError } from "../../utils/errors.js";
 import { resolveCourseFamily } from "../../shared/lib/course-tracks.js";
 import { enrollmentGrantsContentAccess } from "../enrollment/lifecycle.js";
-import { variantForRelease, type ReleaseContent, type ReleaseModule } from "../courses/releases.js";
+import { readReleaseContent, variantForRelease, type ReleaseModule } from "../courses/releases.js";
 
 const summarySelect = {
   id: true,
@@ -42,7 +42,7 @@ async function activeReleaseModules(courses: ReleaseSource[]): Promise<Map<strin
   const releases = releaseIds.length
     ? await prisma.courseRelease.findMany({ where: { id: { in: releaseIds } }, select: { id: true, content: true } })
     : [];
-  const contentById = new Map(releases.map((release) => [release.id, release.content as unknown as ReleaseContent]));
+  const contentById = new Map(releases.map((release) => [release.id, readReleaseContent(release.content)]));
   const result = new Map<string, ReleaseModule[]>();
   for (const course of courses) {
     const content = course.activeReleaseId ? contentById.get(course.activeReleaseId) : undefined;

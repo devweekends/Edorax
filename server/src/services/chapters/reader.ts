@@ -21,7 +21,7 @@ import {
   releaseModulesWithBlocks,
   upgradeEnrollmentToRelease,
   variantForRelease,
-  type ReleaseContent,
+  readReleaseContent,
 } from "../courses/releases.js";
 import { resolveCourseFamily } from "../../shared/lib/course-tracks.js";
 import { findChapterIndex } from "./chapter-slug.js";
@@ -106,7 +106,7 @@ export async function loadChapterReader(courseSlug: string, chapterSlug: string,
   // switch to the track that owns the lesson so bookmarks still work. After lock, keep them on
   // their chosen track (do not silently move a grocery learner onto digital-goods).
   if (index === -1 && selectedRelease && !enrollment.variantLockedAt && enrollment.status !== "COMPLETED") {
-    const content = selectedRelease.release.content as unknown as ReleaseContent;
+    const content = readReleaseContent(selectedRelease.release.content);
     for (const [variantSlug, modules] of Object.entries(content.variants ?? {})) {
       if (variantSlug === selectedRelease.variant) continue;
       if (findChapterIndex(modules.flatMap((m) => m.chapters), chapterSlug) === -1) continue;

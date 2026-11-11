@@ -9,7 +9,7 @@ import type { CourseSettingsBody, CreateCourseBody } from "../../validations/tea
 import { requireCourseById, requireCourseBySlug } from "./access.js";
 import { publishChapters } from "./chapters.js";
 import { ensureBaselineRelease } from "../courses/releases.js";
-import { type ReleaseContent, variantForRelease } from "../courses/releases.js";
+import { readReleaseContent, variantForRelease } from "../courses/releases.js";
 import { resolveCourseFamily } from "../../shared/lib/course-tracks.js";
 import { CONFIRMED_ENROLLMENT_WHERE } from "../enrollment/lifecycle.js";
 import { publishDashboardStructureRelease } from "./publish-course-release.js";
@@ -108,7 +108,7 @@ export async function loadCourseBuilder(user: SessionUser, courseSlug: string): 
   let builderModules = modules.map((module) => ({ ...module, chapters: module.chapters.map(toBuilderChapter) }));
   if (activeReleaseId) {
     const release = await prisma.courseRelease.findUniqueOrThrow({ where: { id: activeReleaseId } });
-    const shared = (release.content as unknown as ReleaseContent).variants[variantForRelease(resolveCourseFamily(familySlug, variantFamily), null)] ?? [];
+    const shared = readReleaseContent(release.content).variants[variantForRelease(resolveCourseFamily(familySlug, variantFamily), null)] ?? [];
     const rows = new Map(modules.flatMap(module => module.chapters.map(chapter => [chapter.id, chapter] as const)));
     const moduleRows = new Map(modules.map(module => [module.id, module]));
     const activeIds = new Set(shared.flatMap(module => module.chapters.map(chapter => chapter.id)));
@@ -199,7 +199,7 @@ export async function loadCourseDraftPreview(user: SessionUser, courseSlug: stri
   }));
   if (activeReleaseId) {
     const release = await prisma.courseRelease.findFirstOrThrow({ where: { id: activeReleaseId, courseId: course.id } });
-    const shared = (release.content as unknown as ReleaseContent).variants[
+    const shared = readReleaseContent(release.content).variants[
       variantForRelease(resolveCourseFamily(familySlug, variantFamily), null)] ?? [];
     const rows = new Map(modules.flatMap(module => module.chapters.map(chapter => [chapter.id, chapter] as const)));
     const moduleRows = new Map(modules.map(module => [module.id, module] as const));
