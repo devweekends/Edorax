@@ -489,12 +489,12 @@ export function MenteeDashboard({ model }: { model: MenteeDashboardViewModel }) 
         <div className="mt-8"><EmptyDashboard name={model.learner.name} /></div>
       ) : (
         <div className="mt-6 space-y-6">
+          <WeeklyQuests />
           {model.activity.runningSession ? <ResumeBanner session={model.activity.runningSession} /> : null}
           <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_20rem]">
             {model.primaryCourse ? <ContinueLearning course={model.primaryCourse} /> : null}
             <WeeklySnapshot model={model} />
           </div>
-          <WeeklyQuests />
           <CourseListPreview courses={model.courses} />
           <div className="grid grid-cols-1 gap-5 border-t border-border pt-6 xl:grid-cols-2">
             <ActionCenter actions={model.actions} hasCourse={Boolean(model.primaryCourse)} />

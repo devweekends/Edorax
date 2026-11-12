@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 type Day = { day: string; seconds: number };
 
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const LEVEL_CLASS = ["bg-muted", "bg-primary/25", "bg-primary/45", "bg-primary/70", "bg-primary"];
+const LEVEL_CLASS = ["bg-muted", "bg-primary/30", "bg-primary/50", "bg-primary/75", "bg-primary"];
 const DAY_MS = 86_400_000;
 
 function level(seconds: number): number {
@@ -72,46 +72,48 @@ export function ActivityGrid({ days }: { days: Day[] }) {
       </div>
 
       <div className="mt-5 overflow-x-auto pb-1">
-        <div className="inline-flex flex-col gap-1">
-          <div className="flex gap-[3px] pl-[3.25rem]">
-            {monthForWeek.map((m, w) => (
-              <span key={w} className="w-[11px] text-[10px] leading-none text-muted-foreground">
-                {m ?? ""}
-              </span>
-            ))}
-          </div>
-          <div className="flex gap-[3px]">
-            <div className="mr-1 flex flex-col gap-[3px] text-[10px] leading-[11px] text-muted-foreground">
-              {["", "Mon", "", "Wed", "", "Fri", ""].map((d, i) => (
-                <span key={i} className="h-[11px] w-10">{d}</span>
+        <div className="mx-auto w-max">
+          <div className="flex flex-col gap-[3px]">
+            <div className="flex gap-[3px] pl-12">
+              {monthForWeek.map((m, w) => (
+                <span key={w} className="w-[13px] text-[10px] leading-none text-muted-foreground">
+                  {m ?? ""}
+                </span>
               ))}
             </div>
-            {Array.from({ length: weeks }).map((_, w) => (
-              <div key={w} className="flex flex-col gap-[3px]">
-                {Array.from({ length: 7 }).map((_, r) => {
-                  const cell = cells[w * 7 + r]!;
-                  const lvl = level(cell.seconds);
-                  return (
-                    <span
-                      key={r}
-                      title={cell.inRange ? `${cell.day}: ${Math.round(cell.seconds / 60)} min` : undefined}
-                      className={cn(
-                        "size-[11px] rounded-[2px]",
-                        cell.inRange ? LEVEL_CLASS[lvl] : "bg-transparent",
-                        cell.inRange && lvl === 0 && "ring-1 ring-inset ring-border"
-                      )}
-                    />
-                  );
-                })}
+            <div className="flex gap-[3px]">
+              <div className="mr-1 flex flex-col gap-[3px] text-[10px] leading-[13px] text-muted-foreground">
+                {["", "Mon", "", "Wed", "", "Fri", ""].map((d, i) => (
+                  <span key={i} className="h-[13px] w-10">{d}</span>
+                ))}
               </div>
-            ))}
-          </div>
-          <div className="mt-2 flex items-center justify-end gap-1 pl-[3.25rem] text-[10px] text-muted-foreground">
-            <span className="mr-1">Less</span>
-            {LEVEL_CLASS.map((cls, i) => (
-              <span key={i} className={cn("size-[11px] rounded-[2px]", cls, i === 0 && "ring-1 ring-inset ring-border")} />
-            ))}
-            <span className="ml-1">More</span>
+              {Array.from({ length: weeks }).map((_, w) => (
+                <div key={w} className="flex flex-col gap-[3px]">
+                  {Array.from({ length: 7 }).map((_, r) => {
+                    const cell = cells[w * 7 + r]!;
+                    const lvl = level(cell.seconds);
+                    return (
+                      <span
+                        key={r}
+                        title={cell.inRange ? `${cell.day}: ${Math.round(cell.seconds / 60)} min` : undefined}
+                        className={cn(
+                          "size-[13px] rounded-[2px]",
+                          cell.inRange ? LEVEL_CLASS[lvl] : "bg-transparent",
+                          cell.inRange && lvl === 0 && "ring-1 ring-inset ring-border"
+                        )}
+                      />
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+            <div className="mt-2 flex items-center justify-end gap-1 pl-12 text-[10px] text-muted-foreground">
+              <span className="mr-1">Less</span>
+              {LEVEL_CLASS.map((cls, i) => (
+                <span key={i} className={cn("size-[13px] rounded-[2px]", cls, i === 0 && "ring-1 ring-inset ring-border")} />
+              ))}
+              <span className="ml-1">More</span>
+            </div>
           </div>
         </div>
       </div>
