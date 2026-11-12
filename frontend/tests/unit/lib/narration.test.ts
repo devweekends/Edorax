@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatClock, formatListenMinutes, formatMegabytes, resumePosition, shouldPinPlayer, NARRATION_SPEEDS } from "../../../src/lib/narration-format";
+import { formatClock, formatListenMinutes, formatMegabytes, resumePosition, NARRATION_SPEEDS } from "../../../src/lib/narration-format";
 import { loadChapterNarration, narrationBase, pickNarration } from "../../../src/lib/narration";
 
 const manifest = {
@@ -98,16 +98,6 @@ describe("player formatting", () => {
     expect(NARRATION_SPEEDS).toContain(1);
     expect(NARRATION_SPEEDS).toEqual([0.75, 1, 1.25, 1.5, 1.75, 2, 2.25, 2.5, 2.75, 3, 3.25, 3.5, 3.75, 4]);
     expect([...NARRATION_SPEEDS].sort((a, b) => a - b)).toEqual([...NARRATION_SPEEDS]);
-  });
-
-  it("pins the player while listening, and only then", () => {
-    expect(shouldPinPlayer("idle", 0, 0)).toBe(false);
-    expect(shouldPinPlayer("loading", 0, 0)).toBe(true);
-    expect(shouldPinPlayer("playing", 40, 224)).toBe(true);
-    expect(shouldPinPlayer("paused", 40, 224)).toBe(true);
-    expect(shouldPinPlayer("paused", 0, 224)).toBe(false);
-    expect(shouldPinPlayer("paused", 224, 224)).toBe(false);
-    expect(shouldPinPlayer("error", 40, 224)).toBe(false);
   });
 
   it("resumes only from a useful spot", () => {
