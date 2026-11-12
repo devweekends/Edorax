@@ -4,6 +4,13 @@ import { submitChapterQuiz } from "../services/chapters/quiz-submit.js";
 import { markChapterComplete } from "../services/progress/chapter-completion.js";
 import { saveChecklistItem, saveLearningLogAnswers } from "../services/progress/learning-log.js";
 import { saveHeadingNote } from "../services/chapters/heading-notes.js";
+import {
+  listChapterHighlights,
+  createChapterHighlight,
+  updateChapterHighlight,
+  deleteChapterHighlight,
+} from "../services/chapters/highlights.js";
+import type { HighlightColor } from "../generated/prisma/index.js";
 import { loadQuizChapterState } from "../services/chapters/quiz-state.js";
 import { askAboutChapter, chapterQuestionStatus, streamAnswerAboutChapter } from "../services/ai/chapter-qa/service.js";
 import type { AskChapterBody, QuizSubmitBody } from "../validations/chapters.js";
@@ -40,6 +47,40 @@ export async function putHeadingNote(req: Request, res: Response) {
   const { chapterId, headingId } = req.params as { chapterId: string; headingId: string };
   const { body } = req.body as { body: string };
   ok(res, await saveHeadingNote(req.user!, { chapterId, headingId, body }));
+}
+
+// GET /api/v1/chapters/:chapterId/highlights
+export async function getHighlights(req: Request, res: Response) {
+  const chapterId = req.params.chapterId as string;
+  ok(res, await listChapterHighlights(req.user!, chapterId));
+}
+
+// POST /api/v1/chapters/:chapterId/highlights
+export async function postHighlight(req: Request, res: Response) {
+  const chapterId = req.params.chapterId as string;
+  const body = req.body as {
+    color?: HighlightColor;
+    quote: string;
+    prefix?: string;
+    suffix?: string;
+    occurrence?: number;
+    note?: string;
+  };
+  ok(res, await createChapterHighlight(req.user!, { chapterId, ...body }));
+}
+
+// PATCH /api/v1/chapters/:chapterId/highlights/:highlightId
+export async function patchHighlight(req: Request, res: Response) {
+  const highlightId = req.params.highlightId as string;
+  const body = req.body as { color?: HighlightColor; note?: string | null };
+  ok(res, await updateChapterHighlight(req.user!, highlightId, body));
+}
+
+// DELETE /api/v1/chapters/:chapterId/highlights/:highlightId
+export async function deleteHighlight(req: Request, res: Response) {
+  const highlightId = req.params.highlightId as string;
+  await deleteChapterHighlight(req.user!, highlightId);
+  noContent(res);
 }
 
 // GET /api/v1/chapters/:chapterId/quiz

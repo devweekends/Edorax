@@ -1,10 +1,11 @@
 import { Router } from "express";
 import * as learner from "../../controllers/learner.js";
+import * as chapters from "../../controllers/chapters.js";
 import * as aiCredential from "../../controllers/ai-credential.js";
 import { authenticate } from "../../middlewares/authenticate.js";
 import { userRateLimit } from "../../middlewares/rate-limit.js";
 import { requireVerified } from "../../middlewares/require-verified.js";
-import { validateBody, validateParams, validateQuery } from "../../middlewares/validate.js";
+import { validate, validateBody, validateParams, validateQuery } from "../../middlewares/validate.js";
 import { aiCredentialModelBody, aiCredentialSaveBody } from "../../validations/ai.js";
 import {
   gamificationPreferencesBody,
@@ -15,6 +16,7 @@ import {
   streakMilestoneParams,
   weeklyGoalBody,
 } from "../../validations/learner.js";
+import { highlightIdParams, highlightUpdateBody } from "../../validations/chapters.js";
 
 // Everything the signed-in learner sees about themselves.
 const router = Router();
@@ -34,6 +36,9 @@ router.patch("/gamification", validateBody(gamificationPreferencesBody), learner
 router.get("/leaderboard", validateQuery(leaderboardQuery), learner.leaderboard);
 router.get("/leaderboards", validateQuery(leaderboardHubQuery), learner.leaderboards);
 router.get("/profile", learner.profile);
+router.get("/highlights", learner.highlights);
+router.patch("/highlights/:highlightId", validate({ params: highlightIdParams, body: highlightUpdateBody }), chapters.patchHighlight);
+router.delete("/highlights/:highlightId", validateParams(highlightIdParams), chapters.deleteHighlight);
 router.patch("/profile", validateBody(profileBody), learner.patchProfile);
 router.post("/instructor-access-requests", validateBody(instructorAccessRequestBody), learner.requestInstructor);
 

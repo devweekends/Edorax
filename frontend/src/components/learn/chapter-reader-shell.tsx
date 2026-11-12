@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { ChapterSidebar, SidebarToggle } from "@/components/learn/chapter-sidebar";
+import { ChapterHighlights } from "@/components/learn/chapter-highlights";
 import { ChapterToc, TocToggle } from "@/components/learn/chapter-toc";
 import { ChapterNav } from "@/components/learn/chapter-nav";
 import { ReadingProgressBar, useReadingProgress } from "@/components/learn/chapter-progress-bar";
@@ -18,6 +19,7 @@ import { FocusModeToggle, ReaderFocusDock } from "@/components/learn/reader-focu
 import { cn } from "@/lib/utils";
 import { useReaderLayout } from "@/lib/use-reader-layout";
 import type { Heading } from "@/shared/lib/mdx-headings";
+import type { ReaderHighlight } from "@/shared/api/reader";
 import type { SyllabusModule } from "@/components/learn/course-syllabus";
 import { AskHelpDialog } from "@/components/help/ask-help-dialog";
 import { ReportIssueDialog } from "@/components/help/report-issue-dialog";
@@ -85,6 +87,7 @@ export function ChapterReaderShell({
   recap,
   streakMilestone = null,
   headingNotes = {},
+  highlights = [],
   predictGate = false,
   predictRevealed = true,
   promptCourseRating = false,
@@ -118,6 +121,7 @@ export function ChapterReaderShell({
   recap?: { checks: string; open: string; next: string };
   streakMilestone?: StreakMilestone | null;
   headingNotes?: Record<string, string>;
+  highlights?: ReaderHighlight[];
   predictGate?: boolean;
   predictRevealed?: boolean;
   promptCourseRating?: boolean;
@@ -142,6 +146,7 @@ export function ChapterReaderShell({
     skipSkeleton,
   } = useReaderLayout(courseSlug);
   const scrollRef = useRef<HTMLElement>(null);
+  const articleRef = useRef<HTMLElement>(null);
   const router = useRouter();
   const hydrated = useHydrated();
   const [focusStored, setFocusStored] = useBrowserStorage("buildment:reader-focus", "0");
@@ -461,6 +466,7 @@ export function ChapterReaderShell({
                   <LearningLogProvider chapterId={chapterId} initialAnswers={learningLogAnswers}>
                     <ChecklistProvider chapterId={chapterId} initialChecks={checklistState}>
                       <article
+                        ref={articleRef}
                         className={cn(
                           "prose prose-neutral max-w-none",
                           "prose-headings:scroll-mt-20 prose-headings:font-semibold prose-headings:tracking-tight prose-headings:text-foreground prose-headings:text-balance",
@@ -489,6 +495,10 @@ export function ChapterReaderShell({
                     </ChecklistProvider>
                   </LearningLogProvider>
                 </ChapterLinkProvider>
+
+                {readerMode !== "QUIZ" ? (
+                  <ChapterHighlights chapterId={chapterId} initialHighlights={highlights} articleRef={articleRef} />
+                ) : null}
 
                 {readerMode !== "QUIZ" ? <AskChapterPanel /> : null}
 
