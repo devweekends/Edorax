@@ -1,6 +1,6 @@
 import type { Prisma } from "../../generated/prisma/index.js";
 import { resolveCourseFamily } from "../../shared/lib/course-tracks.js";
-import { variantForRelease, type ReleaseContent } from "../courses/releases.js";
+import { readReleaseContent, variantForRelease } from "../courses/releases.js";
 import { assertEnrollmentChapter } from "../courses/releases.js";
 import {
   addedAfterCompletion,
@@ -179,8 +179,8 @@ export async function repairEnrollmentProgress(
   const enrollment = await tx.enrollment.findUniqueOrThrow({ where: { id: enrollmentId }, include: { course: { select: { familySlug: true, variantFamily: true, activeReleaseId: true } } } });
   const releaseId = enrollment.releaseId ?? enrollment.course.activeReleaseId;
   const release = releaseId ? await tx.courseRelease.findUnique({ where: { id: releaseId } }) : null;
-  const releaseIds = release ? ((release.content as unknown as ReleaseContent).variants[variantForRelease(resolveCourseFamily(enrollment.course.familySlug, enrollment.course.variantFamily), enrollment.variantSlug)]
-    ?? (release.content as unknown as ReleaseContent).variants.default)
+  const releaseIds = release ? (readReleaseContent(release.content).variants[variantForRelease(resolveCourseFamily(enrollment.course.familySlug, enrollment.course.variantFamily), enrollment.variantSlug)]
+    ?? readReleaseContent(release.content).variants.default)
     ?.flatMap(module => module.chapters.map(chapter => chapter.id)) ?? [] : null;
   const chapters = await tx.chapter.findMany({
     where: releaseIds ? { id: { in: releaseIds } } : { courseId, archivedAt: null },
@@ -200,8 +200,8 @@ export async function recomputeEnrollmentRollup(
   const enrollment = await tx.enrollment.findUniqueOrThrow({ where: { id: enrollmentId }, include: { course: { select: { familySlug: true, variantFamily: true, activeReleaseId: true } } } });
   const releaseId = enrollment.releaseId ?? enrollment.course.activeReleaseId;
   const release = releaseId ? await tx.courseRelease.findUnique({ where: { id: releaseId } }) : null;
-  const modules = release ? (release.content as unknown as ReleaseContent).variants[variantForRelease(resolveCourseFamily(enrollment.course.familySlug, enrollment.course.variantFamily), enrollment.variantSlug)]
-    ?? (release.content as unknown as ReleaseContent).variants.default ?? [] : null;
+  const modules = release ? readReleaseContent(release.content).variants[variantForRelease(resolveCourseFamily(enrollment.course.familySlug, enrollment.course.variantFamily), enrollment.variantSlug)]
+    ?? readReleaseContent(release.content).variants.default ?? [] : null;
   const chapterIds = modules?.flatMap(module => module.chapters.map(chapter => chapter.id));
   const chapterProgress = await tx.chapterProgress.findMany({ where: { enrollmentId,
     ...(chapterIds ? { chapterId: { in: chapterIds } } : { chapter: { archivedAt: null } }) } });

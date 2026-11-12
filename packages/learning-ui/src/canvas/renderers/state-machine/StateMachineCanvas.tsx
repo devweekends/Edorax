@@ -138,27 +138,16 @@ function MachineSvg({
               strokeWidth={on ? 2.5 : 1.25}
               className={cn(SHAPE_TRANSITION, on ? [tone.softFill, tone.stroke] : [NEUTRAL.surface, NEUTRAL.faintStroke])}
             />
-            <text
-              x={x}
-              y={s.sub ? y - 3 : y + 4.5}
-              textAnchor="middle"
-              fontSize={g.nameSize}
-              fontWeight={600}
-              className={NEUTRAL.text}
-            >
-              {s.name}
-            </text>
-            {s.sub ? (
-              <text
-                x={x}
-                y={y + 13}
-                textAnchor="middle"
-                fontSize={g.subSize}
-                className={cn("font-mono", on ? tone.text : NEUTRAL.mutedText)}
-              >
-                {s.sub}
+            {g.stateLines(s.id, y).name.map((line, k) => (
+              <text key={`n${k}`} x={x} y={line.y} textAnchor="middle" fontSize={g.nameSize} fontWeight={600} textLength={line.textLength} lengthAdjust={line.textLength ? "spacingAndGlyphs" : undefined} className={NEUTRAL.text}>
+                {line.text}
               </text>
-            ) : null}
+            ))}
+            {g.stateLines(s.id, y).sub.map((line, k) => (
+              <text key={`s${k}`} x={x} y={line.y} textAnchor="middle" fontSize={g.subSize} textLength={line.textLength} lengthAdjust={line.textLength ? "spacingAndGlyphs" : undefined} className={cn("font-mono", on ? tone.text : NEUTRAL.mutedText)}>
+                {line.text}
+              </text>
+            ))}
           </g>
         );
       })}

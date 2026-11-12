@@ -1,3 +1,4 @@
+import { instructorWithdrawalsEnabled } from "../middlewares/instructor-withdrawals.js";
 import * as courseImport from "../services/teach/course-import.js";
 import type { Request, Response } from "express";
 import { created, noContent, ok } from "../utils/responses.js";
@@ -291,4 +292,30 @@ export async function publishCourseChapters(req: Request, res: Response) {
 export async function publishModuleChapters(req: Request, res: Response) {
   await chapters.publishChapters(req.user!, { moduleId: param(req, "moduleId") });
   noContent(res);
+}
+
+// GET /api/v1/teach/wallet
+export async function getWallet(req: Request, res: Response) {
+  const { getInstructorWallet } = await import("../services/financials/withdrawals.js");
+  ok(res, { ...await getInstructorWallet(req.user!.id), withdrawalsEnabled: instructorWithdrawalsEnabled() });
+}
+
+// POST /api/v1/teach/wallet/withdraw
+export async function requestWithdrawal(req: Request, res: Response) {
+  const { requestInstructorWithdrawal } = await import("../services/financials/withdrawals.js");
+  const { note } = req.body as { note: string };
+  created(res, await requestInstructorWithdrawal(req.user!.id, note));
+}
+
+// GET /api/v1/teach/campaigns
+export async function getCampaigns(req: Request, res: Response) {
+  const { listInstructorCampaigns } = await import("../services/teach/campaigns.js");
+  ok(res, await listInstructorCampaigns(req.user!));
+}
+
+// POST /api/v1/teach/campaigns/:campaignId/participate
+export async function participateCampaign(req: Request, res: Response) {
+  const { setInstructorCampaignParticipation } = await import("../services/teach/campaigns.js");
+  const { courseIds } = req.body as { courseIds: string[] };
+  ok(res, await setInstructorCampaignParticipation(req.user!, param(req, "campaignId"), courseIds));
 }

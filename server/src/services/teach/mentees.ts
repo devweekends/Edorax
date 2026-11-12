@@ -1,11 +1,12 @@
 import type { CourseMenteesView, MenteeAttentionKind, MenteeEvaluation } from "../../shared/api/teach.js";
 import { resolveCourseFamily, summarizeLearnerTrack } from "../../shared/lib/course-tracks.js";
-import { type ReleaseContent, variantForRelease } from "../courses/releases.js";
+import { readReleaseContent, variantForRelease } from "../courses/releases.js";
 import { helpUiCopy } from "../../shared/lib/help-ui-copy.js";
 import { prisma } from "../../db/prisma.js";
 import { NotFoundError } from "../../utils/errors.js";
 import type { SessionUser } from "../../types/auth.js";
 import { inviteAcceptUrl } from "../email/send.js";
+import { CONFIRMED_ENROLLMENT_WHERE } from "../enrollment/lifecycle.js";
 import { requireCourseBySlug } from "./access.js";
 import { loadMenteeEvaluation } from "./evaluation/load-mentee-evaluation.js";
 import { activityState, average, formatLastActive, progressState } from "./helpers.js";
@@ -36,6 +37,7 @@ export async function loadCourseMentees(user: SessionUser, courseSlug: string): 
         select: { id: true, token: true, email: true, createdAt: true },
       },
       enrollments: {
+        where: CONFIRMED_ENROLLMENT_WHERE,
         orderBy: { createdAt: "asc" },
         select: {
           id: true,
@@ -68,7 +70,7 @@ export async function loadCourseMentees(user: SessionUser, courseSlug: string): 
   });
   const releaseIds = [...new Set([course.activeReleaseId, ...course.enrollments.map(item => item.releaseId)].filter((id): id is string => Boolean(id)))];
   const releases = await prisma.courseRelease.findMany({ where: { id: { in: releaseIds } }, select: { id: true, content: true } });
-  const byRelease = new Map(releases.map(release => [release.id, release.content as unknown as ReleaseContent]));
+  const byRelease = new Map(releases.map(release => [release.id, readReleaseContent(release.content)]));
   const family = resolveCourseFamily(course.familySlug, course.variantFamily);
   const chapterCountFor = (releaseId: string | null, variantSlug: string | null) => {
     const content = byRelease.get(releaseId ?? course.activeReleaseId ?? "");

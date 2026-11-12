@@ -1,0 +1,7 @@
+{
+  "name": "@vscode/windows-ca-certs",
+  "version": "0.3.3-local",
+  "description": "Local stand-in for the Windows-only native module. Node's bundled CA list is used instead.",
+  "main": "index.js",
+  "license": "MIT"
+}

@@ -13,10 +13,12 @@ import {
 } from "../../utils/errors.js";
 import type { SessionUser } from "../../types/auth.js";
 import { shouldBypassProgressGating } from "../auth/seed-access.js";
+import type { HelpThreadCategory } from "../../generated/prisma/index.js";
 import {
   notifyMenteeHelpReply,
   notifyMenteeHelpThreadResolved,
   notifyMentorHelpQuestion,
+  notifyMentorLessonReport,
 } from "../notifications/events.js";
 import { dispatchNotification } from "../notifications/service.js";
 import { requireBlockSubmissionAccess } from "../enrollment/api-learn-access.js";
@@ -83,6 +85,10 @@ export async function listMenteeThreads(
     return {
       id: thread.id,
       status: thread.status,
+      kind: thread.kind,
+      category: thread.category,
+      blockId: thread.blockId,
+      quote: thread.quote,
       createdAt: thread.createdAt.toISOString(),
       updatedAt: thread.updatedAt.toISOString(),
       course: thread.course,
@@ -152,6 +158,10 @@ export async function getThread(
     chapter: thread.chapter
       ? { slug: thread.chapter.slug, title: thread.chapter.title }
       : null,
+    kind: thread.kind,
+    category: thread.category,
+    blockId: thread.blockId,
+    quote: thread.quote,
     messages: mapHelpMessages(messages),
   };
 }
@@ -176,7 +186,7 @@ export async function askFromChapter(
   const enrollment = await requireBlockSubmissionAccess(chapter.courseId, user);
 
   const existingOpen = await prisma.helpThread.findFirst({
-    where: { menteeId: user.id, chapterId: chapter.id, status: "OPEN" },
+    where: { menteeId: user.id, chapterId: chapter.id, kind: "QUESTION", status: "OPEN" },
     select: { id: true },
   });
 
@@ -227,6 +237,88 @@ export async function askFromChapter(
   );
 
   return { threadId: thread.id, created: !existingOpen };
+}
+
+/**
+ * A learner reports an error, typo, confusing passage or improvement idea on a
+ * lesson. Unlike questions, every report is its own thread: two different
+ * mistakes on the same chapter are two tickets the instructor can resolve
+ * independently. The optional block/quote points at the exact passage.
+ */
+export async function createLessonReport(
+  user: SessionUser,
+  input: {
+    courseId: string;
+    chapterId: string;
+    category: HelpThreadCategory;
+    body: string;
+    blockId?: string;
+    quote?: string;
+  },
+) {
+  const chapter = await prisma.chapter.findUnique({
+    where: { id: input.chapterId },
+    select: {
+      id: true,
+      courseId: true,
+      title: true,
+      course: { select: { mentorId: true, title: true } },
+    },
+  });
+  if (!chapter || chapter.courseId !== input.courseId) {
+    throw new NotFoundError("Chapter not found.");
+  }
+
+  const enrollment = await requireBlockSubmissionAccess(chapter.courseId, user);
+
+  try {
+    await assertChapterUnlocked({
+      courseId: chapter.courseId,
+      enrollmentId: enrollment.id,
+      chapterId: chapter.id,
+      bypassLocking: shouldBypassProgressGating(user),
+    });
+  } catch (error) {
+    if (error instanceof ChapterLockedError) {
+      throw new ForbiddenError(
+        "Finish the previous chapter before reporting an issue here.",
+        HELP_ERROR_CODES.CHAPTER_LOCKED,
+      );
+    }
+    throw error;
+  }
+
+  const thread = await prisma.helpThread.create({
+    data: {
+      courseId: chapter.courseId,
+      chapterId: chapter.id,
+      menteeId: user.id,
+      kind: "LESSON_REPORT",
+      category: input.category,
+      blockId: input.blockId ?? null,
+      quote: input.quote?.trim() || null,
+    },
+    select: { id: true },
+  });
+
+  const message = await appendMessage(
+    thread.id,
+    user.id,
+    input.body,
+    undefined,
+    [user.id, chapter.course.mentorId],
+  );
+  await dispatchNotification(() =>
+    notifyMentorLessonReport({
+      threadId: thread.id,
+      messageId: message.id,
+      body: input.body,
+      category: input.category,
+      menteeName: user.name,
+    }),
+  );
+
+  return { threadId: thread.id, created: true };
 }
 
 export async function reply(
@@ -399,10 +491,10 @@ async function appendMessage(
   return messageView;
 }
 
-/** Latest help thread for this mentee + chapter (open or resolved), for the chapter reader. */
+/** Latest mentor Q&A thread for this mentee + chapter (open or resolved), for the chapter reader. */
 export async function loadChapterThread(menteeId: string, chapterId: string) {
   return prisma.helpThread.findFirst({
-    where: { menteeId, chapterId },
+    where: { menteeId, chapterId, kind: "QUESTION" },
     orderBy: { updatedAt: "desc" },
     include: { messages: messageInclude },
   });

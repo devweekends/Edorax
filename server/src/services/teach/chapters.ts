@@ -24,7 +24,7 @@ import type { SessionUser } from "../../types/auth.js";
 import type { ChapterSettingsBody, CreateChapterBody, MoveDirection } from "../../validations/teach.js";
 import { requireCourseById } from "./access.js";
 import { applyBlockSyncPlans, planChapterBlockSync, prepareChapterBlockSync, syncChapterBlocksFromSource, type ExistingSyncBlock } from "./sync-blocks.js";
-import { ensureBaselineRelease, type ReleaseContent, variantForRelease } from "../courses/releases.js";
+import { ensureBaselineRelease, readReleaseContent, variantForRelease } from "../courses/releases.js";
 import { resolveCourseFamily } from "../../shared/lib/course-tracks.js";
 import { publishDashboardChapterRelease, publishDashboardNewChapterRelease, removeChapterFromRelease } from "./publish-course-release.js";
 
@@ -42,7 +42,7 @@ async function requireChapter(user: SessionUser, chapterId: string) {
       const family = await prisma.course.findUniqueOrThrow({ where: { id: chapter.courseId },
         select: { familySlug: true, variantFamily: true } });
       const defaultSlug = variantForRelease(resolveCourseFamily(family.familySlug, family.variantFamily), null);
-      const visible = ((release.content as unknown as ReleaseContent).variants[defaultSlug] ?? [])
+      const visible = (readReleaseContent(release.content).variants[defaultSlug] ?? [])
         .some(module => module.chapters.some(item => item.id === chapter.id));
       if (!visible) throw new NotFoundError("Chapter not found");
     }
@@ -56,7 +56,7 @@ async function releasedChapterDraft(chapter: { id: string; courseId: string; tit
   if (status !== "PUBLISHED" && status !== "ARCHIVED") return null;
   const release = await prisma.$transaction(tx => ensureBaselineRelease(tx, chapter.courseId));
   const course = await prisma.course.findUniqueOrThrow({ where: { id: chapter.courseId }, select: { familySlug: true, variantFamily: true } });
-  const shared = (release.content as unknown as ReleaseContent).variants[variantForRelease(resolveCourseFamily(course.familySlug, course.variantFamily), null)] ?? [];
+  const shared = readReleaseContent(release.content).variants[variantForRelease(resolveCourseFamily(course.familySlug, course.variantFamily), null)] ?? [];
   if (!shared.some(module => module.chapters.some(item => item.id === chapter.id))) return null;
   return prisma.courseChapterDraft.upsert({ where: { chapterId: chapter.id },
     create: { chapterId: chapter.id, courseId: chapter.courseId, baseReleaseId: release.id,
@@ -109,7 +109,7 @@ export async function moveChapter(user: SessionUser, chapterId: string, directio
     if (current.activeReleaseId) {
       const release = await prisma.courseRelease.findUniqueOrThrow({ where: { id: current.activeReleaseId } });
       const defaultSlug = variantForRelease(resolveCourseFamily(current.familySlug, current.variantFamily), null);
-      activeIds = ((release.content as unknown as ReleaseContent).variants[defaultSlug] ?? [])
+      activeIds = (readReleaseContent(release.content).variants[defaultSlug] ?? [])
         .flatMap(module => module.chapters.map(item => item.id));
     }
   }
@@ -197,7 +197,7 @@ export async function publishChapter(user: SessionUser, chapterId: string): Prom
   if (!draft && (course.status === "PUBLISHED" || course.status === "ARCHIVED")) {
     const release = await prisma.$transaction(tx => ensureBaselineRelease(tx, course.id));
     const familyCourse = await prisma.course.findUniqueOrThrow({ where: { id: course.id }, select: { familySlug: true, variantFamily: true } });
-    const shared = (release.content as unknown as ReleaseContent).variants[variantForRelease(resolveCourseFamily(familyCourse.familySlug, familyCourse.variantFamily), null)] ?? [];
+    const shared = readReleaseContent(release.content).variants[variantForRelease(resolveCourseFamily(familyCourse.familySlug, familyCourse.variantFamily), null)] ?? [];
     if (shared.some(module => module.chapters.some(item => item.id === chapterId))) {
       if (chapter.source === chapter.compiled) return;
       draft = await releasedChapterDraft(chapter, course.status);

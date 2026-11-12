@@ -2,6 +2,7 @@ import type { MentorCoursesView, TeachWorkspace } from "../../shared/api/teach.j
 import { prisma } from "../../db/prisma.js";
 import type { SessionUser } from "../../types/auth.js";
 import { loadInstructorAccessState } from "../instructor-access/status.js";
+import { CONFIRMED_ENROLLMENT_WHERE } from "../enrollment/lifecycle.js";
 import { mentoredCoursesWhere } from "./access.js";
 import { activityState, average } from "./helpers.js";
 
@@ -16,8 +17,13 @@ export async function loadTeachWorkspace(user: SessionUser): Promise<TeachWorksp
         slug: true,
         title: true,
         status: true,
-        _count: { select: { chapters: { where: { archivedAt: null } }, enrollments: true } },
-        enrollments: { select: { pendingReviews: true } },
+        _count: {
+          select: {
+            chapters: { where: { archivedAt: null } },
+            enrollments: { where: CONFIRMED_ENROLLMENT_WHERE },
+          },
+        },
+        enrollments: { where: CONFIRMED_ENROLLMENT_WHERE, select: { pendingReviews: true } },
         helpThreads: { where: { status: "OPEN" }, select: { id: true } },
       },
     }),
@@ -56,6 +62,7 @@ export async function loadMentorCourses(user: SessionUser): Promise<MentorCourse
       updatedAt: true,
       _count: { select: { chapters: { where: { archivedAt: null } } } },
       enrollments: {
+        where: CONFIRMED_ENROLLMENT_WHERE,
         select: { status: true, percentComplete: true, pendingReviews: true, lastActiveAt: true },
       },
       helpThreads: { where: { status: "OPEN" }, select: { id: true } },

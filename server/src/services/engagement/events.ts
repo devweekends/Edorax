@@ -1,5 +1,6 @@
 import type { EngagementEvent, Prisma } from "../../generated/prisma/index.js";
 import { prisma } from "../../db/prisma.js";
+import { cleanChapterSlug } from "../chapters/chapter-slug.js";
 import { ConflictError, NotFoundError } from "../../utils/errors.js";
 import {
   ENGAGEMENT_ERROR_CODES,
@@ -147,7 +148,9 @@ async function resumePoint(userId: string): Promise<{ href: string; chapterTitle
     orderBy: [{ module: { order: "asc" } }, { order: "asc" }],
     select: { slug: true, title: true },
   });
-  return chapter ? { href: `/courses/${enrollment.course.slug}/${chapter.slug}`, chapterTitle: chapter.title } : null;
+  return chapter
+    ? { href: `/courses/${enrollment.course.slug}/${cleanChapterSlug(chapter.slug)}`, chapterTitle: chapter.title }
+    : null;
 }
 
 type CourseMilestone = "course_first_chapter" | "course_halfway" | "course_one_left";

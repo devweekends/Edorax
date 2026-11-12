@@ -157,4 +157,56 @@ describe("/integrations/v1 (public organisation API)", () => {
     const list = await request(app).get("/integrations/v1/course-requests").set(org.headers).query({ status: "PENDING" });
     expect(list.body.requests).toEqual([]);
   });
+
+  it("rejects enrollment when the organization does not have enough credits", async () => {
+    const paid = await createCourseFixture();
+    const fundedOrg = await createOrganizationFixture(paid.course.id, { maxEnrollments: 5 });
+    const sponsoredLearner = await prisma.user.create({
+      data: {
+        email: `sponsored-${paid.tag}@test.local`,
+        name: "Sponsored Learner",
+        role: "MENTEE",
+        emailVerified: new Date(),
+      },
+    });
+    await prisma.course.update({
+      where: { id: paid.course.id },
+      data: { pricingType: "PAID", priceCents: 5_000 },
+    });
+    await prisma.organization.update({
+      where: { id: fundedOrg.organization.id },
+      data: { creditBalance: 125 },
+    });
+    await prisma.organizationCouponPool.create({
+      data: {
+        organizationId: fundedOrg.organization.id,
+        courseId: paid.course.id,
+        label: "Full seat",
+        percentOff: 100,
+        maxRedemptions: 10,
+      },
+    });
+
+    try {
+      const res = await request(app)
+        .post("/integrations/v1/enrollments")
+        .set(fundedOrg.headers)
+        .send({
+          student_email: sponsoredLearner.email,
+          course_id: paid.course.id,
+          external_assignment_id: `credits-${paid.tag}`,
+        });
+
+      expect(res.status).toBe(402);
+      expect(res.body).toEqual({
+        error:
+          "Organization credit balance is too low to fund this enrollment. Required 5,000 credits ($50.00); available 125 credits ($1.25). Add credits for the organization, then retry.",
+        code: "INSUFFICIENT_CREDITS",
+      });
+    } finally {
+      await fundedOrg.cleanup();
+      await prisma.user.delete({ where: { id: sponsoredLearner.id } }).catch(() => undefined);
+      await paid.cleanup();
+    }
+  });
 });

@@ -30,6 +30,7 @@ export function AdminRoleInviteDialog() {
   useEffect(() => {
     if (!state.message) return;
     toast(state.message, state.ok ? "success" : "error");
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- syncs the dialog with the last action result
     if (state.ok) setOpen(false);
   }, [state]);
 

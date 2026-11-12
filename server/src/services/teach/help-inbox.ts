@@ -19,6 +19,7 @@ export async function loadMentorHelpInbox(user: SessionUser, query: HelpInboxQue
   const courseIds = courses.map((course) => course.id);
   const status = query.status ?? "open";
 
+  const kind = query.kind ?? "all";
   const threads =
     courseIds.length === 0
       ? []
@@ -26,6 +27,7 @@ export async function loadMentorHelpInbox(user: SessionUser, query: HelpInboxQue
           where: {
             courseId: query.courseId && courseIds.includes(query.courseId) ? query.courseId : { in: courseIds },
             ...(status === "resolved" ? { status: "RESOLVED" } : status === "all" ? {} : { status: "OPEN" }),
+            ...(kind === "reports" ? { kind: "LESSON_REPORT" } : kind === "questions" ? { kind: "QUESTION" } : {}),
           },
           // Open questions oldest first so nobody waits unnoticed; resolved ones newest first.
           orderBy: { updatedAt: status === "resolved" ? "desc" : "asc" },
@@ -46,6 +48,9 @@ export async function loadMentorHelpInbox(user: SessionUser, query: HelpInboxQue
       return {
         id: thread.id,
         status: thread.status,
+        kind: thread.kind,
+        category: thread.category,
+        quote: thread.quote,
         menteeLabel: thread.mentee.name ?? thread.mentee.email,
         courseTitle: thread.course.title,
         chapterTitle: thread.chapter?.title ?? null,

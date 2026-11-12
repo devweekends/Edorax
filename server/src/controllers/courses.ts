@@ -7,6 +7,7 @@ import { prisma } from "../db/prisma.js";
 import { loadBlockState } from "../services/blocks/state.js";
 import { BadRequestError } from "../utils/errors.js";
 import { chooseCourseSpecialisation, chooseCourseVariant } from "../services/courses/track.js";
+import { saveCourseRating, getMyCourseRating, dismissCourseRatingPrompt } from "../services/courses/ratings.js";
 
 // GET /api/v1/courses/:courseSlug/continue
 export async function continueChapter(req: Request, res: Response) {
@@ -66,4 +67,20 @@ export async function chooseSpecialisation(req: Request, res: Response) {
 // POST /api/v1/courses/:courseSlug/upgrade-curriculum
 export async function upgradeCurriculum(req: Request, res: Response) {
   ok(res, await upgradeEnrollmentCurriculum(req.params.courseSlug as string, req.user!));
+}
+
+// PUT /api/v1/courses/:courseSlug/rating
+export async function putRating(req: Request, res: Response) {
+  const { rating, review } = req.body as { rating: number; review?: string | null };
+  ok(res, await saveCourseRating(req.user!, req.params.courseSlug as string, { rating, review }));
+}
+
+// GET /api/v1/courses/:courseSlug/rating
+export async function getRating(req: Request, res: Response) {
+  ok(res, { rating: await getMyCourseRating(req.user!, req.params.courseSlug as string) });
+}
+
+// POST /api/v1/courses/:courseSlug/rating/dismiss
+export async function dismissRating(req: Request, res: Response) {
+  ok(res, await dismissCourseRatingPrompt(req.user!, req.params.courseSlug as string));
 }

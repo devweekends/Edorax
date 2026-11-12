@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
 import { created, ok } from "../utils/responses.js";
 import * as threads from "../services/help/threads.js";
-import type { AskFromChapterBody, ReplyBody } from "../validations/help.js";
+import type { AskFromChapterBody, LessonReportBody, ReplyBody } from "../validations/help.js";
 
 // GET /api/v1/help/threads — the learner's own questions
 export async function list(req: Request, res: Response) {
@@ -18,6 +18,14 @@ export async function ask(req: Request, res: Response) {
   const result = await threads.askFromChapter(req.user!, req.body as AskFromChapterBody);
   if (result.created) created(res, result);
   else ok(res, result);
+}
+
+// POST /api/v1/help/reports — report an error, typo, confusing passage or improvement
+export async function reportLesson(req: Request, res: Response) {
+  created(
+    res,
+    await threads.createLessonReport(req.user!, req.body as LessonReportBody),
+  );
 }
 
 // POST /api/v1/help/threads/:threadId/messages

@@ -5,6 +5,7 @@ export interface LabStatus {
   message: string;
 }
 export interface LabsAPI {
+  prepareTerminal(course: string): Promise<{ blockId: string; folder: string }>;
   configure(
     blockId: string,
     mode: 'local' | 'docker',

@@ -5,6 +5,7 @@ import type { SessionUser } from "../../types/auth.js";
 import { notifyMenteeCourseEnrollment, notifyMentorNewEnrollment } from "../notifications/events.js";
 import { dispatchNotification } from "../notifications/service.js";
 import { lifecycleForSignedInEnrollment } from "../enrollment/lifecycle.js";
+import { settleAssignment } from "../financials/settlement.js";
 import { assignmentForNewEnrollment } from "../courses/variant-assignment.js";
 
 const inviteInclude = {
@@ -20,6 +21,7 @@ const inviteInclude = {
       pricingType: true,
       priceCents: true,
       currency: true,
+      instructorPayoutPercent: true,
       mentor: { select: { name: true } },
     },
   },
@@ -43,7 +45,7 @@ function inviteState(invite: InviteRow): InviteState {
 export async function getInvitePublicView(token: string): Promise<InvitePublicView> {
   const invite = await loadInvite(token);
   if (!invite) throw new NotFoundError("Invite not found");
-  const { mentor, pricingType: _p, priceCents: _c, currency: _cur, ...course } = invite.course;
+  const { mentor, pricingType: _p, priceCents: _c, currency: _cur, instructorPayoutPercent: _share, ...course } = invite.course;
   return {
     state: inviteState(invite),
     email: invite.email,
@@ -74,8 +76,15 @@ export async function acceptInvite(user: SessionUser, token: string, name?: stri
     throw new ForbiddenError("This invite was sent to a different account.", INVITE_ERROR_CODES.WRONG_ACCOUNT);
   }
 
-  const lifecycle = lifecycleForSignedInEnrollment(invite.course.pricingType);
-  const checkoutRequired = lifecycle === "PAYMENT_REQUIRED";
+  const settlement = settleAssignment({
+    pricingType: invite.course.pricingType,
+    channel: "direct",
+    organizationListed: false,
+    originalAmountCents: invite.course.priceCents,
+    instructorPayoutPercent: invite.course.instructorPayoutPercent,
+  });
+  const lifecycle = settlement.grantsAccess ? "ACTIVE" : lifecycleForSignedInEnrollment(invite.course.pricingType);
+  const checkoutRequired = !settlement.grantsAccess;
 
   const enrollmentId = await prisma.$transaction(async (tx) => {
     const existing = await tx.enrollment.findUnique({ where: { courseId_userId: { courseId: invite.courseId, userId: user.id } }, select: { id: true } });
@@ -93,13 +102,11 @@ export async function acceptInvite(user: SessionUser, token: string, name?: stri
         startedAt: checkoutRequired ? null : new Date(),
       },
     });
-    if (checkoutRequired) {
-      await tx.payment.upsert({
-        where: { enrollmentId: enrollment.id },
-        create: { enrollmentId: enrollment.id, amountCents: invite.course.priceCents, currency: invite.course.currency, status: "PENDING" },
-        update: {},
-      });
-    }
+    await tx.payment.upsert({
+      where: { enrollmentId: enrollment.id },
+      create: { enrollmentId: enrollment.id, currency: invite.course.currency, ...settlement.payment },
+      update: {},
+    });
     await tx.invite.update({ where: { id: invite.id }, data: { acceptedAt: new Date(), acceptedById: user.id } });
     const trimmed = name?.trim();
     if (trimmed) await tx.user.update({ where: { id: user.id }, data: { name: trimmed } });

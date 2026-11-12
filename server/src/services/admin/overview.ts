@@ -3,6 +3,7 @@ import type { Prisma } from "../../generated/prisma/index.js";
 import { prisma } from "../../db/prisma.js";
 import type { CsvTable } from "../../utils/csv.js";
 import type { ListCoursesQuery } from "../../validations/admin.js";
+import { CONFIRMED_ENROLLMENT_WHERE } from "../enrollment/lifecycle.js";
 import { pageInfo, resolvePaging } from "./paging.js";
 
 /** Upper bound on exported rows (see ADMIN_EXPORT_LIMIT in users.ts). */
@@ -55,7 +56,12 @@ export async function listCourses(filters: ListCoursesQuery = {}): Promise<Admin
       currency: true,
       updatedAt: true,
       mentor: { select: { email: true, name: true } },
-      _count: { select: { enrollments: true, organizationCourses: true } },
+      _count: {
+        select: {
+          enrollments: { where: CONFIRMED_ENROLLMENT_WHERE },
+          organizationCourses: true,
+        },
+      },
     },
   });
 
@@ -85,7 +91,12 @@ export async function listCourses(filters: ListCoursesQuery = {}): Promise<Admin
       currency: true,
       updatedAt: true,
       mentor: { select: { email: true, name: true } },
-      _count: { select: { enrollments: true, organizationCourses: true } },
+      _count: {
+        select: {
+          enrollments: { where: CONFIRMED_ENROLLMENT_WHERE },
+          organizationCourses: true,
+        },
+      },
     },
   });
   return {

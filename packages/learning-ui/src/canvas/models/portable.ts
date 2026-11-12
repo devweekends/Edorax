@@ -657,7 +657,12 @@ export const blockMapDataSchema = z
     purpose: z.string().default(""),
     limits: text,
     blocks: z.array(z.record(z.string(), z.unknown())).min(1),
-    links: z.array(z.object({ from: text, to: text }).passthrough()).optional(),
+    // Chapters author links as { from, to }. BlockMap draws MapLink tuples,
+    // so convert here: spreading an object into linkKey(...) would throw.
+    links: z
+      .array(z.object({ from: text, to: text }).passthrough())
+      .optional()
+      .transform((entries) => entries?.map((entry): [string, string] => [entry.from, entry.to])),
     height: z.number().positive(),
     defaultSelected: text,
     cloudLabel: text,

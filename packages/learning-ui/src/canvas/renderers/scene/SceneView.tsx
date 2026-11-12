@@ -4,7 +4,7 @@ import { DotGrid, VerdictBanner } from "../../primitives/svg-parts";
 import { SvgNode } from "../../primitives/svg-node";
 import { LABEL_HALO, NEUTRAL, TONES } from "../../primitives/tones";
 import type { SceneFrame } from "./frame";
-import { BOX_W, CHIP_H, chipFade, chipTops, chipWidth, stripX, tagBox, tagRowY, TAG_H, longestWaitLabel, waitPillBox } from "./geometry";
+import { actorBox, sceneLift, CHIP_H, chipFade, chipTops, chipWidth, stripX, tagBox, tagRowY, TAG_H, longestWaitLabel, waitPillBox } from "./geometry";
 import type { Scene } from "./types";
 
 // Draws one frame of a scene on a dotted canvas: links between the actors
@@ -21,12 +21,15 @@ export function SceneView({ scene, frame, title }: { scene: Scene; frame: SceneF
   const links = linksOf(scene);
   const tops = chipTops(scene, frame);
   const active = new Set(frame.packets.map((p) => linkKey(p.from, p.to)));
+  // A scene whose top box was placed under the verdict banner is drawn lower, in a taller picture.
+  const lift = sceneLift(scene);
 
   return (
-    <svg viewBox={`0 0 ${scene.width} ${scene.height}`} role="img" aria-labelledby={`${titleId} ${descId}`} className="block h-auto w-full select-none">
+    <svg viewBox={`0 0 ${scene.width} ${scene.height + lift}`} role="img" aria-labelledby={`${titleId} ${descId}`} className="block h-auto w-full select-none">
       <title id={titleId}>{title}</title>
       <desc id={descId}>{describe(frame)}</desc>
-      <DotGrid width={scene.width} height={scene.height} />
+      <DotGrid width={scene.width} height={scene.height + lift} />
+      <g transform={lift ? `translate(0 ${lift})` : undefined}>
 
       {/* The network: a quiet line for every pair of actors that exchange a message. */}
       {links.map(([a, b]) => {
@@ -102,11 +105,17 @@ export function SceneView({ scene, frame, title }: { scene: Scene; frame: SceneF
 
       {frame.actors.map((actor) => {
         const kind = scene.actors.find((a) => a.id === actor.id)?.kind;
+        // Sized for every note the story gives this actor, so the box holds its text and never changes size mid-story.
+        const box = actorBox(actor, scene);
         return (
           <SvgNode
             key={actor.id}
             x={actor.x}
             y={actor.y}
+            left={box.left}
+            top={box.top}
+            width={box.right - box.left}
+            height={box.bottom - box.top}
             label={actor.label}
             kind={kind}
             status={actor.sub}
@@ -124,10 +133,11 @@ export function SceneView({ scene, frame, title }: { scene: Scene; frame: SceneF
       {frame.waits.map((wait) => {
         const actor = frame.actors.find((a) => a.id === wait.actor);
         if (!actor) return null;
-        const cx = actor.x + BOX_W / 2 + 16;
+        const boxRight = actorBox(actor, scene).right;
+        const cx = boxRight + 16;
         const cy = actor.y;
         const circumference = 2 * Math.PI * 12;
-        const pill = waitPillBox(actor, longestWaitLabel(scene, wait.actor, wait.label));
+        const pill = waitPillBox(actor, longestWaitLabel(scene, wait.actor, wait.label), boxRight);
         const shown = wait.opacity * visible;
         // The ring and pill come in twice as fast as the text, so the text never shows before the pill that keeps lines off it.
         const solid = Math.min(1, shown * 2);
@@ -168,6 +178,8 @@ export function SceneView({ scene, frame, title }: { scene: Scene; frame: SceneF
           </g>
         );
       })}
+
+      </g>
 
       {frame.verdict ? <VerdictBanner width={scene.width} text={frame.verdict.text} tone={frame.verdict.tone} opacity={frame.verdictOpacity * visible} /> : null}
     </svg>

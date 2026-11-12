@@ -20,6 +20,7 @@ import { useReaderLayout } from "@/lib/use-reader-layout";
 import type { Heading } from "@/shared/lib/mdx-headings";
 import type { SyllabusModule } from "@/components/learn/course-syllabus";
 import { AskHelpDialog } from "@/components/help/ask-help-dialog";
+import { ReportIssueDialog } from "@/components/help/report-issue-dialog";
 import { StudyClock } from "@/components/learn/study-time-chip";
 import { useStudySession } from "@/lib/use-study-session";
 import { useMascot } from "@/lib/engagement/use-mascot";
@@ -28,6 +29,7 @@ import type { HelpThreadView } from "@/shared/api/help";
 import type { StreakMilestone } from "@/shared/lib/streak";
 import { HeadingNotesProvider } from "@/components/learn/heading-note";
 import { ChapterAudio } from "@/components/learn/chapter-audio";
+import { CourseRatingPrompt } from "@/components/learn/course-rating-modal";
 import { AskChapterPanel } from "@/components/learn/ask-chapter-panel";
 import { AskChapterProvider } from "@/components/learn/ask-chapter-context";
 import { AskAiFloating, AskAiHeaderButton } from "@/components/learn/ask-ai-floating";
@@ -85,6 +87,7 @@ export function ChapterReaderShell({
   headingNotes = {},
   predictGate = false,
   predictRevealed = true,
+  promptCourseRating = false,
   courseId,
   helpThread,
   narration = null,
@@ -117,6 +120,7 @@ export function ChapterReaderShell({
   headingNotes?: Record<string, string>;
   predictGate?: boolean;
   predictRevealed?: boolean;
+  promptCourseRating?: boolean;
   courseId: string;
   helpThread: HelpThreadView | null;
   /** Listen-along audio for this chapter, when its course has it. */
@@ -509,24 +513,35 @@ export function ChapterReaderShell({
                   />
                 ) : null}
 
-                {prevHref || nextHref ? (
-                  <p className="mt-4 hidden text-center text-xs text-muted-foreground md:block">
-                    Tip: press{" "}
-                    {prevHref ? (
-                      <>
-                        <Kbd>[</Kbd> for the previous chapter
-                      </>
-                    ) : null}
-                    {prevHref && nextHref ? " and " : null}
-                    {nextHref ? (
-                      <>
-                        <Kbd>]</Kbd> for the next
-                        {prevHref ? null : " chapter"}
-                      </>
-                    ) : null}
-                    .
-                  </p>
-                ) : null}
+                <div className="mt-4 flex items-center justify-between gap-3">
+                  {prevHref || nextHref ? (
+                    <p className="hidden text-xs text-muted-foreground md:block">
+                      Tip: press{" "}
+                      {prevHref ? (
+                        <>
+                          <Kbd>[</Kbd> for the previous chapter
+                        </>
+                      ) : null}
+                      {prevHref && nextHref ? " and " : null}
+                      {nextHref ? (
+                        <>
+                          <Kbd>]</Kbd> for the next
+                          {prevHref ? null : " chapter"}
+                        </>
+                      ) : null}
+                      .
+                    </p>
+                  ) : (
+                    <span />
+                  )}
+                  <div className="ml-auto">
+                    <ReportIssueDialog
+                      courseId={courseId}
+                      chapterId={chapterId}
+                      chapterTitle={chapterTitle}
+                    />
+                  </div>
+                </div>
               </div>
             </main>
 
@@ -541,6 +556,11 @@ export function ChapterReaderShell({
 
         {focusMode && <ReaderFocusDock onExitFocus={() => void exitFocusMode()} />}
         <AskAiFloating focusMode={focusMode} />
+        <CourseRatingPrompt
+          courseSlug={courseSlug}
+          courseTitle={courseTitle}
+          shouldPrompt={promptCourseRating}
+        />
       </ReaderShellFade>
     </div>
     </AskChapterProvider>

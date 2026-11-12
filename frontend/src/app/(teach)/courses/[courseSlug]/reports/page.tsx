@@ -4,10 +4,12 @@ import {
   BarChart3,
   CircleCheckBig,
   Download,
+  Star,
   TrendingUp,
   Users,
   type LucideIcon,
 } from "lucide-react";
+import { StarRating } from "@/components/learn/star-rating";
 import type { ChapterReportView, CourseReportView } from "@/shared/api/teach";
 import { nowMs } from "@/server/time";
 import { requireTeachSurface } from "@/server/auth/guards";
@@ -33,7 +35,7 @@ export default async function CourseReportsPage({
   const report = await serverApiFetchOrNotFound<CourseReportView>(
     `/api/v1/teach/courses/${encodeURIComponent(courseSlug)}/reports${query}`
   );
-  const { course, summary, enrollments, chapterReport } = report;
+  const { course, summary, enrollments, chapterReport, ratings } = report;
   const atRisk = enrollments.filter((e) => e.atRisk);
   const now = nowMs();
 
@@ -86,6 +88,60 @@ export default async function CourseReportsPage({
             <SummaryCard icon={BarChart3} label="Average progress" value={`${summary.averageCompletion}%`} sub="Across the cohort" />
             <SummaryCard icon={CircleCheckBig} label="Completed" value={summary.completed} sub={`${pct(summary.completed, summary.enrolled)}% completion rate`} />
           </div>
+
+          <section className="rounded-2xl border bg-card p-5 shadow-sm sm:p-6">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Course rating</p>
+                <h2 className="mt-1 text-lg font-semibold tracking-tight">What learners said</h2>
+              </div>
+              <div className="text-right">
+                <p className="flex items-center justify-end gap-1.5 text-2xl font-semibold tabular-nums">
+                  <Star className="size-4 fill-current text-amber-500" aria-hidden />
+                  {ratings.average != null ? ratings.average.toFixed(1) : "—"}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {ratings.count} rating{ratings.count === 1 ? "" : "s"}
+                </p>
+              </div>
+            </div>
+
+            {ratings.count === 0 ? (
+              <p className="mt-3 text-sm text-muted-foreground">
+                No ratings yet. Learners can rate the course after completing it.
+              </p>
+            ) : (
+              <div className="mt-4 grid gap-5 sm:grid-cols-2">
+                <div className="space-y-1">
+                  {ratings.distribution.map((row) => {
+                    const percent = ratings.count > 0 ? Math.round((row.count / ratings.count) * 100) : 0;
+                    return (
+                      <div key={row.stars} className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <span className="w-8 tabular-nums">{row.stars}★</span>
+                        <span className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+                          <span className="block h-full rounded-full bg-amber-500" style={{ width: `${percent}%` }} />
+                        </span>
+                        <span className="w-10 text-right tabular-nums">{percent}%</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <ul className="space-y-2">
+                  {ratings.recent.map((row) => (
+                    <li key={row.id} className="rounded-lg border border-border p-3">
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        <StarRating value={row.rating} size={12} />
+                        <span className="font-medium text-foreground">{row.reviewer}</span>
+                      </div>
+                      {row.review ? (
+                        <p className="mt-1 text-sm text-muted-foreground">{row.review}</p>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </section>
 
           {atRisk.length > 0 && (
             <section className="rounded-2xl border border-amber-300/60 bg-amber-50/70 p-4 dark:border-amber-500/30 dark:bg-amber-500/10">

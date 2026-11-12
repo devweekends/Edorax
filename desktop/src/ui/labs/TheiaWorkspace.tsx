@@ -15,11 +15,17 @@ export function focusTheiaHost() {
 
 export function TheiaWorkspace({
   active,
+  courseSlug,
   snippet,
+  request,
+  onRequestHandled,
 }: {
   active: boolean;
+  courseSlug: string;
   focused?: boolean;
   snippet: LessonSnippetRequest | null;
+  request?: { create: boolean; nonce: number } | null;
+  onRequestHandled?: () => void;
 }) {
   const api = window.buildment.ide!;
   const host = useRef<HTMLDivElement>(null);
@@ -32,6 +38,7 @@ export function TheiaWorkspace({
     };
   }, []);
   const imported = useRef<number | null>(null);
+  const handledRequest = useRef<number | null>(null);
   const [session, setSession] = useState<IDESession | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -44,69 +51,74 @@ export function TheiaWorkspace({
     );
 
   useEffect(() => {
+    if (!active) return;
+    // A toolbar open/new request drives the launch instead of the resume.
+    if (request && handledRequest.current !== request.nonce) return;
     let alive = true;
-    const check = () => {
-      void api
-        .status()
-        .then((value) => {
-          if (!alive) return;
-          setSession((prev) => {
-            if (prev?.folder === value?.folder && prev?.url === value?.url)
-              return prev;
-            return value;
-          });
-        })
-        .catch((error) => {
-          if (alive) report(error);
-        });
-    };
-    check();
-    const timer = window.setInterval(check, 5000);
+    setBusy(true);
+    setError('');
+    void api
+      .resume(courseSlug)
+      .then((value) => {
+        if (alive) setSession(value);
+      })
+      .catch((error) => {
+        if (alive) report(error);
+      })
+      .finally(() => {
+        if (alive) setBusy(false);
+      });
     return () => {
       alive = false;
-      clearInterval(timer);
     };
-  }, [api]);
+  }, [api, courseSlug, active, request]);
 
   useEffect(() => {
     return () => {
-      void api.bounds(null);
+      void api.bounds(null, courseSlug);
     };
-  }, [api]);
+  }, [api, courseSlug]);
 
   useEffect(() => {
-    const update = () => {
+    // Layout shifts (the lesson header settling, Full screen, Hide IDE) do not fire resize or scroll,
+    // so check the host's position every frame and send it only when it changes.
+    let frame = 0;
+    let last = '';
+    const send = () => {
       const rect = host.current?.getBoundingClientRect();
-      if (
-        !active ||
-        busy ||
-        !session ||
-        !rect ||
-        !host.current?.getClientRects().length
-      ) {
-        void api.bounds(null);
-        return;
+      const shown = !!host.current?.getClientRects().length;
+      const next =
+        !active || busy || !session || !rect || !shown
+          ? null
+          : {
+              x: Math.round(rect.x),
+              y: Math.round(rect.y),
+              width: Math.round(rect.width),
+              height: Math.round(rect.height),
+            };
+      const key = next
+        ? `${next.x},${next.y},${next.width},${next.height},${window.devicePixelRatio}`
+        : '';
+      if (key === last) return;
+      last = key;
+      void api.bounds(next, courseSlug).catch(report);
+    };
+    const tick = () => {
+      try {
+        send();
+      } finally {
+        // Keep checking even if one update fails, so the IDE never stops following the page.
+        frame = window.requestAnimationFrame(tick);
       }
-      void api
-        .bounds({
-          x: rect.x,
-          y: rect.y,
-          width: rect.width,
-          height: rect.height,
-        })
-        .catch(report);
     };
-    const observer = new ResizeObserver(update);
-    if (host.current) observer.observe(host.current);
-    window.addEventListener('resize', update);
-    window.addEventListener('scroll', update, true);
-    update();
-    return () => {
-      observer.disconnect();
-      window.removeEventListener('resize', update);
-      window.removeEventListener('scroll', update, true);
-    };
-  }, [api, active, session, busy]);
+    tick();
+    return () => window.cancelAnimationFrame(frame);
+  }, [api, courseSlug, active, session, busy]);
+
+  // Hide the IDE view as soon as the IDE closes, independent of the position loop.
+  useEffect(() => {
+    if (!active) void api.bounds(null, courseSlug).catch(report);
+  }, [api, courseSlug, active]);
 
   useEffect(() => {
     if (
@@ -119,13 +131,10 @@ export function TheiaWorkspace({
       return;
     imported.current = snippet.id;
     setError('');
-    void api.importSnippet(snippet.source, snippet.filename).catch(report);
-  }, [api, active, session, snippet, busy]);
-
-  useEffect(() => {
-    if (!active || !session) return;
-    void api.revealExplorer().catch(report);
-  }, [api, active, session]);
+    void api
+      .importSnippet(snippet.source, snippet.filename, courseSlug)
+      .catch(report);
+  }, [api, courseSlug, active, session, snippet, busy]);
 
   async function open(create: boolean) {
     if (
@@ -138,7 +147,7 @@ export function TheiaWorkspace({
     setBusy(true);
     setError('');
     try {
-      const next = await api.open(create);
+      const next = await api.open(create, courseSlug);
       if (next) {
         setSession(next);
         imported.current = null;
@@ -150,11 +159,28 @@ export function TheiaWorkspace({
     }
   }
 
+  const openRef = useRef(open);
+  openRef.current = open;
+  useEffect(() => {
+    if (!request || handledRequest.current === request.nonce || !active || busy)
+      return;
+    handledRequest.current = request.nonce;
+    void openRef.current(request.create).finally(() => onRequestHandled?.());
+  }, [request, active, busy, onRequestHandled]);
+
   return (
     <section
       aria-label="Project IDE"
       className="flex h-full min-h-[400px] min-w-0 flex-1 flex-col overflow-hidden bg-background"
     >
+      {(error || busy) && (
+        <p
+          role={error ? 'alert' : 'status'}
+          className="shrink-0 border-b border-border px-3 py-2 text-xs"
+        >
+          {error || 'Opening course workspace…'}
+        </p>
+      )}
       <div ref={host} className="min-h-0 flex-1" tabIndex={-1}>
         {!session && (
           <div className="flex h-full flex-col items-center justify-center gap-4 px-8 text-center">

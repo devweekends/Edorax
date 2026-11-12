@@ -226,7 +226,15 @@ function QuestionRow({ thread, onOpen, dataIndex, position, setSize, measure, st
   return <li data-index={dataIndex} aria-posinset={position} aria-setsize={setSize} ref={measure} style={style} className="border-b last:border-b-0">
     <button type="button" onClick={() => onOpen(thread.id)} className="group flex w-full flex-col gap-3 px-4 py-4 text-left transition-colors hover:bg-muted/35 focus-visible:bg-muted/35 focus-visible:outline-none sm:flex-row sm:items-start sm:justify-between sm:gap-6 sm:px-5">
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground"><span className="font-medium text-foreground/80">{thread.course.title}</span><span aria-hidden>·</span><span>Asked <time dateTime={thread.createdAt}>{when(thread.createdAt)}</time></span></div>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+          <span className="font-medium text-foreground/80">{thread.course.title}</span>
+          {thread.kind === "LESSON_REPORT" && (
+            <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-destructive">
+              Report{thread.category ? ` · ${thread.category.toLowerCase().replace("_", " ")}` : ""}
+            </span>
+          )}
+          <span aria-hidden>·</span><span>Asked <time dateTime={thread.createdAt}>{when(thread.createdAt)}</time></span>
+        </div>
         <h3 className="mt-1.5 line-clamp-1 text-base font-semibold tracking-tight group-hover:underline group-hover:underline-offset-2">{thread.chapter?.title ?? "Course question"}</h3>
         <p className="mt-1 line-clamp-2 text-sm leading-6 text-muted-foreground">{thread.question ?? "Open the conversation to read this question."}</p>
         {thread.preview && thread.preview.body !== thread.question && <p className="mt-2 line-clamp-1 text-xs text-muted-foreground"><span className="font-semibold text-foreground/80">{thread.preview.fromMentor ? "Mentor" : "You"}:</span> {thread.preview.body} <span aria-hidden>·</span> <time dateTime={thread.preview.createdAt}>{when(thread.preview.createdAt)}</time></p>}

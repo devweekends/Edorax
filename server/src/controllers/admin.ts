@@ -8,6 +8,7 @@ import * as courseRequests from "../services/admin/course-requests.js";
 import * as users from "../services/admin/users.js";
 import * as mfa from "../services/admin/mfa.js";
 import * as courses from "../services/admin/courses.js";
+import * as courseAccess from "../services/admin/course-access.js";
 import * as profile from "../services/admin/profile.js";
 import * as audit from "../services/admin/audit.js";
 import * as appActivity from "../services/activity/reports.js";
@@ -66,6 +67,30 @@ export async function getMetrics(req: Request, res: Response) {
 // GET /api/v1/admin/courses
 export async function listCourses(req: Request, res: Response) {
   ok(res, await overview.listCourses(req.query as ListCoursesQuery));
+}
+
+// GET /api/v1/admin/courses/:courseId/org-access — organizations with free access to the course
+export async function listCourseOrgAccess(req: Request, res: Response) {
+  ok(res, await courseAccess.listCourseOrganizationAccess(param(req, "courseId")));
+}
+
+// POST /api/v1/admin/courses/:courseId/org-access — grant free access to an organization
+export async function grantCourseOrgAccess(req: Request, res: Response) {
+  const { organizationId } = req.body as { organizationId: string };
+  await courseAccess.grantCourseOrganizationAccess(req.user!, param(req, "courseId"), organizationId);
+  noContent(res);
+}
+
+// DELETE /api/v1/admin/courses/:courseId/org-access/:organizationId — revoke free access
+export async function revokeCourseOrgAccess(req: Request, res: Response) {
+  await courseAccess.revokeCourseOrganizationAccess(req.user!, param(req, "courseId"), param(req, "organizationId"));
+  noContent(res);
+}
+
+// POST /api/v1/admin/organizations/:orgId/free-access — bulk grant or revoke free access
+export async function setOrgCoursesFreeAccess(req: Request, res: Response) {
+  const { courseIds, freeForOrganization } = req.body as { courseIds: string[]; freeForOrganization: boolean };
+  ok(res, await courseAccess.setCoursesFreeForOrganization(req.user!, param(req, "orgId"), courseIds, freeForOrganization));
 }
 
 // POST /api/v1/admin/courses/:courseId/status — publish / unpublish / archive
@@ -240,6 +265,25 @@ export async function reinstateUser(req: Request, res: Response) {
 // POST /api/v1/admin/users/:userId/reset-mfa
 export async function resetUserMfa(req: Request, res: Response) {
   await mfa.resetUserTotp(req.user!, param(req, "userId"));
+  noContent(res);
+}
+
+// POST /api/v1/admin/users/:userId/enroll
+export async function enrollUser(req: Request, res: Response) {
+  const { courseId } = req.body as { courseId: string };
+  const result = await users.enrollUser(req.user!, param(req, "userId"), courseId);
+  created(res, result);
+}
+
+// DELETE /api/v1/admin/users/:userId/enrollments/:enrollmentId
+export async function removeUserEnrollment(req: Request, res: Response) {
+  await users.removeUserEnrollment(req.user!, param(req, "enrollmentId"), param(req, "userId"));
+  noContent(res);
+}
+
+// DELETE /api/v1/admin/enrollments/:enrollmentId
+export async function removeEnrollment(req: Request, res: Response) {
+  await users.removeUserEnrollment(req.user!, param(req, "enrollmentId"));
   noContent(res);
 }
 

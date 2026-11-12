@@ -12,6 +12,7 @@
   },
   "main": ".vite/build/main.cjs",
   "scripts": {
+    "prestart": "node scripts/ensure-ide.mjs",
     "start": "electron-forge start",
     "package": "electron-forge package",
     "make": "electron-forge make",
@@ -24,8 +25,8 @@
     "dev:ui": "vite --config vite.renderer.config.mts --host 127.0.0.1 --port 5179 --strictPort",
     "test:labs": "tsx --test tests/labs.integration.test.ts",
     "test:ide": "tsx scripts/serve-ide-smoke.ts",
-    "ide:setup": "npm --prefix ide run build && node scripts/prepare-pty.mjs",
-    "ide:build": "npm --prefix ide run build",
+    "ide:setup": "pnpm --dir ide install && pnpm --dir ide run build && node scripts/prepare-pty.mjs",
+    "ide:build": "pnpm --dir ide run build",
     "postinstall": "node scripts/prepare-pty.mjs"
   },
   "devDependencies": {

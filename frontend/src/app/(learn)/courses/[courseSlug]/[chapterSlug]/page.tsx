@@ -83,7 +83,13 @@ export default async function ChapterReaderPage({
 
   const { content } = view;
   const source = chapter.readerMode === "QUIZ" ? stripInteractiveBlockTags(content.source) : content.source;
-  const headings = extractHeadings(source);
+  // Bad MDX must not blank the reader with "This chapter can't be displayed right now".
+  let headings: ReturnType<typeof extractHeadings> = [];
+  try {
+    headings = extractHeadings(source);
+  } catch {
+    headings = [];
+  }
   // Only unlocked, non-quiz chapters get audio; a missing or unreadable manifest just means no player.
   const narration = chapter.readerMode === "QUIZ" ? null : await loadChapterNarration(course.slug, chapter.slug);
 
@@ -115,6 +121,7 @@ export default async function ChapterReaderPage({
         headingNotes={content.headingNotes}
         predictGate={content.predictGate}
         predictRevealed={content.predictRevealed}
+        promptCourseRating={Boolean(content.promptCourseRating)}
         helpThread={content.helpThread}
         narration={narration}
         user={user}

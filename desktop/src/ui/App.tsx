@@ -1,23 +1,46 @@
 import { useEffect, useRef, useState } from 'react';
 import { filterCourses, isMyCourse, type Course } from '../domain/catalog';
 import { CourseReader } from './learning/CourseReader';
+import { useDotVoice } from './mascot/DotVoice';
 import { CoursePreview } from './courses/CoursePreview';
 import { CourseCatalog } from './courses/CourseCatalog';
-import { Sidebar } from './layout/Sidebar';
+import { Sidebar, type Section } from './layout/Sidebar';
+import { HomePage } from './home/HomePage';
+import { ProgressPage } from './progress/ProgressPage';
+import { MyLearningPage } from './mylearning/MyLearningPage';
 import { WorkspaceHeader } from './layout/WorkspaceHeader';
 import { useSession } from './auth/useSession';
 import { SignInPrompt } from './auth/SignInPrompt';
+import { AudiobookLibrary } from './audiobooks/AudiobookLibrary';
+import { MiniPlayer } from './audiobooks/MiniPlayer';
+import { VisualLabs } from './visual-labs/VisualLabs';
+import { BrandMark } from './auth/BrandMark';
+import { LeaderboardPage } from './leaderboard/LeaderboardPage';
+import { StreakPopup } from './streak/StreakPopup';
+import type { LeaderboardSelection } from '../domain/leaderboard';
+import { QuestionsPage } from './questions/QuestionsPage';
+import { SettingsPage } from './settings/SettingsPage';
 
 export function App() {
   const [selected, setSelected] = useState<Course | null>(null);
   const [chapter, setChapter] = useState<string | undefined>();
   const [reading, setReading] = useState(false);
   const session = useSession();
-  const { signedIn, setSignedIn, authBusy, authRevision, authChecked, changeSession } =
-    session;
+  const {
+    signedIn,
+    setSignedIn,
+    authBusy,
+    authRevision,
+    authChecked,
+    changeSession,
+  } = session;
   useEffect(() => {
     if (!signedIn) setReading(false);
   }, [signedIn]);
+  const { track: trackDot } = useDotVoice();
+  useEffect(() => {
+    if (signedIn) void trackDot({ type: 'session_start' });
+  }, [signedIn, trackDot]);
   const main = useRef<HTMLElement>(null);
   const catalogScroll = useRef(0);
   function openCourse(course: Course) {
@@ -25,6 +48,18 @@ export function App() {
     setSelected(course);
     if (main.current) main.current.scrollTop = 0;
   }
+  const [section, setSection] = useState<Section>('home');
+
+  function navigate(next: Section) {
+    setSection(next);
+    setTab(next === 'mine' ? 'mine' : 'all');
+    backToCourses();
+  }
+  function openBySlug(slug: string) {
+    const course = courses.find((item) => item.slug === slug);
+    if (course) openCourse(course);
+  }
+
   function backToCourses() {
     const id = selected?.id;
     setReading(false);
@@ -56,6 +91,41 @@ export function App() {
   const [tab, setTab] = useState<'all' | 'mine'>('all');
 
   const catalogGeneration = useRef(0);
+  const [restoredView, setRestoredView] = useState(false);
+  useEffect(() => {
+    if (restoredView || !authChecked || !courses.length) return;
+    setRestoredView(true);
+    try {
+      const raw = sessionStorage.getItem('buildment-view');
+      if (!raw) return;
+      const view = JSON.parse(raw) as {
+        slug?: string;
+        reading?: boolean;
+        chapter?: string;
+      };
+      if (!view.slug) return;
+      const course = courses.find((entry) => entry.slug === view.slug);
+      if (!course) return;
+      setSelected(course);
+      if (view.chapter) setChapter(view.chapter);
+      if (view.reading && signedIn) setReading(true);
+    } catch {
+      /* A broken saved view just opens the catalog. */
+    }
+  }, [authChecked, courses, signedIn, restoredView]);
+  useEffect(() => {
+    if (!restoredView) return;
+    try {
+      if (!selected) sessionStorage.removeItem('buildment-view');
+      else
+        sessionStorage.setItem(
+          'buildment-view',
+          JSON.stringify({ slug: selected.slug, reading, chapter }),
+        );
+    } catch {
+      /* Persistence is best effort. */
+    }
+  }, [selected, reading, chapter, restoredView]);
   async function load() {
     const request = ++catalogGeneration.current;
     setLoading(courses.length === 0);
@@ -97,17 +167,45 @@ export function App() {
     });
   }
 
-  if (!authChecked) return <div className="flex h-screen items-center justify-center text-sm text-muted-foreground" role="status">Opening Edorax…</div>;
-  if (!signedIn) return (
-    <main className="flex min-h-screen items-center justify-center bg-background px-5 text-foreground">
-      <div className="w-full max-w-xl">
-        <p className="font-display text-4xl font-semibold">Welcome to Edorax</p>
-        <p className="mt-3 text-sm text-muted-foreground">Sign in to access your courses. Your browser will open securely, then bring you back here.</p>
-        <SignInPrompt busy={authBusy} onSignIn={() => void changeSession(true)} firstScreen />
-        {session.authError && <p role="alert" className="mt-4 text-sm text-destructive">{session.authError}</p>}
+  const [leaderboardSeed, setLeaderboardSeed] = useState<LeaderboardSelection | null>(null);
+  function openLeaderboard(selection: LeaderboardSelection) {
+    setLeaderboardSeed(selection);
+    navigate('leaderboard');
+  }
+
+  if (!authChecked)
+    return (
+      <div
+        className="flex h-screen items-center justify-center text-sm text-muted-foreground"
+        role="status"
+      >
+        Opening Edorax…
       </div>
-    </main>
-  );
+    );
+  if (!signedIn)
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-background px-5 text-foreground">
+        <div className="w-full max-w-xl">
+          <p className="font-display text-4xl font-semibold">
+            Welcome to Edorax
+          </p>
+          <p className="mt-3 text-sm text-muted-foreground">
+            Sign in to access your courses. Your browser will open securely,
+            then bring you back here.
+          </p>
+          <SignInPrompt
+            busy={authBusy}
+            onSignIn={() => void changeSession(true)}
+            firstScreen
+          />
+          {session.authError && (
+            <p role="alert" className="mt-4 text-sm text-destructive">
+              {session.authError}
+            </p>
+          )}
+        </div>
+      </main>
+    );
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
@@ -119,12 +217,15 @@ export function App() {
           session={session}
         />
       )}
+      {signedIn && <StreakPopup />}
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {!(reading && signedIn) && (
           <Sidebar
             collapsed={collapsed}
             toggleSidebar={toggleSidebar}
-            backToCourses={backToCourses}
+            section={section}
+            onNavigate={navigate}
+            myCount={courses.filter(isMyCourse).length}
           />
         )}
 
@@ -157,6 +258,28 @@ export function App() {
                 setReading(true);
               }}
             />
+          ) : section === 'home' ? (
+            <HomePage
+              onOpenCourse={openBySlug}
+              onBrowse={() => navigate('courses')}
+              onViewAll={() => navigate('mine')}
+              onOpenProgress={() => navigate('progress')}
+              onOpenLeaderboard={openLeaderboard}
+            />
+          ) : section === 'mine' ? (
+            <MyLearningPage onOpenCourse={openBySlug} onBrowse={() => navigate('courses')} />
+          ) : section === 'questions' ? (
+            <QuestionsPage />
+          ) : section === 'settings' ? (
+            <SettingsPage />
+          ) : section === 'progress' ? (
+            <ProgressPage onOpenCourse={openBySlug} onBrowse={() => navigate('courses')} />
+          ) : section === 'leaderboard' ? (
+            <LeaderboardPage initialSelection={leaderboardSeed ?? undefined} />
+          ) : section === 'audiobooks' ? (
+            <AudiobookLibrary />
+          ) : section === 'labs' ? (
+            <VisualLabs />
           ) : (
             <CourseCatalog
               {...{
@@ -180,6 +303,7 @@ export function App() {
           )}
         </main>
       </div>
+      <MiniPlayer />
     </div>
   );
 }

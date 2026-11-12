@@ -21,3 +21,24 @@ export const replyBody = z.object({
   replyToId: id.optional(),
 });
 export type ReplyBody = z.infer<typeof replyBody>;
+
+export const lessonReportCategory = z.enum([
+  "ERROR",
+  "TYPO",
+  "CONFUSING",
+  "BROKEN_LINK",
+  "SUGGESTION",
+  "OTHER",
+]);
+
+export const lessonReportBody = z.object({
+  courseId: id,
+  chapterId: id,
+  category: lessonReportCategory,
+  body: messageBody,
+  /** The exact block the learner is reporting, when the UI knows it. */
+  blockId: id.optional(),
+  /** The passage the learner selected, so the instructor can find it. */
+  quote: z.string().trim().max(500).optional(),
+});
+export type LessonReportBody = z.infer<typeof lessonReportBody>;

@@ -4,6 +4,7 @@ import type { QuizChapterState } from '../../../../../server/src/shared/api/bloc
 import { useQuizIntegrity } from '@buildment/learning-ui/lib/integrity/use-quiz-integrity';
 import { integrityTransport } from './integrity-transport';
 import { IntegrityNotice } from './IntegrityNotice';
+import { useDotVoice } from '../../mascot/DotVoice';
 import { Exercise } from '../Exercise';
 
 export function QuizSession({
@@ -11,12 +12,15 @@ export function QuizSession({
   state,
   complete,
   onSaved,
+  onExit,
 }: {
   chapterId: string;
   state: QuizChapterState;
   complete: boolean;
   onSaved: () => void;
+  onExit: () => void;
 }) {
+  const [screens, setScreens] = useState(1);
   const steps = state.steps.length
     ? state.steps
     : state.blockIds.map((id) => ({ id, type: 'QUIZ' as const }));
@@ -66,6 +70,27 @@ export function QuizSession({
         void document.exitFullscreen().catch(() => undefined);
     };
   }, []);
+  const { track: trackDot, setQuiet } = useDotVoice();
+  useEffect(() => {
+    // Quiz mode: full screen, on top, no screenshots, copy blocked, and one screen only.
+    setQuiet(true);
+    void window.buildment.quizLockdown(true).then((result) => setScreens(result.screens));
+    const unsubscribe = window.buildment.onQuizScreens((result) => setScreens(result.screens));
+    void document.documentElement.requestFullscreen?.().catch(() => undefined);
+    const previous = document.body.style.userSelect;
+    document.body.style.userSelect = 'none';
+    return () => {
+      setQuiet(false);
+      unsubscribe();
+      document.body.style.userSelect = previous;
+      void window.buildment.quizLockdown(false);
+    };
+  }, []);
+  async function exitQuiz() {
+    if (document.fullscreenElement) await document.exitFullscreen().catch(() => undefined);
+    await window.buildment.quizLockdown(false);
+    onExit();
+  }
   async function submit() {
     if (busy || perfect) return;
     const payload = state.blockIds.map((blockId) => ({
@@ -101,6 +126,7 @@ export function QuizSession({
         setError(result.message);
         return;
       }
+      void trackDot({ type: 'quiz_submitted', chapterId });
       const data = result.data as {
         score: number;
         maxScore: number;
@@ -179,6 +205,28 @@ export function QuizSession({
           style={{ width: ((position + 1) / visible.length) * 100 + '%' }}
         />
       </div>
+      {screens > 1 && (
+        <div
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="quiz-screens-title"
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-background/95 p-6 text-center"
+        >
+          <div className="max-w-md rounded-2xl border border-border bg-card p-7">
+            <h2 id="quiz-screens-title" className="text-2xl font-semibold">Turn off your other screens</h2>
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">
+              Quizzes run on one screen only. Disconnect or turn off the other displays to continue.
+            </p>
+          </div>
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={() => void exitQuiz()}
+        className="fixed right-4 top-4 z-[75] rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium shadow-sm hover:bg-muted"
+      >
+        Exit quiz
+      </button>
       <IntegrityNotice integrity={integrity} />
       {individualCount > 0 && (
         <p className="text-sm leading-6 text-muted-foreground">
@@ -206,7 +254,7 @@ export function QuizSession({
       {score && (
         <div
           role="status"
-          className="my-5 rounded-xl border border-border bg-ok-soft/40 p-5"
+          className="my-5 rounded-xl border border-border bg-secondary/40 p-5"
         >
           <p className="text-lg font-semibold">
             Quiz score: {score.score} / {score.maxScore}

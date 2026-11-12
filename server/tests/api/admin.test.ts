@@ -103,7 +103,7 @@ describe("organizations", () => {
     const ok = await request(app)
       .put(`/api/v1/admin/organizations/${createdOrgId}/allocations`)
       .set(admin())
-      .send({ isAllowed: true, courses: [{ courseId: fx.course.id, maxEnrollments: 25, expiresAt: "2030-01-31" }] });
+      .send({ courses: [{ courseId: fx.course.id, maxEnrollments: 25, expiresAt: "2030-01-31" }] });
     expect(ok.status).toBe(204);
 
     const detail = await request(app).get(`/api/v1/admin/organizations/${createdOrgId}`).set(admin());
@@ -133,9 +133,17 @@ describe("organizations", () => {
     expect(off.status).toBe(204);
     expect(await prisma.organizationCourse.findUnique({ where: key })).toMatchObject({ isAllowed: false, maxEnrollments: 25 });
 
+    // Editing the catalog without specifying assignability must preserve an explicit opt-out.
+    const edit = await request(app)
+      .put(`/api/v1/admin/organizations/${createdOrgId}/allocations`)
+      .set(admin())
+      .send({ courses: [{ courseId: fx.course.id, maxEnrollments: 30 }] });
+    expect(edit.status).toBe(204);
+    expect(await prisma.organizationCourse.findUnique({ where: key })).toMatchObject({ isAllowed: false, maxEnrollments: 30 });
+
     const on = await request(app).patch(url).set(admin()).send({ enabled: true });
     expect(on.status).toBe(204);
-    expect(await prisma.organizationCourse.findUnique({ where: key })).toMatchObject({ isAllowed: true, maxEnrollments: 25 });
+    expect(await prisma.organizationCourse.findUnique({ where: key })).toMatchObject({ isAllowed: true, maxEnrollments: 30 });
 
     // An allocation that does not exist is a 404, not a silent no-op.
     const missing = await request(app)
@@ -578,6 +586,120 @@ describe("user detail and account actions", () => {
     expect(
       (await request(app).post(`/api/v1/admin/users/${fx.learner.id}/revoke-sessions`).set(await mentor())).status
     ).toBe(403);
+  });
+
+  it("excludes pending-payment and rejected enrollments from user lists and detail until payment or admin enrollment succeeds", async () => {
+    const paidCourse = await prisma.course.create({
+      data: {
+        slug: `paid-enr-${fx.tag}`,
+        title: "Paid Enrollment Course",
+        status: "PUBLISHED",
+        pricingType: "PAID",
+        priceCents: 2500,
+        currency: "USD",
+        mentorId: fx.mentor.id,
+        publishedAt: new Date(),
+      },
+    });
+    const buyer = await prisma.user.create({
+      data: {
+        email: `buyer-${fx.tag}@test.local`,
+        name: "Pending Buyer",
+        role: "MENTEE",
+        emailVerified: new Date(),
+      },
+    });
+    createdUserIds.push(buyer.id);
+
+    try {
+      const pendingEnrollment = await prisma.enrollment.create({
+        data: {
+          courseId: paidCourse.id,
+          userId: buyer.id,
+          source: "SELF",
+          lifecycle: "PAYMENT_REQUIRED",
+          status: "ASSIGNED",
+          payment: {
+            create: {
+              amountCents: 2500,
+              currency: "USD",
+              status: "PENDING",
+            },
+          },
+        },
+      });
+
+      // 1. Under payment: excluded from user list count, enrolled filter, course count, and user detail.
+      const listWhilePending = await request(app)
+        .get("/api/v1/admin/users")
+        .query({ query: buyer.email })
+        .set(admin());
+      expect(listWhilePending.body.data.users[0]).toMatchObject({ id: buyer.id, enrollmentCount: 0 });
+
+      const enrolledOnlyWhilePending = await request(app)
+        .get("/api/v1/admin/users")
+        .query({ query: buyer.email, enrolled: "true" })
+        .set(admin());
+      expect(enrolledOnlyWhilePending.body.data.users).toHaveLength(0);
+
+      const detailWhilePending = await request(app).get(`/api/v1/admin/users/${buyer.id}`).set(admin());
+      expect(detailWhilePending.body.data.user.enrollmentCount).toBe(0);
+      expect(detailWhilePending.body.data.enrollments).toEqual([]);
+
+      // 2. Rejected payment: still excluded everywhere.
+      const rejectRes = await request(app)
+        .post(`/api/v1/admin/manual-access/${pendingEnrollment.id}/reject`)
+        .set(admin());
+      expect(rejectRes.status).toBe(200);
+
+      const detailAfterReject = await request(app).get(`/api/v1/admin/users/${buyer.id}`).set(admin());
+      expect(detailAfterReject.body.data.user.enrollmentCount).toBe(0);
+      expect(detailAfterReject.body.data.enrollments).toEqual([]);
+
+      // 3. Admin enrolls the user: upgrades to ACTIVE + SUCCEEDED and now counts as a positive enrollment.
+      const enrollRes = await request(app)
+        .post(`/api/v1/admin/users/${buyer.id}/enroll`)
+        .set(admin())
+        .send({ courseId: paidCourse.id });
+      expect(enrollRes.status).toBe(201);
+
+      const enrolledOnlyAfterSuccess = await request(app)
+        .get("/api/v1/admin/users")
+        .query({ query: buyer.email, enrolled: "true" })
+        .set(admin());
+      expect(enrolledOnlyAfterSuccess.body.data.users).toHaveLength(1);
+      expect(enrolledOnlyAfterSuccess.body.data.users[0]).toMatchObject({ id: buyer.id, enrollmentCount: 1 });
+
+      const detailAfterSuccess = await request(app).get(`/api/v1/admin/users/${buyer.id}`).set(admin());
+      expect(detailAfterSuccess.body.data.user.enrollmentCount).toBe(1);
+      expect(detailAfterSuccess.body.data.enrollments).toHaveLength(1);
+      expect(detailAfterSuccess.body.data.enrollments[0]).toMatchObject({
+        id: pendingEnrollment.id,
+        courseId: paidCourse.id,
+        lifecycle: "ACTIVE",
+      });
+
+      // Duplicate enroll is rejected with ALREADY_ENROLLED.
+      const dupRes = await request(app)
+        .post(`/api/v1/admin/users/${buyer.id}/enroll`)
+        .set(admin())
+        .send({ courseId: paidCourse.id });
+      expect(dupRes.status).toBe(409);
+      expect(dupRes.body.code).toBe("ALREADY_ENROLLED");
+
+      // 4. Admin removes the enrollment: disappears cleanly.
+      const removeRes = await request(app)
+        .delete(`/api/v1/admin/users/${buyer.id}/enrollments/${pendingEnrollment.id}`)
+        .set(admin());
+      expect(removeRes.status).toBe(204);
+
+      const detailAfterRemove = await request(app).get(`/api/v1/admin/users/${buyer.id}`).set(admin());
+      expect(detailAfterRemove.body.data.user.enrollmentCount).toBe(0);
+      expect(detailAfterRemove.body.data.enrollments).toEqual([]);
+    } finally {
+      await prisma.enrollment.deleteMany({ where: { courseId: paidCourse.id } });
+      await prisma.course.delete({ where: { id: paidCourse.id } });
+    }
   });
 });
 

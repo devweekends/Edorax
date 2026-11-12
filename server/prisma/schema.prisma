@@ -147,6 +147,18 @@ enum InstructorPayoutStatus {
   PAID
 }
 
+enum InstructorWithdrawalStatus {
+  REQUESTED
+  PAID
+  REJECTED
+}
+
+enum OrganizationCreditTransactionStatus {
+  RESERVED
+  COMMITTED
+  RELEASED
+}
+
 /// Org coupon seat that has been reserved for a learner (mentor assign / Pathment enroll).
 enum CouponUsageStatus {
   ISSUED
@@ -302,6 +314,7 @@ model User {
   courseMemberships CourseInstructor[]
   courseInstructorInvitesSent CourseInstructorInvite[] @relation("CourseInstructorInviteSender")
   enrollments   Enrollment[]
+  courseRatings CourseRating[]
   responses     Response[]
   reviewsGiven          Review[]       @relation("Reviewer")
   invitesSent           Invite[]       @relation("InviteSender")
@@ -332,6 +345,7 @@ model User {
   creditEntries                 CreditEntry[]
   unlockedCosmetics             UnlockedCosmetic[]
   rewardInventory               RewardInventory[]
+  instructorWithdrawals         InstructorWithdrawal[]
 }
 
 /// A learner's own AI provider key for AI interviews. Only the AES-256-GCM
@@ -435,6 +449,8 @@ model Course {
   pricingType    CoursePricingType @default(FREE)
   priceCents     Int          @default(0)
   currency       String       @default("USD")
+  /// Global instructor share used by the financial calculator.
+  instructorPayoutPercent Int  @default(70)
   sequential     Boolean      @default(true)
   /// When true, text open questions grade instantly with the learner's OpenRouter key instead of the mentor queue.
   autoGradeOpenQuestions Boolean @default(false)
@@ -461,12 +477,17 @@ model Course {
   chapterDrafts  CourseChapterDraft[]
   enrollments    Enrollment[]
   organizationCourses OrganizationCourse[]
+  organizationFreeAccesses CourseOrganizationAccess[]
   organizationCourseRequests OrganizationCourseRequest[]
   couponPools    OrganizationCouponPool[]
   couponUsages   CouponUsage[]
   instructorCoupons InstructorCoupon[]
   invites        Invite[]
   helpThreads    HelpThread[]
+  ratings        CourseRating[]
+  /// Cached aggregate of CourseRating, maintained on every write so catalog cards stay one query.
+  ratingAverage  Float?
+  ratingCount    Int          @default(0)
   publishedAt    DateTime?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
@@ -474,6 +495,25 @@ model Course {
   @@index([mentorId, status])
   leaderboardGroups     LeaderboardGroup[]
   leaderboardPlacements LeaderboardPlacement[]
+}
+
+/// One learner's rating of a completed course. Editable, never duplicated.
+model CourseRating {
+  id        String   @id @default(cuid())
+  courseId  String
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// 1–5 stars.
+  rating    Int
+  /// Optional written review. Public when present.
+  review    String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([courseId, userId])
+  @@index([courseId, createdAt])
+  @@index([userId])
 }
 
 model CreditEntry {
@@ -702,6 +742,9 @@ model Enrollment {
   lastNudgeSentAt   DateTime?
   startedAt         DateTime?
   completedAt       DateTime?
+  /// Set when the learner dismisses the post-completion rating prompt. Keeps
+  /// the one-time ask from reappearing; the course page keeps a small link.
+  ratingDismissedAt DateTime?
   variantSlug       String? // learner's variant in the course family; null = not picked yet
   variantChosenAt   DateTime?
   variantLockedAt   DateTime? // first chapter start fixes the learner's variant
@@ -719,6 +762,7 @@ model Enrollment {
   instructorCouponRedemption InstructorCouponRedemption?
   xpEntries         XpEntry[]
   couponUsage       CouponUsage?
+  organizationCreditTransaction OrganizationCreditTransaction?
   certificate       Certificate?
 
   @@unique([courseId, userId])
@@ -741,6 +785,37 @@ model Organization {
   enrollments     Enrollment[]
   couponPools     OrganizationCouponPool[]
   couponUsages    CouponUsage[]
+  freeCourseAccesses CourseOrganizationAccess[]
+  creditBalance   Int                     @default(0)
+  creditTransactions OrganizationCreditTransaction[]
+}
+
+/// Platform-admin-controlled allow-list for organizations that receive a paid course at no charge.
+model CourseOrganizationAccess {
+  courseId       String
+  organizationId String
+  course         Course       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  organization  Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+
+  @@id([courseId, organizationId])
+  @@index([organizationId])
+}
+
+/// Append-only organization credit movement linked to the enrollment it funds.
+model OrganizationCreditTransaction {
+  id            String                              @id @default(cuid())
+  organizationId String
+  organization  Organization                        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  enrollmentId  String                              @unique
+  enrollment    Enrollment                          @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  amountCredits Int
+  status        OrganizationCreditTransactionStatus @default(RESERVED)
+  createdAt     DateTime                            @default(now())
+  committedAt   DateTime?
+  releasedAt    DateTime?
+
+  @@index([organizationId, status])
 }
 
 /// Limited coupon seats an organization can grant for one course, or for any allocated course
@@ -920,12 +995,46 @@ model Payment {
   status       PaymentStatus @default(PENDING)
   provider     String?
   providerRef  String?
+  originalAmountCents Int               @default(0)
+  discountAmountCents Int                  @default(0)
+  organizationContributionCents Int         @default(0)
+  learnerAmountCents Int                @default(0)
+  instructorPayoutPercent Int               @default(0)
+  platformRevenueCents Int                  @default(0)
+  fundingSource String?
   paidAt       DateTime?
   instructorShareCents Int   @default(0)
   instructorPayoutStatus InstructorPayoutStatus @default(NOT_DUE)
   instructorPayoutPaidAt DateTime?
+  /// Set while these earnings are reserved by a withdrawal request, and kept after that request is paid.
+  payoutWithdrawalId String?
+  payoutWithdrawal   InstructorWithdrawal? @relation(fields: [payoutWithdrawalId], references: [id], onDelete: SetNull)
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
+
+  @@index([instructorPayoutStatus, status])
+  @@index([payoutWithdrawalId])
+}
+
+/// Instructor request to be paid the earnings already calculated on Payment rows.
+model InstructorWithdrawal {
+  id           String                      @id @default(cuid())
+  instructorId String
+  instructor   User                        @relation(fields: [instructorId], references: [id], onDelete: Cascade)
+  amountCents  Int
+  currency     String                      @default("USD")
+  status       InstructorWithdrawalStatus  @default(REQUESTED)
+  /// Where the instructor asked to receive the transfer.
+  note         String                      @db.VarChar(240)
+  /// Payment ids included when the request was created. Kept after a rejection.
+  paymentIds   String[]
+  requestedAt  DateTime                    @default(now())
+  resolvedAt   DateTime?
+  resolvedById String?
+  payments     Payment[]
+
+  @@index([instructorId, status])
+  @@index([status, requestedAt])
 }
 
 /// Denormalized daily study seconds — updated on heartbeat, not aggregated from Response.
@@ -1259,6 +1368,20 @@ model Review {
 }
 
 // Mentee help requests — separate from the open-question review queue (demo Day 3).
+enum HelpThreadKind {
+  QUESTION
+  LESSON_REPORT
+}
+
+enum HelpThreadCategory {
+  ERROR
+  TYPO
+  CONFUSING
+  BROKEN_LINK
+  SUGGESTION
+  OTHER
+}
+
 model HelpThread {
   id         String           @id @default(cuid())
   courseId   String
@@ -1268,6 +1391,13 @@ model HelpThread {
   menteeId   String
   mentee     User             @relation("HelpThreadsAsked", fields: [menteeId], references: [id], onDelete: Cascade)
   status     HelpThreadStatus @default(OPEN)
+  // A question is a conversation the learner starts with the mentor. A lesson
+  // report is the same thread machinery, tagged with a category and an optional
+  // block/quote so the instructor can find the exact passage that is wrong.
+  kind       HelpThreadKind     @default(QUESTION)
+  category   HelpThreadCategory?
+  blockId    String?
+  quote      String?            @db.Text
   menteeLastReadAt DateTime?
   createdAt  DateTime         @default(now())
   updatedAt  DateTime         @updatedAt
@@ -1277,6 +1407,7 @@ model HelpThread {
   @@index([courseId, status, updatedAt])
   @@index([menteeId, updatedAt])
   @@index([chapterId, menteeId])
+  @@index([courseId, kind, status])
 }
 
 model HelpMessage {

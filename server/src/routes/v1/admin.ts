@@ -1,3 +1,4 @@
+import { instructorWithdrawalsEnabled, requireInstructorWithdrawals } from "../../middlewares/instructor-withdrawals.js";
 import { prisma } from "../../db/prisma.js";
 import { approveManualAccess, listManualInstructorPayouts, markManualInstructorPayoutPaid, rejectManualAccess } from "../../services/enrollment/manual-access.js";
 import { created, noContent, ok } from "../../utils/responses.js";
@@ -19,6 +20,9 @@ import {
   bulkIdsOnlyBody,
   bulkSuspendBody,
   courseIdParams,
+  courseOrgAccessBody,
+  courseOrgAccessBulkBody,
+  courseOrgAccessParams,
   courseStatusBody,
   createDiscountCampaignBody,
   discountCampaignParams,
@@ -36,11 +40,16 @@ import {
   listUsersQuery,
   metricsQuery,
   orgIdParams,
-  pageQuery,
+  listAuditQuery,
   requestIdParams,
   suspendUserBody,
   totpCodeBody,
   userIdParams,
+  userEnrollmentParams,
+  grantOrganizationCreditsBody,
+  rejectWithdrawalBody,
+  withdrawalIdParams,
+  enrollUserBody,
 } from "../../validations/admin.js";
 
 // Platform administration: organisations and their integration access,
@@ -54,7 +63,30 @@ router.patch("/profile", profileLimiter, validateBody(adminProfileBody), admin.u
 router.patch("/password", profileLimiter, validateBody(adminPasswordBody), admin.updatePassword);
 
 router.get("/manual-access", async (_req, res) => {
-  const rows = await prisma.enrollment.findMany({ where: { lifecycle: "PAYMENT_REQUIRED", userId: { not: null } }, select: { id: true, createdAt: true, user: { select: { name: true, email: true } }, course: { select: { title: true } }, payment: { select: { amountCents: true, currency: true } } }, orderBy: { createdAt: "desc" }, take: 500 });
+  const rows = await prisma.enrollment.findMany({
+    where: { lifecycle: "PAYMENT_REQUIRED", userId: { not: null } },
+    select: {
+      id: true,
+      createdAt: true,
+      user: { select: { name: true, email: true } },
+      course: { select: { title: true } },
+      payment: {
+        select: {
+          amountCents: true,
+          currency: true,
+          originalAmountCents: true,
+          discountAmountCents: true,
+          organizationContributionCents: true,
+          learnerAmountCents: true,
+          instructorShareCents: true,
+          platformRevenueCents: true,
+          fundingSource: true,
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 500,
+  });
   ok(res, rows);
 });
 router.post("/manual-access/:enrollmentId/approve", validateParams(enrollmentParams), async (req, res) => {
@@ -71,9 +103,41 @@ router.post("/manual-payouts/:enrollmentId/paid", validateParams(enrollmentParam
   ok(res, { paid: true });
 });
 
+router.get("/withdrawals/config", (_req, res) => ok(res, { enabled: instructorWithdrawalsEnabled() }));
+router.get("/withdrawals", async (req, res) => {
+  const { listAdminWithdrawals } = await import("../../services/financials/withdrawals.js");
+  const status = req.query.status as "REQUESTED" | "PAID" | "REJECTED" | undefined;
+  ok(res, await listAdminWithdrawals(status));
+});
+router.post("/withdrawals/:withdrawalId/pay", requireInstructorWithdrawals, validateParams(withdrawalIdParams), async (req, res) => {
+  const { markWithdrawalPaid } = await import("../../services/financials/withdrawals.js");
+  ok(res, await markWithdrawalPaid(req.params.withdrawalId as string, req.user!));
+});
+router.post("/withdrawals/:withdrawalId/reject", requireInstructorWithdrawals, validateParams(withdrawalIdParams), validateBody(rejectWithdrawalBody), async (req, res) => {
+  const { rejectWithdrawal } = await import("../../services/financials/withdrawals.js");
+  const { reason } = req.body as { reason?: string };
+  ok(res, await rejectWithdrawal(req.params.withdrawalId as string, req.user!, reason));
+});
+
+router.get("/revenue", async (_req, res) => {
+  const { getPlatformRevenueReport } = await import("../../services/financials/revenue-report.js");
+  ok(res, await getPlatformRevenueReport());
+});
+
+router.post("/organizations/:orgId/credits", validateParams(orgIdParams), validateBody(grantOrganizationCreditsBody), async (req, res) => {
+  const { grantOrganizationCreditsAdmin } = await import("../../services/admin/organizations.js");
+  const { amountCredits, reason } = req.body as { amountCredits: number; reason?: string };
+  ok(res, await grantOrganizationCreditsAdmin(req.params.orgId as string, req.user!, amountCredits, reason));
+});
+
+
 router.get("/overview", admin.getOverview);
 router.get("/metrics", validateQuery(metricsQuery), admin.getMetrics);
 router.get("/courses", validateQuery(listCoursesQuery), admin.listCourses);
+router.post("/organizations/:orgId/free-access", validate({ params: orgIdParams, body: courseOrgAccessBulkBody }), admin.setOrgCoursesFreeAccess);
+router.get("/courses/:courseId/org-access", validateParams(courseIdParams), admin.listCourseOrgAccess);
+router.post("/courses/:courseId/org-access", validate({ params: courseIdParams, body: courseOrgAccessBody }), admin.grantCourseOrgAccess);
+router.delete("/courses/:courseId/org-access/:organizationId", validateParams(courseOrgAccessParams), admin.revokeCourseOrgAccess);
 router.get("/discount-campaigns", async (_req, res) => {
   const discounts = await import("../../services/admin/discount-campaigns.js");
   ok(res, await discounts.listDiscountCampaigns());
@@ -133,6 +197,13 @@ router.post("/users/:userId/revoke-sessions", validateParams(userIdParams), admi
 router.post("/users/:userId/suspend", validate({ params: userIdParams, body: suspendUserBody }), admin.suspendUser);
 router.post("/users/:userId/reinstate", validateParams(userIdParams), admin.reinstateUser);
 router.post("/users/:userId/reset-mfa", validateParams(userIdParams), admin.resetUserMfa);
+router.post("/users/:userId/enroll", validate({ params: userIdParams, body: enrollUserBody }), admin.enrollUser);
+router.delete(
+  "/users/:userId/enrollments/:enrollmentId",
+  validateParams(userEnrollmentParams),
+  admin.removeUserEnrollment
+);
+router.delete("/enrollments/:enrollmentId", validateParams(enrollmentParams), admin.removeEnrollment);
 
 router.post("/mfa/enroll", admin.enrollMfa);
 router.get("/mfa", admin.getMfa);
@@ -152,7 +223,7 @@ router.post("/admins", validateBody(grantAdminBody), admin.grantAdmin);
 router.post("/instructor-access-requests/:requestId/approve", validateParams(requestIdParams), admin.approveInstructorRequest);
 router.post("/instructor-access-requests/:requestId/reject", validateParams(requestIdParams), admin.rejectInstructorRequest);
 
-router.get("/audit", validateQuery(pageQuery), admin.listAudit);
+router.get("/audit", validateQuery(listAuditQuery), admin.listAudit);
 router.get("/audit/export", admin.exportAuditCsv);
 
 export default router;

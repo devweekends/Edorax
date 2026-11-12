@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { CourseLink as Link } from "./course-navigation";
 import { ArrowRight, BookOpen, Clock3, Layers3, MessageSquareText, Target } from "lucide-react";
 import { buttonVariants } from "../ui/button";
@@ -21,6 +22,8 @@ type CourseOverviewHeroProps = {
   moduleCount: number;
   chapterCount: number;
   estimatedHours: number | null;
+  /** Host-provided content under the continue button, e.g. the on-demand rating link. */
+  ratingLink?: ReactNode;
 };
 
 function splitTitle(title: string) {
@@ -45,6 +48,7 @@ export function CourseOverviewHero({
   moduleCount,
   chapterCount,
   estimatedHours,
+  ratingLink,
 }: CourseOverviewHeroProps) {
   const { lead, rest } = splitTitle(title);
 
@@ -146,6 +150,7 @@ export function CourseOverviewHero({
                 <ArrowRight aria-hidden />
               </Link>
             ) : null}
+            {ratingLink}
           </div>
         </aside>
       </div>

@@ -1,3 +1,5 @@
+import { wrapBalanced } from "../renderers/scene/geometry";
+
 // A sorting game as a pure model: cards come one at a time and each belongs
 // in exactly one bucket. A right answer moves to the next card; a wrong one
 // keeps the card, gives a short reason, and marks the card as missed.
@@ -115,6 +117,40 @@ export function wrapWords(text: string, max: number): string[] {
   }
   if (line) lines.push(line);
   return lines;
+}
+
+/** Rough advance per character of a tray's name (13.5px bold) and gloss (11.5px medium) on one line. */
+const LABEL_CHAR_W = 7.9;
+const SUB_CHAR_W = 6.2;
+
+/** True when a tray's name and gloss each fit on one line inside the tray, so the roomy layout with the big count can be used. */
+export function fitsOneLine(trayW: number, label: string, sub: string): boolean {
+  return label.length * LABEL_CHAR_W <= trayW - 10 && sub.length * SUB_CHAR_W <= trayW - 10;
+}
+
+/** How a tray's name and gloss wrap to its width. Every word is kept; a tray with many lines grows (see trayHeight). */
+export function trayLines(trayW: number, label: string, sub: string): { label: string[]; sub: string[] } {
+  // A wide tray keeps a little more air at its sides than a narrow one can afford.
+  const pad = trayW > 100 ? 16 : 8;
+  const labelChars = Math.floor((trayW - pad) / 7);
+  const subChars = Math.floor((trayW - pad) / 5.9);
+  return { label: wrapWords(breakLongWords(label, labelChars), labelChars), sub: wrapBalanced(breakLongWords(sub, subChars), subChars) };
+}
+
+/** Lets a word longer than a line (a_long_identifier, a/long/path) break after its separators. */
+export function breakLongWords(text: string, max: number): string {
+  return text.split(/\s+/).filter(Boolean).map((word) => (word.length > max ? word.replace(/([_/.:-])(?=.)/g, "$1 ") : word)).join(" ");
+}
+
+/** The standard tray height, and the height a tray needs for its wrapped name and gloss above the count in its corner. */
+export const TRAY_H = 104;
+export function trayHeight(trayW: number, buckets: { label: string; sub: string }[], dense: boolean): number {
+  const needs = buckets.map((bucket) => {
+    if (!dense && fitsOneLine(trayW, bucket.label, bucket.sub)) return TRAY_H;
+    const lines = trayLines(trayW, bucket.label, bucket.sub);
+    return 31 + (lines.label.length - 1) * 14.5 + 15 + Math.max(0, lines.sub.length - 1) * 13 + 6 + 22;
+  });
+  return Math.max(TRAY_H, ...needs.map(Math.ceil));
 }
 
 /** Problems in a deck that would break the game: unknown answers, duplicate ids, missing reasons. */

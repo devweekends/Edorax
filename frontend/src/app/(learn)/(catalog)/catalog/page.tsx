@@ -33,6 +33,8 @@ function CourseGrid({ courses }: { courses: CatalogCourseSummary[] }) {
               tags={course.tags}
               instructorName={course.instructorName}
               enrolledLabel={enrolledLabel}
+              ratingAverage={course.ratingAverage}
+              ratingCount={course.ratingCount}
             />
           </li>
         );

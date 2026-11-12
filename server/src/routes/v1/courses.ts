@@ -6,7 +6,7 @@ import { certificateClaimBody } from "../../validations/capstone.js";
 import { authenticate, optionalAuth } from "../../middlewares/authenticate.js";
 import { requireVerified } from "../../middlewares/require-verified.js";
 import { validateBody, validateParams } from "../../middlewares/validate.js";
-import { chapterPathParams, chooseSpecialisationBody, chooseVariantBody, courseSlugParams } from "../../validations/courses.js";
+import { chapterPathParams, chooseSpecialisationBody, chooseVariantBody, courseRatingBody, courseSlugParams } from "../../validations/courses.js";
 
 const router = Router();
 
@@ -14,6 +14,22 @@ router.get("/:courseSlug/continue", optionalAuth, validateParams(courseSlugParam
 router.get("/:courseSlug/certificate", authenticate, requireVerified, validateParams(courseSlugParams), certificates.mine);
 router.post("/:courseSlug/certificate", authenticate, requireVerified, validateParams(courseSlugParams), validateBody(certificateClaimBody), certificates.claim);
 router.get("/:courseSlug/overview", authenticate, requireVerified, validateParams(courseSlugParams), courses.overview);
+router.get("/:courseSlug/rating", authenticate, requireVerified, validateParams(courseSlugParams), courses.getRating);
+router.put(
+  "/:courseSlug/rating",
+  authenticate,
+  requireVerified,
+  validateParams(courseSlugParams),
+  validateBody(courseRatingBody),
+  courses.putRating
+);
+router.post(
+  "/:courseSlug/rating/dismiss",
+  authenticate,
+  requireVerified,
+  validateParams(courseSlugParams),
+  courses.dismissRating
+);
 router.get("/:courseSlug/chapters/:chapterSlug", authenticate, requireVerified, validateParams(chapterPathParams), courses.chapter);
 router.get("/:courseSlug/chapters/:chapterSlug/download", authenticate, requireVerified, validateParams(chapterPathParams), courses.downloadChapter);
 router.put(

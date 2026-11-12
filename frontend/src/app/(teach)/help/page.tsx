@@ -17,16 +17,19 @@ function initials(name: string) {
 export default async function MentorHelpInboxPage({
   searchParams,
 }: {
-  searchParams: Promise<{ courseId?: string; status?: string }>;
+  searchParams: Promise<{ courseId?: string; status?: string; kind?: string }>;
 }) {
   await requireTeachSurface();
-  const { courseId: courseFilter, status: rawStatus } = await searchParams;
+  const { courseId: courseFilter, status: rawStatus, kind: rawKind } = await searchParams;
   const statusFilter =
     rawStatus === "resolved" || rawStatus === "all" ? rawStatus : undefined;
+  const kindFilter =
+    rawKind === "questions" || rawKind === "reports" ? rawKind : undefined;
 
   const query = new URLSearchParams();
   if (courseFilter) query.set("courseId", courseFilter);
   if (statusFilter) query.set("status", statusFilter);
+  if (kindFilter) query.set("kind", kindFilter);
   const suffix = query.size ? `?${query}` : "";
   const {
     courses,
@@ -66,6 +69,15 @@ export default async function MentorHelpInboxPage({
             <option value="open">Open ({openHelpCount})</option>
             <option value="resolved">Resolved</option>
             <option value="all">All</option>
+          </AutoSubmitSelect>
+          <AutoSubmitSelect
+            name="kind"
+            defaultValue={kindFilter ?? "all"}
+            className="h-9 rounded-lg border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-ring"
+          >
+            <option value="all">Everything</option>
+            <option value="questions">Questions</option>
+            <option value="reports">Lesson reports</option>
           </AutoSubmitSelect>
           {courses.length > 1 && (
             <AutoSubmitSelect
@@ -121,6 +133,12 @@ export default async function MentorHelpInboxPage({
                       <p className="truncate text-[15px] font-semibold text-foreground">
                         {thread.menteeLabel}
                       </p>
+                      {thread.kind === "LESSON_REPORT" && (
+                        <span className="rounded-full bg-destructive/10 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-destructive">
+                          Report
+                          {thread.category ? ` · ${thread.category.toLowerCase().replace("_", " ")}` : ""}
+                        </span>
+                      )}
                       {isAging && (
                         <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200">
                           {Math.floor(thread.ageHours)}h waiting

@@ -15,7 +15,9 @@ import {
   Menu,
   MessageSquareText,
   Settings2,
+  Sparkles,
   Users,
+  Wallet,
   type LucideIcon,
 } from "lucide-react";
 import { WorkspaceAccountMenu } from "@/components/workspace/workspace-account-menu";
@@ -114,6 +116,18 @@ export function MentorWorkspaceSidebar({
       icon: LibraryBig,
       active: pathname === "/courses",
       count: courses.length,
+    },
+    {
+      label: "Wallet & Payouts",
+      href: "/wallet",
+      icon: Wallet,
+      active: pathname.startsWith("/wallet"),
+    },
+    {
+      label: "Campaigns",
+      href: "/campaigns",
+      icon: Sparkles,
+      active: pathname.startsWith("/campaigns"),
     },
   ];
   const courseItems: NavItem[] = [

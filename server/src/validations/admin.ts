@@ -6,7 +6,10 @@ export const orgIdParams = params("orgId");
 export const allocationParams = z.object({ orgId: id, courseId: id });
 export const requestIdParams = params("requestId");
 export const userIdParams = params("userId");
+export const userEnrollmentParams = z.object({ userId: id, enrollmentId: id });
 export const courseIdParams = params("courseId");
+export const enrollUserBody = z.object({ courseId: id });
+export type EnrollUserBody = z.infer<typeof enrollUserBody>;
 export const createDiscountCampaignBody = z.object({
   label: z.string().trim().min(2).max(100),
   code: z.string().trim().min(3).max(32).regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/).nullable().optional(),
@@ -14,19 +17,27 @@ export const createDiscountCampaignBody = z.object({
   maxRedemptions: z.coerce.number().int().min(1).max(100000),
   expiresAt: z.string().datetime().nullable().optional(),
   autoApply: z.boolean().default(false),
-  scope: z.enum(["ALL", "CATEGORY", "SUBCATEGORY", "TAG", "SELECTED_COURSES"]),
+  scope: z.enum(["ALL", "CATEGORY", "SUBCATEGORY", "TAG"]),
   category: z.enum(["TECH", "SOFT_SKILLS"]).optional(),
   subcategory: z.string().trim().min(1).max(80).optional(),
   tag: z.string().trim().min(1).max(32).optional(),
-  courseIds: z.array(id).max(500).default([]),
 }).refine((body) => body.code || body.autoApply, { message: "Enter a coupon code or enable automatic discount." })
   .refine((body) => body.scope !== "CATEGORY" || body.category, { message: "Choose a category." })
   .refine((body) => body.scope !== "SUBCATEGORY" || body.subcategory, { message: "Choose a subcategory." })
-  .refine((body) => body.scope !== "TAG" || body.tag, { message: "Choose a tag." })
-  .refine((body) => body.scope !== "SELECTED_COURSES" || body.courseIds.length > 0, { message: "Select at least one course." });
+  .refine((body) => body.scope !== "TAG" || body.tag, { message: "Choose a tag." });
 export type CreateDiscountCampaignBody = z.infer<typeof createDiscountCampaignBody>;
 export const discountCampaignParams = params("campaignId");
 export const discountCampaignActiveBody = z.object({ active: z.boolean() });
+
+/** Platform-admin free-for-organization grants (CourseOrganizationAccess). */
+export const courseOrgAccessParams = z.object({ courseId: id, organizationId: id });
+export const courseOrgAccessBody = z.object({ organizationId: id });
+/** Bulk change of free-for-organization for several allocated courses at once. */
+export const courseOrgAccessBulkBody = z.object({
+  courseIds: z.array(id).min(1).max(500),
+  freeForOrganization: z.boolean(),
+});
+export type CourseOrgAccessBulkBody = z.infer<typeof courseOrgAccessBulkBody>;
 
 /** Change a course's publish state from the admin catalog. */
 export const courseStatusBody = z.object({
@@ -71,7 +82,7 @@ const expiresAt = z
   .transform((value) => (value ? value : undefined));
 
 export const allocationsBody = z.object({
-  isAllowed: z.boolean(),
+  isAllowed: z.boolean().optional(),
   courses: z.array(z.object({ courseId: id, maxEnrollments, expiresAt })).max(500),
   removeCourseIds: z.array(id).max(500).default([]),
 });
@@ -135,6 +146,7 @@ const listQuery = z.object({
 export const listUsersQuery = listQuery.extend({
   role: z.enum(["MENTEE", "MENTOR", "ADMIN"]).optional(),
   verified: z.enum(["true", "false"]).optional(),
+  enrolled: z.enum(["true", "false"]).optional(),
   /** The pending instructor-access panel pages independently of the account list. */
   requestsPage: z.coerce.number().int().min(1).optional(),
 });
@@ -152,6 +164,13 @@ export const pageQuery = z.object({
 });
 export type PageQuery = z.infer<typeof pageQuery>;
 
+/** The audit log accepts a free-text search and an optional target type. */
+export const listAuditQuery = pageQuery.extend({
+  query: z.string().trim().max(120).optional(),
+  targetType: z.string().trim().max(40).optional(),
+});
+export type ListAuditQuery = z.infer<typeof listAuditQuery>;
+
 export const listOrganizationsQuery = pageQuery.extend({
   query: z.string().trim().max(120).optional(),
 });
@@ -168,3 +187,20 @@ export const metricsQuery = z.object({
   range: z.enum(["7", "30", "90"]).optional(),
 });
 export type MetricsQuery = z.infer<typeof metricsQuery>;
+
+export const withdrawalIdParams = z.object({
+  withdrawalId: z.string().min(1),
+});
+export type WithdrawalIdParams = z.infer<typeof withdrawalIdParams>;
+
+export const rejectWithdrawalBody = z.object({
+  reason: z.string().trim().max(240).optional(),
+});
+export type RejectWithdrawalBody = z.infer<typeof rejectWithdrawalBody>;
+
+export const grantOrganizationCreditsBody = z.object({
+  amountCredits: z.number().int().positive(),
+  reason: z.string().trim().max(240).optional(),
+});
+export type GrantOrganizationCreditsBody = z.infer<typeof grantOrganizationCreditsBody>;
+

@@ -9,6 +9,7 @@ import {
 } from "../../middlewares/validate.js";
 import {
   askFromChapterBody,
+  lessonReportBody,
   replyBody,
   threadParams,
 } from "../../validations/help.js";
@@ -21,6 +22,7 @@ router.use(authenticate, requireVerified);
 
 router.get("/threads", help.list);
 router.post("/threads", validateBody(askFromChapterBody), help.ask);
+router.post("/reports", validateBody(lessonReportBody), help.reportLesson);
 router.get("/threads/:threadId", validateParams(threadParams), help.detail);
 router.post(
   "/threads/:threadId/seen",

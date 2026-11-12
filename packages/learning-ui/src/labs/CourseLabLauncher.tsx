@@ -40,7 +40,8 @@ export function CourseLabLauncher({ spec }: { spec: HldLabSpec }) {
           <span className="lab-mono shrink-0 rounded-[4px] border border-sky-300/60 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-sky-200">
             Hands-on lab
           </span>
-          <span className="lab-display truncate text-sm font-semibold">{spec.title}</span>
+          {/* A long title wraps on a phone, where one line would cut it off; from sm up there is room to keep one line. */}
+          <span className="lab-display min-w-0 text-sm font-semibold sm:truncate">{spec.title}</span>
         </div>
         <span className="lab-mono hidden shrink-0 text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400 sm:inline">
           Focused workspace

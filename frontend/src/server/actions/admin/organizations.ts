@@ -66,7 +66,6 @@ export async function bulkUpsertOrganizationCourseAllocationsAction(
     await adminCall<void>(`/api/v1/admin/organizations/${encodeURIComponent(organizationId)}/allocations`, {
       method: "PUT",
       json: {
-        isAllowed: formData.get("isAllowed") === "on" || formData.get("isAllowed") === "true",
         courses: courseIds.map((courseId) => ({
           courseId,
           maxEnrollments: Number(formData.get(`maxEnrollments_${courseId}`) ?? 0),
@@ -112,6 +111,32 @@ export async function setAllocationLeaderboardAction(formData: FormData): Promis
   revalidatePath(`/admin/organizations/${organizationId}`);
 }
 
+
+
+
+export async function grantOrganizationCreditsAction(
+  _prev: AdminActionState,
+  formData: FormData
+): Promise<AdminActionState> {
+  const organizationId = String(formData.get("organizationId") ?? "");
+  const amountDollars = Number(formData.get("amountDollars") ?? 0);
+  const reason = String(formData.get("reason") ?? "").trim() || undefined;
+  if (!organizationId) return { ok: false, message: "Missing organization." };
+  if (amountDollars <= 0) return { ok: false, message: "Credit amount must be greater than zero." };
+
+  const amountCredits = Math.round(amountDollars * 100);
+
+  return runAdminAction(async () => {
+    await adminCall(`/api/v1/admin/organizations/${encodeURIComponent(organizationId)}/credits`, {
+      method: "POST",
+      json: { amountCredits, reason },
+    });
+    revalidatePath(`/admin/organizations/${organizationId}`);
+    return `Granted ${amountCredits} credits ($${amountDollars.toFixed(2)}) to organization.`;
+  });
+}
+
+
 /** Create a limited coupon pool for one allocated course, or a general pool for any allocated course. */
 export async function createOrganizationCouponPoolAction(
   _prev: AdminActionState,
@@ -152,3 +177,6 @@ export async function setOrganizationCouponPoolActiveAction(formData: FormData):
   );
   revalidatePath(`/admin/organizations/${organizationId}`);
 }
+
+
+

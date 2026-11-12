@@ -24,6 +24,16 @@ export type HelpMessageView = {
   seenAt: string | null;
 };
 
+export type HelpThreadKind = "QUESTION" | "LESSON_REPORT";
+
+export type HelpThreadCategory =
+  | "ERROR"
+  | "TYPO"
+  | "CONFUSING"
+  | "BROKEN_LINK"
+  | "SUGGESTION"
+  | "OTHER";
+
 export type HelpThreadView = {
   id: string;
   status: HelpThreadStatus;
@@ -34,6 +44,10 @@ export type HelpThreadView = {
 export type HelpThreadSummary = {
   id: string;
   status: HelpThreadStatus;
+  kind: HelpThreadKind;
+  category: HelpThreadCategory | null;
+  blockId: string | null;
+  quote: string | null;
   createdAt: string;
   updatedAt: string;
   course: { slug: string; title: string };
@@ -51,6 +65,10 @@ export type HelpThreadDetail = HelpThreadView & {
   mentee: { id: string; name: string | null; email: string };
   course: { slug: string; title: string };
   chapter: { slug: string; title: string } | null;
+  kind: HelpThreadKind;
+  category: HelpThreadCategory | null;
+  blockId: string | null;
+  quote: string | null;
 };
 
 /** Result of sending a message — carries the saved message so the sender's UI can settle it. */

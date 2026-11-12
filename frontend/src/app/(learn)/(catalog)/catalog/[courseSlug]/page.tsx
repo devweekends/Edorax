@@ -4,7 +4,7 @@ import type { CatalogCourseDetail } from "@/shared/api/catalog";
 import { getSessionUser } from "@/server/auth/guards";
 import { cn } from "@/lib/utils";
 import { SITE_SHARE_IMAGE, SITE_URL } from "@/lib/site";
-import { serverApiFetchOrNotFound } from "@/lib/api-server";
+import { serverApiFetch, serverApiFetchOrNotFound } from "@/lib/api-server";
 import { selfEnrollInCourseAction } from "@/server/actions/enroll";
 import { CourseCover } from "@/components/learn/course-cover";
 import { formatPriceCents } from "@/lib/format-price";
@@ -12,9 +12,21 @@ import { buttonVariants } from "@/components/ui/button";
 import { PendingSubmitButton } from "@/components/ui/pending-submit-button";
 import { CourseProjectShowcase } from "@/components/learn/course-project-showcase";
 import { CourseRoadmap } from "@/components/learn/course-roadmap";
+import { CourseReviews, type CourseReviewsView } from "@/components/learn/course-reviews";
+import { StarRating } from "@/components/learn/star-rating";
 
 async function loadCourse(courseSlug: string) {
   return serverApiFetchOrNotFound<CatalogCourseDetail>(`/api/v1/catalog/${encodeURIComponent(courseSlug)}`);
+}
+
+async function loadReviews(courseSlug: string): Promise<CourseReviewsView | null> {
+  try {
+    return await serverApiFetch<CourseReviewsView>(
+      `/api/v1/catalog/${encodeURIComponent(courseSlug)}/reviews?page=1&pageSize=5`
+    );
+  } catch {
+    return null;
+  }
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ courseSlug: string }> }): Promise<Metadata> {
@@ -59,6 +71,7 @@ export default async function CatalogCoursePage({
   const { courseSlug } = await params;
   const user = await getSessionUser();
   const course = await loadCourse(courseSlug);
+  const reviews = await loadReviews(course.slug);
   const hasAccess = course.access === "active";
   const needsPayment = course.access === "payment_required";
   // Visitors sign up first and land straight in the course (see app/enroll); learners enroll in one
@@ -117,6 +130,15 @@ export default async function CatalogCoursePage({
           {course.instructorName ? `Instructor · ${course.instructorName}` : "Instructor-led course"}
         </p>
         <h1 className="mt-1 text-3xl font-semibold tracking-tight">{course.title}</h1>
+        {course.ratingCount > 0 && course.ratingAverage != null ? (
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+            <StarRating value={course.ratingAverage} size={16} />
+            <span className="font-medium text-foreground">{course.ratingAverage.toFixed(1)}</span>
+            <span>
+              ({course.ratingCount} rating{course.ratingCount === 1 ? "" : "s"})
+            </span>
+          </div>
+        ) : null}
         {course.description ? (
           <p className="mt-3 text-sm leading-6 text-muted-foreground">{course.description}</p>
         ) : null}
@@ -145,6 +167,8 @@ export default async function CatalogCoursePage({
         <div className="mt-6 hidden flex-wrap items-center gap-3 sm:flex">{enrollActions}</div>
       </header>
       </div>
+
+      {reviews ? <CourseReviews reviews={reviews} /> : null}
 
       <div className="mt-6">
         <CourseProjectShowcase courseSlug={course.slug} />

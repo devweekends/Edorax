@@ -12,6 +12,7 @@ import type { Prisma } from "../../generated/prisma/index.js";
 import { NotFoundError, UnprocessableError } from "../../utils/errors.js";
 import type { AllocationsBody, CreateOrganizationBody, ListOrganizationsQuery } from "../../validations/admin.js";
 import { hashIntegrationSecret } from "../integrations/credential-hash.js";
+import { CONFIRMED_ENROLLMENT_WHERE } from "../enrollment/lifecycle.js";
 import { ADMIN_AUDIT_ACTIONS, recordAdminAction, type AdminActor } from "./audit.js";
 import { pageInfo, resolvePaging } from "./paging.js";
 
@@ -37,7 +38,12 @@ export async function listOrganizations(filters: ListOrganizationsQuery = {}): P
     skip: paging.skip,
     take: paging.take,
     include: {
-      _count: { select: { courseAllocations: true, enrollments: true } },
+      _count: {
+        select: {
+          courseAllocations: true,
+          enrollments: { where: CONFIRMED_ENROLLMENT_WHERE },
+        },
+      },
       apiCredentials: { where: { active: true }, take: 1, select: { accessKey: true } },
     },
   });
@@ -90,18 +96,34 @@ async function requireOrganization(orgId: string) {
 const PUBLISHED_COURSES_CAP = 500;
 
 export async function getOrganization(orgId: string): Promise<AdminOrganizationDetail> {
-  const [org, publishedCourses] = await Promise.all([
+  const [org, creditTransactions, publishedCourses] = await Promise.all([
     prisma.organization.findUnique({
       where: { id: orgId },
       include: {
         apiCredentials: { orderBy: { createdAt: "desc" } },
         courseAllocations: {
           orderBy: { updatedAt: "desc" },
-          include: { course: { select: { id: true, title: true, slug: true, status: true } } },
+          include: {
+            course: {
+              select: {
+                id: true,
+                title: true,
+                slug: true,
+                status: true,
+                organizationFreeAccesses: { where: { organizationId: orgId }, select: { organizationId: true } },
+              },
+            },
+          },
         },
         courseRequests: { where: { status: "PENDING" }, include: { course: { select: { title: true, slug: true } } } },
-        _count: { select: { enrollments: true } },
+        _count: { select: { enrollments: { where: CONFIRMED_ENROLLMENT_WHERE } } },
       },
+    }),
+    prisma.organizationCreditTransaction.findMany({
+      where: { organizationId: orgId },
+      orderBy: { createdAt: "desc" },
+      take: 25,
+      include: { enrollment: { select: { course: { select: { title: true } } } } },
     }),
     // One extra row tells us whether the cap was hit.
     prisma.course.findMany({
@@ -119,7 +141,23 @@ export async function getOrganization(orgId: string): Promise<AdminOrganizationD
   const couponPools = await listCouponPools(org.id);
 
   return {
-    organization: { id: org.id, slug: org.slug, name: org.name, enrollmentCount: org._count.enrollments },
+    organization: {
+      id: org.id,
+      slug: org.slug,
+      name: org.name,
+      enrollmentCount: org._count.enrollments,
+      creditBalance: org.creditBalance,
+    },
+    creditTransactions: creditTransactions.map((transaction) => ({
+      id: transaction.id,
+      amountCredits: transaction.amountCredits,
+      status: transaction.status,
+      createdAt: transaction.createdAt.toISOString(),
+      committedAt: transaction.committedAt?.toISOString() ?? null,
+      releasedAt: transaction.releasedAt?.toISOString() ?? null,
+      enrollmentId: transaction.enrollmentId,
+      courseTitle: transaction.enrollment.course.title,
+    })),
     credentials: org.apiCredentials.map((cred) => ({
       id: cred.id,
       accessKey: cred.accessKey,
@@ -127,9 +165,11 @@ export async function getOrganization(orgId: string): Promise<AdminOrganizationD
       active: cred.active,
       lastUsedAt: cred.lastUsedAt?.toISOString() ?? null,
     })),
-    allocations: org.courseAllocations.map((row) => ({
+    allocations: org.courseAllocations.map(({ course: { organizationFreeAccesses, ...course }, ...row }) => ({
       id: row.id,
-      course: row.course,
+      course,
+      // Platform-admin grant: the course is free for this org's Pathment assignments.
+      freeForOrganization: organizationFreeAccesses.length > 0,
       isAllowed: row.isAllowed,
       maxEnrollments: row.maxEnrollments,
       currentEnrollments: row.currentEnrollments,
@@ -218,8 +258,8 @@ export async function upsertAllocations(actor: AdminActor, orgId: string, input:
       action: ADMIN_AUDIT_ACTIONS.ORGANIZATION_ALLOCATE,
       targetType: "Organization",
       targetId: orgId,
-      summary: `${input.isAllowed ? "Allocated" : "Updated"} ${rows.length} course${rows.length === 1 ? "" : "s"} for ${organization.name}`,
-      metadata: { courseIds, removedCourseIds: removeCourseIds, isAllowed: input.isAllowed },
+      summary: `Updated ${rows.length} course${rows.length === 1 ? "" : "s"} for ${organization.name}`,
+      metadata: { courseIds, removedCourseIds: removeCourseIds, isAllowed: input.isAllowed ?? null },
     });
   });
 }
@@ -228,16 +268,16 @@ export type AllocationInput = {
   organizationId: string;
   courseId: string;
   maxEnrollments: number;
-  isAllowed: boolean;
+  isAllowed?: boolean;
   expiresAt: Date | null;
 };
 
 export function upsertAllocation(tx: Prisma.TransactionClient, input: AllocationInput) {
-  const { organizationId, courseId, ...fields } = input;
+  const { organizationId, courseId, isAllowed, ...fields } = input;
   return tx.organizationCourse.upsert({
     where: { organizationId_courseId: { organizationId, courseId } },
-    create: { organizationId, courseId, ...fields },
-    update: fields,
+    create: { organizationId, courseId, ...fields, isAllowed: isAllowed ?? true },
+    update: { ...fields, ...(isAllowed === undefined ? {} : { isAllowed }) },
   });
 }
 
@@ -295,4 +335,32 @@ export async function setAllocationLeaderboard(orgId: string, courseId: string, 
     data: { leaderboardEnabled: enabled },
   });
   if (count === 0) throw new NotFoundError("Allocation not found");
+}
+
+export async function grantOrganizationCreditsAdmin(
+  orgId: string,
+  actor: AdminActor,
+  amountCredits: number,
+  reason?: string
+): Promise<{ id: string; creditBalance: number }> {
+  return prisma.$transaction(async (tx) => {
+    const org = await tx.organization.findUnique({
+      where: { id: orgId },
+      select: { id: true, name: true, creditBalance: true },
+    });
+    if (!org) throw new NotFoundError("Organization not found.");
+    const updated = await tx.organization.update({
+      where: { id: orgId },
+      data: { creditBalance: { increment: amountCredits } },
+      select: { id: true, creditBalance: true },
+    });
+    await recordAdminAction(tx, {
+      actor,
+      action: ADMIN_AUDIT_ACTIONS.ORGANIZATION_GRANT_CREDITS,
+      targetType: "Organization",
+      targetId: org.id,
+      summary: `Granted ${amountCredits} credits ($${(amountCredits / 100).toFixed(2)}) to ${org.name}.${reason ? ` Reason: ${reason}` : ""}`,
+    });
+    return updated;
+  });
 }

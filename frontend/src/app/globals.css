@@ -718,6 +718,32 @@
   animation: mascot-steam 1600ms ease-in-out infinite;
 }
 
+@keyframes dot-yip-hop {
+  0%,
+  100% {
+    transform: translateY(0) scale(1, 1) rotate(0deg);
+  }
+  18% {
+    transform: translateY(-12px) scale(0.96, 1.06) rotate(-4deg);
+  }
+  36% {
+    transform: translateY(0) scale(1.06, 0.93) rotate(0deg);
+  }
+  54% {
+    transform: translateY(-10px) scale(0.97, 1.05) rotate(4deg);
+  }
+  72% {
+    transform: translateY(0) scale(1.04, 0.95) rotate(0deg);
+  }
+}
+
+.dot-yip {
+  transform-origin: 50% 92%;
+  animation:
+    mascot-enter 340ms cubic-bezier(0.34, 1.4, 0.64, 1) both,
+    dot-yip-hop 1100ms ease-in-out 280ms infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .mascot-enter,
   .mascot-motion-jump,
@@ -733,7 +759,8 @@
   .mascot-part-twinkle,
   .mascot-part-glow,
   .mascot-part-confetti,
-  .mascot-part-steam {
+  .mascot-part-steam,
+  .dot-yip {
     animation: none !important;
     opacity: 1 !important;
     transform: none !important;

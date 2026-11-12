@@ -1,5 +1,5 @@
 // GENERATED from server/src/shared — do not edit here. Run `pnpm sync-shared` in server/.
-import type { CourseCategory, CoursePricingType, CourseStatus, EnrollmentLifecycle } from "../domain/enums";
+import type { CourseCategory, CoursePricingType, CourseStatus, EnrollmentLifecycle, EnrollStatus } from "../domain/enums";
 import type { CourseTrack } from "../lib/course-tracks";
 import type { SyllabusModule } from "./syllabus";
 
@@ -24,6 +24,9 @@ export type CatalogCourseSummary = {
   instructorName: string | null;
   moduleCount: number;
   chapterCount: number;
+  /** Cached course rating; null until the first review lands. */
+  ratingAverage: number | null;
+  ratingCount: number;
   /** The caller's enrollment lifecycle in this course; null for anonymous visitors. */
   enrollmentLifecycle: EnrollmentLifecycle | null;
 };
@@ -61,7 +64,11 @@ export type CourseOverview = {
     instructorName: string | null;
   };
   access: "active" | "payment_required" | "none";
-  enrollment: { percentComplete: number; chaptersCompleted: number; pendingReviews: number } | null;
+  enrollment: { percentComplete: number; chaptersCompleted: number; pendingReviews: number; status: EnrollStatus } | null;
+  /** The learner's own rating, once submitted. Drives the overview card and edit state. */
+  rating: { rating: number; review: string | null; updatedAt: string } | null;
+  /** The learner dismissed the rating prompt; keep only the small on-demand link. */
+  ratingDismissed: boolean;
   /** Present when an org coupon unlocked or discounted this enrollment. */
   coupon: CourseCouponEntitlement | null;
   /** Variant and specialisation for a course in a family; null otherwise or without access. */

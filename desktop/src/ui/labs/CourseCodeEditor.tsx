@@ -8,9 +8,7 @@ import {
 } from 'lucide-react';
 import { ProjectEditor } from './ProjectEditor';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Terminal } from '@xterm/xterm';
-import { FitAddon } from '@xterm/addon-fit';
-import '@xterm/xterm/css/xterm.css';
+import { LabTerminal } from './LabTerminal';
 import type { CodeEditorProps } from '@buildment/learning-ui/blocks/exercises/CodeExerciseClient';
 import type { LabStatus } from '../../domain/labs';
 
@@ -21,97 +19,6 @@ const readableError = (error: unknown) =>
 
 const button =
   'rounded-lg border border-border px-3 py-2 text-xs font-medium hover:bg-muted disabled:opacity-40';
-
-function LabTerminal({
-  blockId,
-  onError,
-  label,
-}: {
-  label: string;
-  blockId: string;
-  onError: (message: string) => void;
-}) {
-  const host = useRef<HTMLDivElement>(null);
-  const [revision, setRevision] = useState(0);
-  useEffect(() => {
-    if (!host.current) return;
-    const api = window.buildment.labs;
-    const id = crypto.randomUUID();
-    let active = true;
-    let ready = false;
-    const terminal = new Terminal({
-      fontSize: 13,
-      cursorBlink: true,
-      convertEol: true,
-      theme: { background: '#15171c' },
-    });
-    const fit = new FitAddon();
-    terminal.loadAddon(fit);
-    terminal.open(host.current);
-    const report = (error: unknown) => {
-      if (active) onError(String(error));
-    };
-    const resize = () => {
-      fit.fit();
-      if (ready)
-        void api
-          .resizeTerminal(
-            blockId,
-            id,
-            Math.min(500, terminal.cols),
-            Math.min(500, terminal.rows),
-          )
-          .catch(report);
-    };
-    const off = api.onTerminalData((event) => {
-      if (event.id === id) terminal.write(event.data);
-    });
-    const input = terminal.onData((data) => {
-      // Chunk large pastes to the IPC input limit.
-      for (let offset = 0; offset < data.length; offset += 2048)
-        void api
-          .terminalInput(blockId, id, data.slice(offset, offset + 2048))
-          .catch(report);
-    });
-    let frame = 0;
-    const observer = new ResizeObserver(() => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(resize);
-    });
-    observer.observe(host.current);
-    void api
-      .openTerminal(blockId, id)
-      .then(() => {
-        if (!active) {
-          void api.closeTerminal(blockId, id);
-          return;
-        }
-        ready = true;
-        resize();
-      })
-      .catch(report);
-    return () => {
-      active = false;
-      cancelAnimationFrame(frame);
-      observer.disconnect();
-      off();
-      input.dispose();
-      terminal.dispose();
-      void api.closeTerminal(blockId, id).catch(() => {});
-    };
-  }, [blockId, revision, onError]);
-  return (
-    <div className="flex h-full min-w-0 overflow-hidden min-h-[170px] flex-col bg-[#15171c] text-white">
-      <div className="flex items-center justify-between border-b border-white/10 px-4 py-2 text-xs">
-        <span>{label}</span>
-        <button className="underline" onClick={() => setRevision((n) => n + 1)}>
-          Reconnect
-        </button>
-      </div>
-      <div ref={host} className="min-h-0 flex-1 px-3 pt-2" />
-    </div>
-  );
-}
 
 export default function CourseCodeEditor({
   blockId,
@@ -283,7 +190,7 @@ export default function CourseCodeEditor({
         <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2 text-xs">
           <span
             aria-hidden
-            className={`h-2 w-2 shrink-0 rounded-full ${status?.running ? 'bg-emerald-500' : 'bg-amber-500'}`}
+            className={`h-2 w-2 shrink-0 rounded-full ${status?.running ? 'bg-primary' : 'bg-[var(--brand-yellow)]'}`}
           />
           <span role="status" className="flex-1">
             {status?.message || 'Checking workspace…'}

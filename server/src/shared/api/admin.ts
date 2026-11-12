@@ -86,6 +86,8 @@ export type AdminCredentialRow = {
 export type AdminAllocationRow = {
   id: string;
   course: { id: string; slug: string; title: string; status: CourseStatus };
+  /** Platform-admin grant: this course is free for the organization's Pathment assignments. */
+  freeForOrganization: boolean;
   isAllowed: boolean;
   maxEnrollments: number;
   currentEnrollments: number;
@@ -112,7 +114,17 @@ export type AdminCouponPoolRow = {
 };
 
 export type AdminOrganizationDetail = {
-  organization: { id: string; slug: string; name: string; enrollmentCount: number };
+  organization: { id: string; slug: string; name: string; enrollmentCount: number; creditBalance: number };
+  creditTransactions: Array<{
+    id: string;
+    amountCredits: number;
+    status: "RESERVED" | "COMMITTED" | "RELEASED";
+    createdAt: string;
+    committedAt: string | null;
+    releasedAt: string | null;
+    enrollmentId: string;
+    courseTitle: string;
+  }>;
   credentials: AdminCredentialRow[];
   allocations: AdminAllocationRow[];
   couponPools: AdminCouponPoolRow[];
@@ -180,6 +192,15 @@ export type AdminCoursesView = {
   page: AdminPageInfo;
 };
 
+/** Platform-admin free-for-organization grants for one course. */
+export type AdminCourseOrgAccessView = {
+  course: { id: string; title: string; slug: string };
+  grants: Array<{
+    organization: { id: string; name: string; slug: string };
+    createdAt: string;
+  }>;
+};
+
 /** One-time TOTP enrollment payload: the secret, the otpauth URI, and a scannable QR (data URL). */
 export type AdminTotpEnrollment = { secret: string; otpauthUri: string; qrDataUrl: string };
 
@@ -207,6 +228,7 @@ export type AdminUserDetail = {
   };
   enrollments: Array<{
     id: string;
+    courseId: string;
     courseTitle: string;
     courseSlug: string;
     lifecycle: EnrollmentLifecycle;
@@ -226,6 +248,7 @@ export const ADMIN_ERROR_CODES = {
   ALREADY_VERIFIED: "ALREADY_VERIFIED",
   NOT_SUSPENDED: "NOT_SUSPENDED",
   ALREADY_SUSPENDED: "ALREADY_SUSPENDED",
+  ALREADY_ENROLLED: "ALREADY_ENROLLED",
 } as const;
 
 /** One row of the platform-admin audit trail (newest first). */
@@ -244,3 +267,40 @@ export type AdminAuditView = {
   entries: AdminAuditRow[];
   page: AdminPageInfo;
 };
+
+export type AdminWithdrawalRow = {
+  id: string;
+  instructorId: string;
+  instructorName: string | null;
+  instructorEmail: string;
+  amountCents: number;
+  currency: string;
+  status: "REQUESTED" | "PAID" | "REJECTED";
+  note: string;
+  paymentCount: number;
+  requestedAt: string;
+  resolvedAt: string | null;
+  resolvedById: string | null;
+};
+
+export type FundingSourceRevenueBreakdown = {
+  count: number;
+  originalAmountCents: number;
+  discountAmountCents: number;
+  organizationContributionCents: number;
+  learnerAmountCents: number;
+  instructorShareCents: number;
+  platformRevenueCents: number;
+};
+
+export type AdminRevenueReport = {
+  totalPlatformRevenueCents: number;
+  totalLearnerPaymentsCents: number;
+  totalOrganizationContributionsCents: number;
+  totalInstructorEarningsCents: number;
+  totalInstructorPaidCents: number;
+  totalInstructorPendingCents: number;
+  currency: string;
+  byFundingSource: Record<string, FundingSourceRevenueBreakdown>;
+};
+

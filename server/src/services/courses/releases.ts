@@ -3,8 +3,11 @@ import type { Prisma } from "../../generated/prisma/index.js";
 import { prisma } from "../../db/prisma.js";
 import { resolveCourseFamily, type CourseFamily } from "../../shared/lib/course-tracks.js";
 import { NotFoundError } from "../../utils/errors.js";
+import { cleanChapterSlug } from "../chapters/chapter-slug.js";
 import { recomputeEnrollmentRollup } from "../progress/compute.js";
 import { canonical } from "../teach/course-update-matching.js";
+
+export { cleanChapterSlug } from "../chapters/chapter-slug.js";
 
 export type ReleaseChapter = {
   id: string; key: string | null; slug: string; title: string; order: number;
@@ -13,6 +16,28 @@ export type ReleaseChapter = {
 };
 export type ReleaseModule = { id: string; key: string | null; title: string; order: number; chapters: ReleaseChapter[] };
 export type ReleaseContent = { variants: Record<string, ReleaseModule[]> };
+
+/**
+ * A release names each lesson by its public slug, so two chapters at one slug cannot both be read:
+ * the reader opens the first and the curriculum lists both. A publish could store such a pair when
+ * a changed lesson was not matched to its earlier version (publishCourseRelease now replaces by
+ * slug). The publisher appends the replacement, so the later entry is the current lesson and the
+ * earlier one is dropped.
+ */
+export function withoutSupersededChapters(modules: ReleaseModule[]): ReleaseModule[] {
+  const current = new Map<string, string>();
+  for (const module of modules) for (const chapter of module.chapters) current.set(cleanChapterSlug(chapter.slug), chapter.id);
+  if (current.size === modules.reduce((sum, module) => sum + module.chapters.length, 0)) return modules;
+  return modules.map(module => ({ ...module,
+    chapters: module.chapters.filter(chapter => current.get(cleanChapterSlug(chapter.slug)) === chapter.id) }));
+}
+
+/** Read a stored release. Always go through this, so every caller sees each lesson once. */
+export function readReleaseContent(raw: unknown): ReleaseContent {
+  const content = raw as ReleaseContent;
+  if (!content?.variants) return content;
+  return { ...content, variants: Object.fromEntries(Object.entries(content.variants).map(([slug, modules]) => [slug, withoutSupersededChapters(modules)])) };
+}
 
 export function variantForRelease(familySlug: string | CourseFamily | null, variantSlug: string | null): string {
   return variantSlug ?? (typeof familySlug === "object" && familySlug ? familySlug : resolveCourseFamily(familySlug))?.defaultVariantSlug ?? "default";
@@ -56,17 +81,31 @@ export async function ensureBaselineRelease(tx: Prisma.TransactionClient, course
   return release;
 }
 
+/** Prefer the learner's variant; fall back when a release dropped it or they hold a retired slug. */
+export function resolveVariantInRelease(
+  content: ReleaseContent,
+  family: CourseFamily | null,
+  variantSlug: string | null
+): string {
+  const requested = variantForRelease(family, variantSlug);
+  const fallback = family?.defaultVariantSlug ?? "default";
+  const variant = content.variants[requested] ? requested
+    : content.variants[fallback] ? fallback
+    : Object.keys(content.variants)[0];
+  if (!variant || !content.variants[variant]) throw new NotFoundError("Course variant not found in this release.");
+  return variant;
+}
+
 export async function releaseForEnrollment(courseId: string, enrollment: { releaseId: string | null; variantSlug: string | null }, familySlug: string | null) {
   const course = await prisma.course.findUniqueOrThrow({ where: { id: courseId }, select: { activeReleaseId: true, variantFamily: true } });
   const releaseId = enrollment.releaseId ?? course.activeReleaseId;
   if (!releaseId) return null;
   const release = await prisma.courseRelease.findFirst({ where: { id: releaseId, courseId } });
   if (!release) throw new NotFoundError("Course release not found.");
-  const content = release.content as unknown as ReleaseContent;
-  const variant = variantForRelease(resolveCourseFamily(familySlug, course.variantFamily), enrollment.variantSlug);
-  const modules = content.variants[variant];
-  if (!modules) throw new NotFoundError("Course variant not found in this release.");
-  return { release, variant, modules };
+  const content = readReleaseContent(release.content);
+  const family = resolveCourseFamily(familySlug, course.variantFamily);
+  const variant = resolveVariantInRelease(content, family, enrollment.variantSlug);
+  return { release, variant, modules: content.variants[variant]! };
 }
 
 /** Build the existing syllabus shape from a pinned release. Chapter and block rows are immutable once referenced. */
@@ -90,15 +129,12 @@ export async function assertEnrollmentChapter(tx: Prisma.TransactionClient, enro
   const id = enrollment.releaseId ?? enrollment.course.activeReleaseId;
   if (!id) return;
   const release = await tx.courseRelease.findFirstOrThrow({ where: { id, courseId: enrollment.courseId } });
-  const variant = variantForRelease(resolveCourseFamily(enrollment.course.familySlug, enrollment.course.variantFamily), enrollment.variantSlug);
-  const content = release.content as unknown as ReleaseContent;
-  const modules = content.variants[variant];
-  if (!modules) throw new NotFoundError("Course variant not found in this release.");
+  const content = readReleaseContent(release.content);
+  const family = resolveCourseFamily(enrollment.course.familySlug, enrollment.course.variantFamily);
+  // Same fallback as releaseForEnrollment so overview/reader and chapter-start never disagree.
+  const variant = resolveVariantInRelease(content, family, enrollment.variantSlug);
+  const modules = content.variants[variant]!;
   if (!modules.some(module => module.chapters.some(chapter => chapter.id === chapterId))) throw new NotFoundError("Chapter is not in this learner's course release.");
-}
-
-export function cleanChapterSlug(slug: string): string {
-  return slug.replace(/--[a-z0-9]+$/i, "").trim().toLowerCase();
 }
 
 /**
@@ -129,13 +165,10 @@ export async function upgradeEnrollmentToRelease(
     where: { id: targetReleaseId, courseId: enrollment.courseId },
   });
 
-  const content = targetRelease.content as unknown as ReleaseContent;
-  const variant = variantForRelease(
-    resolveCourseFamily(enrollment.course.familySlug, enrollment.course.variantFamily),
-    enrollment.variantSlug
-  );
-  const modules = content?.variants?.[variant];
-  if (!modules) throw new NotFoundError("Course variant not found in this release.");
+  const content = readReleaseContent(targetRelease.content);
+  const family = resolveCourseFamily(enrollment.course.familySlug, enrollment.course.variantFamily);
+  const variant = resolveVariantInRelease(content, family, enrollment.variantSlug);
+  const modules = content.variants[variant]!;
   const targetChapters: ReleaseChapter[] = modules.flatMap((m) => m.chapters);
 
   const targetById = new Map(targetChapters.map((c) => [c.id, c]));

@@ -32,6 +32,19 @@ export default async function MentorHelpThreadPage({
         {copy.mentorNav}
       </Link>
 
+      {thread.kind === "LESSON_REPORT" && (
+        <div className="mt-4 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-destructive">
+            Lesson report{thread.category ? ` · ${thread.category.toLowerCase().replace("_", " ")}` : ""}
+          </p>
+          {thread.quote && (
+            <p className="mt-1 text-sm italic text-muted-foreground">
+              &ldquo;{thread.quote}&rdquo;
+            </p>
+          )}
+        </div>
+      )}
+
       <div className="mt-4">
         <HelpThreadDetailPanel
           variant="mentor"

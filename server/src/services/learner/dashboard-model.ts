@@ -6,10 +6,15 @@ import type {
   ResponseStatus,
   StudySessionStatus,
 } from "../../generated/prisma/index.js";
+import { cleanChapterSlug } from "../chapters/chapter-slug.js";
 import { decorateSyllabus } from "../progress/syllabus.js";
 import { pickContinueTarget } from "../progress/enrollment-syllabus.js";
 import { isCompletableBlock } from "../progress/rules.js";
 import { mentorReplyUnread } from "../progress/attention.js";
+
+function chapterPath(courseSlug: string, chapterSlug: string): string {
+  return `/courses/${courseSlug}/${cleanChapterSlug(chapterSlug)}`;
+}
 import type { LearnerHabit } from "../../shared/lib/streak.js";
 import type { GamificationSummary } from "../../shared/api/gamification.js";
 import type {
@@ -194,7 +199,7 @@ export function buildMenteeDashboardViewModel(args: {
     const totalStudySeconds = enrollment.chapterProgress.reduce((sum, row) => sum + row.timeSpentSeconds, 0);
     const chaptersTotal = flat.length;
     const overviewHref = `/courses/${enrollment.course.slug}`;
-    const chapterHref = target ? `${overviewHref}/${target.slug}` : overviewHref;
+    const chapterHref = target ? `${overviewHref}/${cleanChapterSlug(target.slug)}` : overviewHref;
     let state: DashboardCourse["state"];
     let actionLabel: string;
     let actionReason: string;
@@ -217,7 +222,7 @@ export function buildMenteeDashboardViewModel(args: {
       state = "NEEDS_REVISION";
       actionLabel = `Revise ${revision.block.chapter.title}`;
       actionReason = "Your mentor requested a new attempt on your latest submission.";
-      href = `/courses/${revision.block.chapter.course.slug}/${revision.block.chapter.slug}`;
+      href = chapterPath(revision.block.chapter.course.slug, revision.block.chapter.slug);
       priority = 0;
     } else if (enrollment.percentComplete >= 100 || enrollment.status === "COMPLETED") {
       state = "COMPLETED";
@@ -288,7 +293,7 @@ export function buildMenteeDashboardViewModel(args: {
 
   const actions: DashboardAction[] = [];
   for (const response of latest) {
-    const chapterHref = `/courses/${response.block.chapter.course.slug}/${response.block.chapter.slug}`;
+    const chapterHref = chapterPath(response.block.chapter.course.slug, response.block.chapter.slug);
     if (response.status === "NEEDS_REVISION") {
       actions.push({ id: `revision-${response.id}`, kind: "REVISION", title: "Revise submission", context: `${response.block.chapter.course.title} · ${response.block.chapter.title}`, reason: response.review?.feedback ?? "Your mentor requested a new attempt.", statusLabel: "Needs revision", href: chapterHref, occurredAt: iso(response.review?.createdAt ?? response.submittedAt) });
     } else if (response.review && !response.review.seenAt) {
@@ -342,7 +347,7 @@ export function buildMenteeDashboardViewModel(args: {
 
   const events: DashboardEvent[] = [];
   for (const response of args.responses.slice(0, 12)) {
-    const href = `/courses/${response.block.chapter.course.slug}/${response.block.chapter.slug}`;
+    const href = chapterPath(response.block.chapter.course.slug, response.block.chapter.slug);
     events.push({ id: `response-${response.id}`, type: "SUBMISSION", title: "Submission sent", context: `${response.block.chapter.course.title} · ${response.block.chapter.title}`, occurredAt: response.submittedAt.toISOString(), href });
     if (response.review) events.push({ id: `review-${response.id}`, type: response.review.verdict === "NEEDS_REVISION" ? "REVISION" : "REVIEW", title: response.review.verdict === "NEEDS_REVISION" ? "Revision requested" : "Mentor review received", context: `${response.block.chapter.course.title} · ${response.block.chapter.title}`, occurredAt: response.review.createdAt.toISOString(), href });
   }
@@ -354,13 +359,13 @@ export function buildMenteeDashboardViewModel(args: {
     for (const progress of enrollment.chapterProgress) {
       const chapter = chapters.find((item) => item.id === progress.chapterId);
       if (!chapter) continue;
-      const href = `/courses/${enrollment.course.slug}/${chapter.slug}`;
+      const href = chapterPath(enrollment.course.slug, chapter.slug);
       if (progress.completedAt) events.push({ id: `chapter-complete-${progress.chapterId}`, type: "CHAPTER_COMPLETED", title: "Chapter completed", context: `${enrollment.course.title} · ${chapter.title}`, occurredAt: progress.completedAt.toISOString(), href });
       else if (progress.startedAt) events.push({ id: `chapter-start-${progress.chapterId}`, type: "CHAPTER_STARTED", title: "Chapter started", context: `${enrollment.course.title} · ${chapter.title}`, occurredAt: progress.startedAt.toISOString(), href });
     }
   }
   for (const session of args.sessions.filter((item) => item.status === "ENDED").slice(0, 4)) {
-    events.push({ id: `session-${session.id}`, type: "STUDY_SESSION", title: "Study session completed", context: `${session.enrollment.course.title} · ${session.chapter.title}`, occurredAt: (session.endedAt ?? session.updatedAt).toISOString(), href: `/courses/${session.enrollment.course.slug}/${session.chapter.slug}` });
+    events.push({ id: `session-${session.id}`, type: "STUDY_SESSION", title: "Study session completed", context: `${session.enrollment.course.title} · ${session.chapter.title}`, occurredAt: (session.endedAt ?? session.updatedAt).toISOString(), href: chapterPath(session.enrollment.course.slug, session.chapter.slug) });
   }
   events.sort((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt));
 
@@ -386,8 +391,8 @@ export function buildMenteeDashboardViewModel(args: {
       activeDays: args.week.filter((day) => day.seconds > 0).length,
       maxDaySeconds: Math.max(1, ...args.week.map((day) => day.seconds)),
       lastActiveAt: courses.map((course) => course.lastActiveAt).filter((value): value is string => Boolean(value)).sort().at(-1) ?? null,
-      recentChapter: latestProgress && latestProgressChapter ? { title: latestProgressChapter.title, courseTitle: latestProgress.enrollment.course.title, href: `/courses/${latestProgress.enrollment.course.slug}/${latestProgressChapter.slug}` } : null,
-      runningSession: running ? { chapterTitle: running.chapter.title, courseTitle: running.enrollment.course.title, href: `/courses/${running.enrollment.course.slug}/${running.chapter.slug}`, startedAt: running.startedAt.toISOString() } : null,
+      recentChapter: latestProgress && latestProgressChapter ? { title: latestProgressChapter.title, courseTitle: latestProgress.enrollment.course.title, href: chapterPath(latestProgress.enrollment.course.slug, latestProgressChapter.slug) } : null,
+      runningSession: running ? { chapterTitle: running.chapter.title, courseTitle: running.enrollment.course.title, href: chapterPath(running.enrollment.course.slug, running.chapter.slug), startedAt: running.startedAt.toISOString() } : null,
     },
     latestFeedback,
     help: {

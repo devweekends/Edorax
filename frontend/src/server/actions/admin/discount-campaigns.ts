@@ -6,8 +6,8 @@ import { runAdminAction } from "./action-result";
 
 export type DiscountCampaignInput = {
   label: string; code: string | null; percentOff: number; maxRedemptions: number;
-  expiresAt: string | null; autoApply: boolean; scope: "ALL" | "CATEGORY" | "SUBCATEGORY" | "TAG" | "SELECTED_COURSES";
-  category?: "TECH" | "SOFT_SKILLS"; subcategory?: string; tag?: string; courseIds: string[];
+  expiresAt: string | null; autoApply: boolean; scope: "ALL" | "CATEGORY" | "SUBCATEGORY" | "TAG";
+  category?: "TECH" | "SOFT_SKILLS"; subcategory?: string; tag?: string;
 };
 
 export async function createDiscountCampaign(input: DiscountCampaignInput) {

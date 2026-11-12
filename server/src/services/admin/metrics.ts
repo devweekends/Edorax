@@ -1,5 +1,6 @@
 import type { AdminMetricsView, AdminMetricTotals } from "../../shared/api/admin.js";
 import { prisma } from "../../db/prisma.js";
+import { CONFIRMED_ENROLLMENT_WHERE } from "../enrollment/lifecycle.js";
 
 // Platform trends for the admin overview: new accounts, new enrollments, and
 // distinct active learners per UTC day, plus range totals. Buckets are computed
@@ -25,7 +26,10 @@ export async function loadMetrics(range: MetricsRange = "30"): Promise<AdminMetr
 
   const [users, enrollments, activity] = await Promise.all([
     prisma.user.findMany({ where: { createdAt: { gte: since } }, select: { createdAt: true } }),
-    prisma.enrollment.findMany({ where: { createdAt: { gte: since } }, select: { createdAt: true } }),
+    prisma.enrollment.findMany({
+      where: { createdAt: { gte: since }, ...CONFIRMED_ENROLLMENT_WHERE },
+      select: { createdAt: true },
+    }),
     prisma.dailyActivity.findMany({
       where: { date: { gte: since } },
       select: { date: true, activeSeconds: true, enrollment: { select: { userId: true, learnerProfileId: true } } },

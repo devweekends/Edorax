@@ -17,6 +17,7 @@ import type {
   ProjectEvidence,
 } from "../../../shared/api/teach.js";
 import { helpUiCopy as copy } from "../../../shared/lib/help-ui-copy.js";
+import { isConfirmedEnrollment } from "../../enrollment/lifecycle.js";
 import { loadIntegritySummaries } from "../../integrity/review.js";
 
 const RESPONSE_LIMIT = 240;
@@ -28,9 +29,13 @@ export async function loadMenteeEvaluation(args: {
 }): Promise<MenteeEvaluation | null> {
   const enrollment = await prisma.enrollment.findUnique({
     where: { id: args.enrollmentId },
-    include: { user: { select: { id: true, name: true, email: true } } },
+    include: {
+      user: { select: { id: true, name: true, email: true } },
+      payment: { select: { status: true } },
+    },
   });
   if (!enrollment || !isEnrollmentScopedToCourse(enrollment, args.course.id)) return null;
+  if (!isConfirmedEnrollment(enrollment)) return null;
   if (!enrollment.userId || !enrollment.user) return null;
 
   const [courseStructure, progressRows, responseRows, helpRows, sessionRows, study, integrity] =

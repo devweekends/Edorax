@@ -1,10 +1,12 @@
 import type { ChapterReportView, CourseActivityView, CourseReportView } from "../../shared/api/teach.js";
 import { prisma } from "../../db/prisma.js";
-import { type ReleaseContent, variantForRelease } from "../courses/releases.js";
+import { readReleaseContent, variantForRelease } from "../courses/releases.js";
 import { resolveCourseFamily } from "../../shared/lib/course-tracks.js";
 import { toCsv } from "../../utils/csv.js";
 import type { SessionUser } from "../../types/auth.js";
 import { requireCourseBySlug } from "./access.js";
+import { loadCourseRatingReport } from "../courses/ratings.js";
+import { CONFIRMED_ENROLLMENT_WHERE } from "../enrollment/lifecycle.js";
 
 // Course insights (docs/06-reports.mdx). Cohort numbers come from the
 // denormalised Enrollment rollups; the chapter report reads BlockStats and
@@ -24,7 +26,7 @@ export async function loadCourseReport(user: SessionUser, courseSlug: string, ch
   const owned = await requireCourseBySlug(user, courseSlug);
   const now = Date.now();
 
-  const [course, enrollments, chapterProgress] = await Promise.all([
+  const [course, enrollments, chapterProgress, ratings] = await Promise.all([
     prisma.course.findUniqueOrThrow({
       where: { id: owned.id },
       select: {
@@ -36,8 +38,16 @@ export async function loadCourseReport(user: SessionUser, courseSlug: string, ch
         },
       },
     }),
-    prisma.enrollment.findMany({ where: { courseId: owned.id }, orderBy: { createdAt: "asc" }, include: learnerInclude }),
-    prisma.chapterProgress.findMany({ where: { enrollment: { courseId: owned.id } }, select: { enrollmentId: true, timeSpentSeconds: true } }),
+    prisma.enrollment.findMany({
+      where: { courseId: owned.id, ...CONFIRMED_ENROLLMENT_WHERE },
+      orderBy: { createdAt: "asc" },
+      include: learnerInclude,
+    }),
+    prisma.chapterProgress.findMany({
+      where: { enrollment: { courseId: owned.id, ...CONFIRMED_ENROLLMENT_WHERE } },
+      select: { enrollmentId: true, timeSpentSeconds: true },
+    }),
+    loadCourseRatingReport(owned.id),
   ]);
 
   const studySeconds = new Map<string, number>();
@@ -56,7 +66,7 @@ export async function loadCourseReport(user: SessionUser, courseSlug: string, ch
 
   const enrolled = enrollments.length;
   const release = course.activeReleaseId ? await prisma.courseRelease.findUnique({ where: { id: course.activeReleaseId } }) : null;
-  const releaseModules = release ? (release.content as unknown as ReleaseContent).variants[
+  const releaseModules = release ? readReleaseContent(release.content).variants[
     variantForRelease(resolveCourseFamily(course.familySlug, course.variantFamily), null)] : null;
   const modules = releaseModules?.map(module => ({ id: module.id, title: module.title,
     chapters: module.chapters.map(chapter => ({ id: chapter.id, title: chapter.title })) })) ?? course.modules;
@@ -86,6 +96,7 @@ export async function loadCourseReport(user: SessionUser, courseSlug: string, ch
       atRisk: isAtRisk(e),
     })),
     chapterReport: chapterId && chapterIds.has(chapterId) ? await loadChapterReport(owned.id, chapterId) : null,
+    ratings,
   };
 }
 
@@ -98,7 +109,7 @@ async function loadChapterReport(courseId: string, chapterId: string): Promise<C
       select: { id: true, type: true, stats: { select: { attempts: true, correctCount: true, pendingReviews: true } } },
     }),
     prisma.chapterProgress.findMany({
-      where: { chapterId, enrollment: { courseId } },
+      where: { chapterId, enrollment: { courseId, ...CONFIRMED_ENROLLMENT_WHERE } },
       include: { enrollment: { select: learnerInclude } },
     }),
   ]);
@@ -134,7 +145,11 @@ async function loadChapterReport(courseId: string, chapterId: string): Promise<C
 /** The mentee table as CSV — Enrollment rollups only (docs/06-reports.mdx "Export"). */
 export async function exportCourseReportCsv(user: SessionUser, courseSlug: string): Promise<{ filename: string; csv: string }> {
   const owned = await requireCourseBySlug(user, courseSlug);
-  const enrollments = await prisma.enrollment.findMany({ where: { courseId: owned.id }, orderBy: { createdAt: "asc" }, include: learnerInclude });
+  const enrollments = await prisma.enrollment.findMany({
+    where: { courseId: owned.id, ...CONFIRMED_ENROLLMENT_WHERE },
+    orderBy: { createdAt: "asc" },
+    include: learnerInclude,
+  });
 
   const header = ["name", "email", "status", "percent_complete", "chapters_completed", "score", "max_score", "pending_reviews", "last_active_at", "started_at", "completed_at"];
   const rows = enrollments.map((e) => [
@@ -165,9 +180,13 @@ export async function loadCourseActivity(user: SessionUser, courseSlug: string):
   const dayIndex = new Map(days.map((day, index) => [day, index]));
 
   const [enrollments, activityRows] = await Promise.all([
-    prisma.enrollment.findMany({ where: { courseId: owned.id }, include: learnerInclude, orderBy: { createdAt: "asc" } }),
+    prisma.enrollment.findMany({
+      where: { courseId: owned.id, ...CONFIRMED_ENROLLMENT_WHERE },
+      include: learnerInclude,
+      orderBy: { createdAt: "asc" },
+    }),
     prisma.dailyActivity.findMany({
-      where: { enrollment: { courseId: owned.id }, date: { gte: since } },
+      where: { enrollment: { courseId: owned.id, ...CONFIRMED_ENROLLMENT_WHERE }, date: { gte: since } },
       select: { enrollmentId: true, date: true, activeSeconds: true },
     }),
   ]);

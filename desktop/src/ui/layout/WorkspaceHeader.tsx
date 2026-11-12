@@ -1,6 +1,9 @@
 import { DesktopToolbar } from './DesktopToolbar';
+import logo from '../../assets/edorax.svg';
+import { ThemeToggle } from './ThemeToggle';
 import { ArrowLeft, Loader2, AlertCircle } from 'lucide-react';
 import { AccountMenu } from '../auth/AccountMenu';
+import { NotificationsBell } from '../notifications/NotificationsBell';
 import type { Session } from '../auth/useSession';
 
 export function WorkspaceHeader({
@@ -18,8 +21,14 @@ export function WorkspaceHeader({
   return (
     <>
       <DesktopToolbar>
-        <div className="flex min-w-0 flex-1 items-center gap-3">
-          {selected && (
+        {!selected && (
+          <div className="flex items-center gap-2.5 select-none">
+            <img src={logo} alt="" className="size-7" />
+            <span className="font-heading text-base font-bold tracking-tight">edorax</span>
+          </div>
+        )}
+        {selected && (
+          <div className="flex min-w-0 flex-1 items-center gap-3">
             <button
               onClick={backToCourses}
               aria-label="Back to courses"
@@ -28,17 +37,16 @@ export function WorkspaceHeader({
             >
               <ArrowLeft size={18} />
             </button>
-          )}
-          <div className="min-w-0 select-none">
-            <p className="truncate text-[13px] font-semibold leading-5">
-              {selected ? courseTitle || 'Course' : 'Courses'}
-            </p>
-            <p className="text-[11px] leading-4 text-muted-foreground">
-              Edorax
+            <p className="truncate select-none text-[13px] font-semibold leading-5">
+              {courseTitle || 'Course'}
             </p>
           </div>
+        )}
+        <div className="ml-auto flex items-center gap-2">
+          <ThemeToggle />
+          <NotificationsBell />
+          <AccountMenu session={session} />
         </div>
-        <AccountMenu session={session} />
       </DesktopToolbar>
       {(authError || authBusy) && (
         <div

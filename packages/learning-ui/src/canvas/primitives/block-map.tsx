@@ -7,6 +7,7 @@ import { BeatButton, BeatFrame } from "./beat-frame";
 import { DotGrid, VerdictBanner } from "./svg-parts";
 import { FOCUS_RING, NEUTRAL, TONES, type Tone } from "./tones";
 import { useBeatClock } from "./use-beat-clock";
+import { fitOneLine } from "../renderers/scene/geometry";
 import type { ActorKind } from "../renderers/scene/types";
 import {
   alongRoute,
@@ -19,7 +20,7 @@ import {
   pathLinks,
   stopIndex,
   type MapBlock,
-  type MapLink,
+  type MapLinkInput,
   type Point,
 } from "../models/block-map";
 
@@ -33,7 +34,7 @@ import {
 export type BlockMapConfig = {
   blocks: MapBlock[];
   /** Links that are not a step on any block's path, for example workers to file storage. */
-  links?: MapLink[];
+  links?: MapLinkInput[];
   /** viewBox height; the width is always 420. */
   height: number;
   /** The block selected when the picture first shows. */
@@ -109,6 +110,9 @@ function MapCard({ block, status, tone, selected, broken, dim, arrival }: CardPr
   const left = block.x - MAP_CARD_W / 2;
   const top = block.y - MAP_CARD_H / 2;
   const IconCmp = ICONS[block.kind];
+  // A name or note longer than the card is drawn smaller, so it stays inside the card.
+  const name = fitOneLine(block.label, 12.5, MAP_CARD_W - 31 - 5);
+  const note = fitOneLine(status, 11.5, MAP_CARD_W - 12 - 8);
   return (
     <g opacity={dim ? 0.6 : 1}>
       {selected ? (
@@ -120,14 +124,27 @@ function MapCard({ block, status, tone, selected, broken, dim, arrival }: CardPr
       {arrival > 0 && !broken ? <rect x={left} y={top} width={MAP_CARD_W} height={MAP_CARD_H} rx={13} opacity={arrival} className={cn(TONES.accent.softFill, TONES.accent.stroke)} strokeWidth={2} /> : null}
       <circle cx={left + 16} cy={top + 15} r={10.5} className={BADGE[block.kind]} />
       <IconCmp x={left + 8.5} y={top + 7.5} width={15} height={15} strokeWidth={2} className={ICON_COLOUR[block.kind]} aria-hidden />
-      <text x={left + 31} y={top + 19.5} className={cn(NEUTRAL.text, "text-[12.5px] font-semibold")}>{block.label}</text>
+      <text x={left + 31} y={top + 19.5} fontSize={name.size} textLength={name.textLength} lengthAdjust={name.textLength ? "spacingAndGlyphs" : undefined} className={cn(NEUTRAL.text, "font-semibold")}>{block.label}</text>
       <rect x={left + 6} y={top + 27} width={MAP_CARD_W - 12} height={18} rx={9} className={tone ? TONES[tone].softFill : "fill-muted"} />
-      <text x={block.x} y={top + 40} textAnchor="middle" className={cn(tone ? TONES[tone].text : NEUTRAL.mutedText, "text-[11.5px] font-semibold")}>{status}</text>
+      <text x={block.x} y={top + 40} textAnchor="middle" fontSize={note.size} textLength={note.textLength} lengthAdjust={note.textLength ? "spacingAndGlyphs" : undefined} className={cn(tone ? TONES[tone].text : NEUTRAL.mutedText, "font-semibold")}>{status}</text>
     </g>
   );
 }
 
-export function BlockMap({ title, limits, blocks, links: extra = [], height, defaultSelected, cloudLabel }: BlockMapConfig & { title: string; limits: string }) {
+/** The banner across the top ends at 38; a card and its selection ring start no higher than this. */
+const BANNER_CLEAR = 46;
+
+/** How far to move every card down so the highest one is clear of the banner. */
+export function mapLift(blocks: { y: number }[]): number {
+  if (blocks.length === 0) return 0;
+  return Math.max(0, Math.ceil(BANNER_CLEAR - Math.min(...blocks.map((b) => b.y - MAP_CARD_H / 2 - 5))));
+}
+
+export function BlockMap({ title, limits, blocks: placed, links: extra = [], height: givenHeight, defaultSelected, cloudLabel }: BlockMapConfig & { title: string; limits: string }) {
+  // A map whose top card was placed under the banner is moved down as a whole, and the picture grows by the same amount.
+  const lift = mapLift(placed);
+  const blocks = lift ? placed.map((b) => ({ ...b, y: b.y + lift })) : placed;
+  const height = givenHeight + lift;
   const ref = useRef<HTMLDivElement>(null);
   const clock = useBeatClock(ref);
   const { restart } = clock;

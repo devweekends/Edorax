@@ -4,7 +4,7 @@ import type { Prisma } from "../../generated/prisma/index.js";
 import { prisma } from "../../db/prisma.js";
 import type { CsvTable } from "../../utils/csv.js";
 import { pageInfo, resolvePaging } from "./paging.js";
-import { ConflictError, ForbiddenError, NotFoundError, isAppError } from "../../utils/errors.js";
+import { ConflictError, ForbiddenError, NotFoundError, UnprocessableError, isAppError } from "../../utils/errors.js";
 import type { GrantAdminBody, GrantInstructorBody, ListUsersQuery } from "../../validations/admin.js";
 import {
   notifyUserGrantedAdminByAdmin,
@@ -13,6 +13,13 @@ import {
 } from "../notifications/events.js";
 import { dispatchNotification } from "../notifications/service.js";
 import { ADMIN_AUDIT_ACTIONS, recordAdminAction, type AdminActor } from "./audit.js";
+import { releaseEnrollmentSlot } from "../integrations/allocation.js";
+import { cancelIssuedCouponUsage } from "../coupons/issue.js";
+import { adminWaiverSnapshot } from "../financials/settlement.js";
+import { releaseOrganizationCredits } from "../organizations/credits.js";
+import { assignmentForNewEnrollment } from "../courses/variant-assignment.js";
+import { CONFIRMED_ENROLLMENT_WHERE, isConfirmedEnrollment } from "../enrollment/lifecycle.js";
+import { resolvePendingBlockReview } from "../progress/compute.js";
 
 // Accounts and the instructor capability. Granting instructor tools promotes a
 // learner to MENTOR (admins keep their role) and records an approved request so
@@ -26,6 +33,14 @@ function buildUserWhere(filters: ListUsersQuery): Prisma.UserWhereInput {
   return {
     ...(filters.role ? { role: filters.role } : {}),
     ...(filters.verified ? { emailVerified: filters.verified === "true" ? { not: null } : null } : {}),
+    ...(filters.enrolled
+      ? {
+          enrollments:
+            filters.enrolled === "true"
+              ? { some: CONFIRMED_ENROLLMENT_WHERE }
+              : { none: CONFIRMED_ENROLLMENT_WHERE },
+        }
+      : {}),
     ...(filters.query
       ? {
           OR: [
@@ -69,7 +84,12 @@ export async function listUsers(filters: ListUsersQuery = {}): Promise<AdminUser
         testerEnabled: true,
         suspendedAt: true,
         createdAt: true,
-        _count: { select: { enrollments: true, coursesOwned: true } },
+        _count: {
+          select: {
+            enrollments: { where: CONFIRMED_ENROLLMENT_WHERE },
+            coursesOwned: true,
+          },
+        },
       },
     }),
   ]);
@@ -106,7 +126,12 @@ export async function exportUsers(filters: ListUsersQuery = {}): Promise<CsvTabl
       suspendedAt: true,
       totpEnabledAt: true,
       createdAt: true,
-      _count: { select: { enrollments: true, coursesOwned: true } },
+      _count: {
+        select: {
+          enrollments: { where: CONFIRMED_ENROLLMENT_WHERE },
+          coursesOwned: true,
+        },
+      },
     },
   });
   return {
@@ -143,12 +168,20 @@ export async function getUserDetail(userId: string): Promise<AdminUserDetail> {
       suspensionNote: true,
       totpEnabledAt: true,
       createdAt: true,
-      _count: { select: { enrollments: true, coursesOwned: true, sessions: true } },
+      _count: {
+        select: {
+          enrollments: { where: CONFIRMED_ENROLLMENT_WHERE },
+          coursesOwned: true,
+          sessions: true,
+        },
+      },
       enrollments: {
+        where: CONFIRMED_ENROLLMENT_WHERE,
         orderBy: { createdAt: "desc" },
-        take: 20,
+        take: 50,
         select: {
           id: true,
+          courseId: true,
           lifecycle: true,
           percentComplete: true,
           lastActiveAt: true,
@@ -183,6 +216,7 @@ export async function getUserDetail(userId: string): Promise<AdminUserDetail> {
     },
     enrollments: user.enrollments.map((row) => ({
       id: row.id,
+      courseId: row.courseId,
       courseTitle: row.course.title,
       courseSlug: row.course.slug,
       lifecycle: row.lifecycle,
@@ -521,4 +555,179 @@ export async function rejectInstructorRequest(actor: AdminActor, requestId: stri
     });
   });
   await dispatchNotification(() => notifyUserInstructorAccessDecision({ userId: request.userId, approved: false }));
+}
+
+/**
+ * Removes an enrollment for a user from a course. Guards: verifies enrollment belongs to user if specified.
+ * Cleans up organization course slots, coupon reservations, pending review counters, responses, and records audit trail.
+ */
+export async function removeUserEnrollment(
+  actor: AdminActor,
+  enrollmentId: string,
+  userId?: string
+): Promise<void> {
+  const enrollment = await prisma.enrollment.findUnique({
+    where: { id: enrollmentId },
+    select: {
+      id: true,
+      userId: true,
+      courseId: true,
+      organizationId: true,
+      source: true,
+      lifecycle: true,
+      status: true,
+      course: { select: { title: true } },
+      user: { select: { id: true, email: true } },
+    },
+  });
+  if (!enrollment) throw new NotFoundError("Enrollment not found");
+  if (userId && enrollment.userId !== userId) {
+    throw new ConflictError("Enrollment does not belong to the specified user.");
+  }
+
+  await prisma.$transaction(async (tx) => {
+    if (
+      enrollment.organizationId &&
+      enrollment.source === "PATHMENT" &&
+      enrollment.lifecycle !== "CANCELLED" &&
+      enrollment.status !== "DROPPED"
+    ) {
+      await releaseEnrollmentSlot(tx, enrollment.organizationId, enrollment.courseId);
+    }
+    await cancelIssuedCouponUsage(tx, enrollmentId);
+
+    const pendingResponses =
+      (await tx.response.findMany?.({
+        where: { enrollmentId, status: "PENDING_REVIEW" },
+        select: { blockId: true },
+      })) ?? [];
+    for (const row of pendingResponses) {
+      await resolvePendingBlockReview(tx, row.blockId);
+    }
+
+    await tx.response.deleteMany({ where: { enrollmentId } });
+
+    if (enrollment.userId && tx.courseRating) {
+      const removedRatings = await tx.courseRating.deleteMany({
+        where: { courseId: enrollment.courseId, userId: enrollment.userId },
+      });
+      if (removedRatings.count > 0) {
+        const aggregate = await tx.courseRating.aggregate({
+          where: { courseId: enrollment.courseId },
+          _avg: { rating: true },
+          _count: { _all: true },
+        });
+        await tx.course.update({
+          where: { id: enrollment.courseId },
+          data: {
+            ratingAverage: aggregate._avg.rating,
+            ratingCount: aggregate._count._all,
+          },
+        });
+      }
+    }
+
+    await tx.enrollment.delete({ where: { id: enrollmentId } });
+    await recordAdminAction(tx, {
+      actor,
+      action: ADMIN_AUDIT_ACTIONS.USER_REMOVE_ENROLLMENT,
+      targetType: "Enrollment",
+      targetId: enrollmentId,
+      summary: `Removed ${enrollment.user?.email ?? "learner"}'s enrollment from ${enrollment.course.title}`,
+      metadata: {
+        userId: enrollment.userId,
+        courseId: enrollment.courseId,
+        courseTitle: enrollment.course.title,
+      },
+    });
+  });
+}
+
+/**
+ * Enrolls a user in a published course by platform admin, bypassing paywalls and setting lifecycle to ACTIVE.
+ */
+export async function enrollUser(
+  actor: AdminActor,
+  userId: string,
+  courseId: string
+): Promise<{ id: string }> {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, email: true } });
+  if (!user) throw new NotFoundError("User not found");
+  const course = await prisma.course.findUnique({
+    where: { id: courseId },
+    select: { id: true, title: true, status: true, variantAssignment: true, activeReleaseId: true, pricingType: true, priceCents: true, currency: true },
+  });
+  if (!course) throw new NotFoundError("Course not found");
+  if (course.status && course.status !== "PUBLISHED") {
+    throw new UnprocessableError("Only published courses can be enrolled.", ADMIN_ERROR_CODES.COURSE_NOT_PUBLISHED);
+  }
+
+  const enrollment = await prisma.$transaction(async (tx) => {
+    const existing = await tx.enrollment.findUnique({
+      where: { courseId_userId: { courseId, userId } },
+      include: { payment: true },
+    });
+    if (existing && isConfirmedEnrollment(existing)) {
+      throw new ConflictError("User is already enrolled in this course.", ADMIN_ERROR_CODES.ALREADY_ENROLLED);
+    }
+
+    let row;
+    if (existing) {
+      row = await tx.enrollment.update({
+        where: { id: existing.id },
+        data: {
+          lifecycle: "ACTIVE",
+          status: "IN_PROGRESS",
+          startedAt: existing.startedAt ?? new Date(),
+        },
+      });
+      const waiver = adminWaiverSnapshot({ originalAmountCents: course.priceCents, pricingType: course.pricingType });
+      if (existing.payment && existing.payment.status !== "SUCCEEDED") {
+        await tx.payment.update({
+          where: { enrollmentId: existing.id },
+          data: waiver,
+        });
+      }
+      if (!existing.payment) {
+        await tx.payment.create({
+          data: { enrollmentId: existing.id, currency: course.currency, ...waiver },
+        });
+      }
+      await cancelIssuedCouponUsage(tx, existing.id);
+      await releaseOrganizationCredits(tx, existing.id);
+    } else {
+      const assignment =
+        course.variantAssignment === "RANDOM" ? await assignmentForNewEnrollment(tx, course.id) : {};
+      row = await tx.enrollment.create({
+        data: {
+          ...assignment,
+          userId,
+          courseId,
+          lifecycle: "ACTIVE",
+          status: "IN_PROGRESS",
+          source: "DIRECT",
+          startedAt: new Date(),
+          ...(course.activeReleaseId ? { releaseId: course.activeReleaseId } : {}),
+        },
+      });
+      await tx.payment.create({
+        data: {
+          enrollmentId: row.id,
+          currency: course.currency,
+          ...adminWaiverSnapshot({ originalAmountCents: course.priceCents, pricingType: course.pricingType }),
+        },
+      });
+    }
+    await recordAdminAction(tx, {
+      actor,
+      action: ADMIN_AUDIT_ACTIONS.USER_ENROLL,
+      targetType: "Enrollment",
+      targetId: row.id,
+      summary: `Enrolled ${user.email} in ${course.title}`,
+      metadata: { userId, courseId, courseTitle: course.title },
+    });
+    return row;
+  });
+
+  return { id: enrollment.id };
 }

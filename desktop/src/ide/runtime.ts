@@ -25,14 +25,24 @@ export class TheiaRuntime {
     if (this.starting) throw new Error('The workspace is already starting.');
     const root = await realpath(folder);
     if (this.session?.folder === root) return this.session;
-    const node = path.join(
+    const bundledNode = path.join(
       this.directory,
       'node_modules/node/bin',
       process.platform === 'win32' ? 'node.exe' : 'node',
     );
+    const nodeBundled = await access(bundledNode).then(
+      () => true,
+      () => false,
+    );
+    // Use the bundled Node when it is installed, otherwise the Node already on this PC.
+    const node = nodeBundled
+      ? bundledNode
+      : process.platform === 'win32'
+        ? 'node.exe'
+        : 'node';
     const main = path.join(this.directory, 'src-gen/backend/main.js');
     try {
-      await Promise.all([access(node), access(main)]);
+      await access(main);
     } catch {
       throw new Error(
         'Theia is not built yet. Run npm --prefix desktop run ide:setup, then reopen the workspace.',
@@ -66,12 +76,12 @@ export class TheiaRuntime {
       }
 
       // Ensure PATH includes the bundled Node runtime directory as well as standard system paths
-      const nodeBinDir = path.dirname(node);
+      const nodeBinDir = nodeBundled ? path.dirname(bundledNode) : '';
       const pathSeparator = process.platform === 'win32' ? ';' : ':';
       const existingPath = env.PATH || env.Path || '';
       const parts = existingPath.split(pathSeparator).filter(Boolean);
       const extras = [
-        nodeBinDir,
+        ...(nodeBinDir ? [nodeBinDir] : []),
         ...(process.platform === 'darwin'
           ? [
               '/opt/homebrew/bin',

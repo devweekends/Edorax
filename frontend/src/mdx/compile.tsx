@@ -9,6 +9,7 @@ import { transformVisualFences } from "./transform-visual-fences";
 import { rehypePrettyCodePlugins } from "./rehype-pretty-code-config";
 import { chapterBodyForReader } from "@/shared/lib/mdx-frontmatter";
 import { Lab } from "@buildment/learning-ui/labs/Lab";
+import { MdxBlockBoundary } from "./mdx-error-boundary";
 
 function CourseLabBlock(props: { slug?: unknown; spec?: unknown; version?: unknown; presentation?: unknown }) {
   return (
@@ -59,6 +60,32 @@ function withUnknownComponentFallback(components: MDXComponents, source: string)
   return { ...components, ...extras };
 }
 
+/**
+ * Wrap every block component in an error boundary so one failing block
+ * renders an inline card instead of blanking the chapter. Lowercase
+ * (intrinsic) overrides are left alone.
+ */
+function withBlockBoundaries(components: MDXComponents): MDXComponents {
+  const wrapped: MDXComponents = {};
+  for (const [name, Block] of Object.entries(components)) {
+    if (!/^[A-Z]/.test(name) || Block == null || typeof Block === "string") {
+      wrapped[name] = Block;
+      continue;
+    }
+    const Component = Block as React.ComponentType<Record<string, unknown>>;
+    function SafeBlock(props: Record<string, unknown>) {
+      return (
+        <MdxBlockBoundary name={name}>
+          <Component {...props} />
+        </MdxBlockBoundary>
+      );
+    }
+    SafeBlock.displayName = `Safe(${name})`;
+    wrapped[name] = SafeBlock;
+  }
+  return wrapped;
+}
+
 // Server-side MDX rendering for the reader route — see
 // docs/02-content-authoring.mdx "Rendering pipeline". Raw HTML stays disabled
 // by omission (no rehype-raw plugin registered): MDX text like `<script>` is
@@ -77,17 +104,34 @@ export function ChapterMdx({
   const transformed = transformVisualFences(chapterBodyForReader(source));
   const mdxSource = restoreInteractiveBlockTags(transformed);
   const baseComponents = courseLabMode ? { ...mdxComponents, Lab: CourseLabBlock } : mdxComponents;
-  const components = withUnknownComponentFallback(baseComponents, mdxSource);
+  const components = withBlockBoundaries(withUnknownComponentFallback(baseComponents, mdxSource));
   return (
-    <MDXRemote
-      source={mdxSource}
-      components={components}
-      options={{
-        mdxOptions: {
-          remarkPlugins: [remarkGfm, ...readerRemarkPlugins],
-          rehypePlugins: rehypePrettyCodePlugins,
-        },
-      }}
-    />
+    <MdxBlockBoundary name="chapter">
+      <MDXRemote
+        source={mdxSource}
+        components={components}
+        // Compile/runtime MDX failures must not take down the whole reader route
+        // ("This chapter can't be displayed right now"). Show an inline card instead.
+        onError={MdxCompileError}
+        options={{
+          mdxOptions: {
+            remarkPlugins: [remarkGfm, ...readerRemarkPlugins],
+            rehypePlugins: rehypePrettyCodePlugins,
+          },
+        }}
+      />
+    </MdxBlockBoundary>
+  );
+}
+
+function MdxCompileError({ error }: { error: Error }) {
+  return (
+    <div
+      role="alert"
+      className="my-6 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive"
+    >
+      <p className="font-medium">This lesson content could not be rendered.</p>
+      <p className="mt-1 break-words font-mono text-xs opacity-80">{error.message}</p>
+    </div>
   );
 }

@@ -30,6 +30,7 @@ export function AccountSetupPrompt({ user }: { user: AccountSetupUser }) {
     // Older API deployments may not return the login ID yet. In that case, show
     // the setup prompt rather than suppressing it under a shared empty key.
     if (!user.loginSessionId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reads sessionStorage, which only exists in the browser
       setOpen(true);
       return;
     }
@@ -46,6 +47,7 @@ export function AccountSetupPrompt({ user }: { user: AccountSetupUser }) {
 
   useEffect(() => {
     if (state.ok) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- closes the dialog after the server action succeeds
       setOpen(false);
       router.refresh();
     }

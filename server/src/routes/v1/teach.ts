@@ -1,3 +1,4 @@
+import { requireInstructorWithdrawals } from "../../middlewares/instructor-withdrawals.js";
 import { raw, Router } from "express";
 import * as teach from "../../controllers/teach.js";
 import * as media from "../../controllers/course-media.js";
@@ -10,6 +11,7 @@ import { validate, validateBody, validateParams } from "../../middlewares/valida
 import {
   assignByEmailsBody,
   approveCourseZipUpdateBody,
+  campaignIdParams,
   chapterDraftBody,
   chapterIdParams,
   courseInstructorInviteBody,
@@ -33,9 +35,11 @@ import {
   menteeParams,
   moduleIdParams,
   moveBody,
+  participateCampaignBody,
   renameModuleBody,
   removeChapterBody,
   reportsQuery,
+  requestWithdrawalBody,
   responseIdParams,
   reviewQueueQuery,
   submitReviewBody,
@@ -50,6 +54,13 @@ const router = Router();
 router.use(authenticate, requireVerified, requireInstructor);
 
 router.get("/workspace", teach.getWorkspace);
+router.get("/wallet", teach.getWallet);
+router.post("/wallet/withdraw", requireInstructorWithdrawals, validateBody(requestWithdrawalBody), teach.requestWithdrawal);
+router.get("/campaigns", teach.getCampaigns);
+router.post("/campaigns/:campaignId/participate", validate({ params: campaignIdParams, body: participateCampaignBody }), teach.participateCampaign);
+
+
+
 
 router.get("/courses", teach.listCourses);
 router.post("/courses/import", requireZipImport, raw({ type: "application/zip", limit: "5mb" }), teach.importCourseZip);

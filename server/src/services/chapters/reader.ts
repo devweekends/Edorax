@@ -16,7 +16,13 @@ import { loadCourseGate } from "../progress/gate.js";
 import { loadLearnerHabit } from "../progress/learner-habit.js";
 import { milestoneReflectionBlocked } from "../progress/reflection.js";
 import { isCompletableBlock, previousChapterId } from "../progress/rules.js";
-import { releaseForEnrollment, releaseModulesWithBlocks, upgradeEnrollmentToRelease, variantForRelease } from "../courses/releases.js";
+import {
+  releaseForEnrollment,
+  releaseModulesWithBlocks,
+  upgradeEnrollmentToRelease,
+  variantForRelease,
+  readReleaseContent,
+} from "../courses/releases.js";
 import { resolveCourseFamily } from "../../shared/lib/course-tracks.js";
 import { findChapterIndex } from "./chapter-slug.js";
 
@@ -69,19 +75,24 @@ export async function loadChapterReader(courseSlug: string, chapterSlug: string,
 
   // If the requested chapter is from a newer release, upgrade in-progress learners seamlessly.
   const currentRelease = await releaseForEnrollment(course.id, enrollment, course.familySlug);
-  const inCurrentRelease = !currentRelease || currentRelease.modules.some(m => m.chapters.some(c => c.slug === chapterSlug));
+  const inCurrentRelease = !currentRelease
+    || findChapterIndex(currentRelease.modules.flatMap((m) => m.chapters), chapterSlug) !== -1;
 
   if (!forDownload && !inCurrentRelease && course.activeReleaseId && enrollment.releaseId !== course.activeReleaseId && enrollment.status !== "COMPLETED") {
-    const upgraded = await prisma.$transaction((tx) =>
-      upgradeEnrollmentToRelease(tx, enrollment.id, course.activeReleaseId!), { timeout: 60_000 });
-    if (upgraded) enrollment.releaseId = course.activeReleaseId;
+    try {
+      const upgraded = await prisma.$transaction((tx) =>
+        upgradeEnrollmentToRelease(tx, enrollment.id, course.activeReleaseId!), { timeout: 60_000 });
+      if (upgraded) enrollment.releaseId = course.activeReleaseId;
+    } catch {
+      // Keep the pinned release readable if the active release cannot accept this learner yet.
+    }
   }
 
   const bypassLocking = shouldBypassProgressGating(user);
-  const selectedRelease = await releaseForEnrollment(course.id, enrollment, course.familySlug);
-  const courseModules = selectedRelease ? await releaseModulesWithBlocks(selectedRelease.modules) : course.modules;
+  let selectedRelease = await releaseForEnrollment(course.id, enrollment, course.familySlug);
+  let courseModules = selectedRelease ? await releaseModulesWithBlocks(selectedRelease.modules) : course.modules;
 
-  const flatChapters = courseModules.flatMap((mod) =>
+  let flatChapters = courseModules.flatMap((mod) =>
     mod.chapters.map((ch) => ({
       ...ch,
       moduleTitle: mod.title,
@@ -89,7 +100,38 @@ export async function loadChapterReader(courseSlug: string, chapterSlug: string,
       blockCount: ch.blocks.filter((block) => isCompletableBlock(block)).length,
     }))
   );
-  const index = findChapterIndex(flatChapters, chapterSlug);
+  let index = findChapterIndex(flatChapters, chapterSlug);
+
+  // Variant-only lessons 404 when the learner is on another track. Before the variant is locked,
+  // switch to the track that owns the lesson so bookmarks still work. After lock, keep them on
+  // their chosen track (do not silently move a grocery learner onto digital-goods).
+  if (index === -1 && selectedRelease && !enrollment.variantLockedAt && enrollment.status !== "COMPLETED") {
+    const content = readReleaseContent(selectedRelease.release.content);
+    for (const [variantSlug, modules] of Object.entries(content.variants ?? {})) {
+      if (variantSlug === selectedRelease.variant) continue;
+      if (findChapterIndex(modules.flatMap((m) => m.chapters), chapterSlug) === -1) continue;
+      if (enrollment.variantSlug !== variantSlug) {
+        await prisma.enrollment.update({
+          where: { id: enrollment.id },
+          data: { variantSlug, variantChosenAt: enrollment.variantChosenAt ?? new Date() },
+        });
+        enrollment.variantSlug = variantSlug;
+      }
+      selectedRelease = { ...selectedRelease, variant: variantSlug, modules };
+      courseModules = await releaseModulesWithBlocks(modules);
+      flatChapters = courseModules.flatMap((mod) =>
+        mod.chapters.map((ch) => ({
+          ...ch,
+          moduleTitle: mod.title,
+          moduleOrder: mod.order,
+          blockCount: ch.blocks.filter((block) => isCompletableBlock(block)).length,
+        }))
+      );
+      index = findChapterIndex(flatChapters, chapterSlug);
+      break;
+    }
+  }
+
   if (index === -1) throw new NotFoundError("Chapter not found");
 
   const chapter = flatChapters[index]!;
@@ -144,7 +186,7 @@ export async function loadChapterReader(courseSlug: string, chapterSlug: string,
     return loadChapterReader(courseSlug, chapterSlug, user, 1, forDownload);
   }
 
-  const [content, currentProgress, helpThreadRow, habit, chapterResponses, predictBlocks, headingNotes] = await Promise.all([
+  const [content, currentProgress, helpThreadRow, habit, chapterResponses, predictBlocks, headingNotes, existingRating] = await Promise.all([
     prisma.chapter.findUnique({ where: { id: chapter.id }, select: { compiled: true, source: true } }),
     prisma.chapterProgress.findUnique({
       where: { enrollmentId_chapterId: { enrollmentId: enrollment.id, chapterId: chapter.id } },
@@ -162,6 +204,10 @@ export async function loadChapterReader(courseSlug: string, chapterSlug: string,
       select: { id: true },
     }),
     prisma.headingNote.findMany({ where: { userId: user.id, chapterId: chapter.id }, select: { headingId: true, body: true } }),
+    prisma.courseRating.findUnique({
+      where: { courseId_userId: { courseId: course.id, userId: user.id } },
+      select: { id: true },
+    }),
   ]);
   if (!content) throw new NotFoundError("Chapter not found");
 
@@ -189,6 +235,16 @@ export async function loadChapterReader(courseSlug: string, chapterSlug: string,
   const latest = latestChapterResponses(chapterResponses);
   const answeredIds = new Set(latest.map((response) => response.blockId));
   const predictGate = predictBlocks.length > 0;
+  const moreThanHalfComplete =
+    startedEnrollment.status === "COMPLETED" ||
+    startedEnrollment.percentComplete > 50 ||
+    (flatChapters.length > 0 && startedEnrollment.chaptersCompleted * 2 > flatChapters.length);
+  const promptCourseRating =
+    !forDownload &&
+    moreThanHalfComplete &&
+    !chapterComplete &&
+    !existingRating &&
+    !startedEnrollment.ratingDismissedAt;
 
   return {
     ...base,
@@ -215,6 +271,7 @@ export async function loadChapterReader(courseSlug: string, chapterSlug: string,
       predictGate,
       predictRevealed: !predictGate || predictBlocks.every((block) => answeredIds.has(block.id)),
       helpThread: serializeHelpThread(helpThreadRow),
+      promptCourseRating,
     },
   };
 }

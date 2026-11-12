@@ -1,6 +1,7 @@
 import { EnrollmentBadge } from "@buildment/learning-ui/components/learn/enrollment-badge";
 import Link from "next/link";
 import { CourseCover } from "@/components/learn/course-cover";
+import { StarRating } from "@/components/learn/star-rating";
 import { formatPriceCents } from "@/lib/format-price";
 
 export type CatalogCourseCardProps = {
@@ -17,6 +18,8 @@ export type CatalogCourseCardProps = {
   enrolledLabel?: string | null;
   subcategory?: string | null;
   tags?: string[];
+  ratingAverage?: number | null;
+  ratingCount?: number;
 };
 
 /** The whole card is the link: a big target on a phone, and one tab stop per course. */
@@ -34,6 +37,8 @@ export function CatalogCourseCard({
   enrolledLabel,
   subcategory,
   tags = [],
+  ratingAverage = null,
+  ratingCount = 0,
 }: CatalogCourseCardProps) {
   const meta = [difficulty ? difficulty.toLowerCase() : null, estimatedHours ? `${estimatedHours} hours` : null]
     .filter(Boolean)
@@ -48,6 +53,13 @@ export function CatalogCourseCard({
         {meta ? <p className="text-sm capitalize text-muted-foreground">{meta}</p> : null}
         {subcategory ? <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-primary">{subcategory}</p> : null}
         <h2 className="mt-2 text-lg leading-snug tracking-[-0.02em]">{title}</h2>
+        {ratingCount > 0 && ratingAverage != null ? (
+          <div className="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+            <StarRating value={ratingAverage} size={12} />
+            <span className="font-medium text-foreground">{ratingAverage.toFixed(1)}</span>
+            <span>({ratingCount})</span>
+          </div>
+        ) : null}
         {tags.length ? <p className="mt-2 line-clamp-1 text-xs text-muted-foreground">{tags.slice(0, 3).join(" · ")}</p> : null}
         {instructorName ? <p className="mt-1 text-sm text-muted-foreground">With {instructorName}</p> : null}
         {description ? (

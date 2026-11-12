@@ -4,6 +4,7 @@ import { ConflictError, NotFoundError } from "../../utils/errors.js";
 import { appBaseUrl, sendEmail } from "../email/send.js";
 import { escapeHtml } from "../email/format.js";
 import { cancelIssuedCouponUsage, redeemCouponUsage } from "../coupons/issue.js";
+import { commitOrganizationCredits, releaseOrganizationCredits } from "../organizations/credits.js";
 
 /** The enrollment is the durable request. Sending can be retried if email fails. */
 export async function requestManualAccess(enrollmentId: string, userId: string) {
@@ -28,9 +29,10 @@ export async function approveManualAccess(enrollmentId: string, actor: AdminActo
     if (!updated.count) throw new ConflictError("This enrollment is no longer awaiting access.");
     await tx.payment.update({ where: { enrollmentId }, data: {
       status: "SUCCEEDED", provider: "manual", paidAt: new Date(),
-      instructorShareCents: Math.floor(enrollment.payment.amountCents / 2),
-      instructorPayoutStatus: enrollment.payment.amountCents > 0 ? "PENDING" : "NOT_DUE",
+      instructorShareCents: enrollment.payment.instructorShareCents,
+      instructorPayoutStatus: enrollment.payment.instructorShareCents > 0 ? "PENDING" : "NOT_DUE",
     } });
+    await commitOrganizationCredits(tx, enrollmentId);
     await redeemCouponUsage(tx, enrollmentId);
     await recordAdminAction(tx, { actor, action: ADMIN_AUDIT_ACTIONS.MANUAL_ACCESS_APPROVE, targetType: "Enrollment", targetId: enrollmentId, summary: "Confirmed manual payment and granted course access." });
   });
@@ -53,6 +55,7 @@ export async function rejectManualAccess(enrollmentId: string, actor: AdminActor
       where: { enrollmentId, status: "PENDING" },
       data: { status: "FAILED" },
     });
+    await releaseOrganizationCredits(tx, enrollmentId);
     await recordAdminAction(tx, {
       actor,
       action: ADMIN_AUDIT_ACTIONS.MANUAL_ACCESS_REJECT,
@@ -65,28 +68,67 @@ export async function rejectManualAccess(enrollmentId: string, actor: AdminActor
 
 export async function listManualInstructorPayouts() {
   const payments = await prisma.payment.findMany({
-    where: { status: "SUCCEEDED", provider: "manual", instructorPayoutStatus: { in: ["PENDING", "PAID"] } },
+    where: {
+      status: "SUCCEEDED",
+      instructorShareCents: { gt: 0 },
+      instructorPayoutStatus: { in: ["PENDING", "PAID"] },
+    },
     orderBy: [{ instructorPayoutStatus: "asc" }, { paidAt: "desc" }],
     select: {
-      amountCents: true, currency: true, instructorPayoutStatus: true, instructorShareCents: true, instructorPayoutPaidAt: true, paidAt: true,
-      enrollment: { select: { id: true, user: { select: { name: true, email: true } }, course: { select: { title: true, mentor: { select: { name: true, email: true } } } } } },
+      id: true,
+      amountCents: true,
+      currency: true,
+      instructorPayoutStatus: true,
+      instructorShareCents: true,
+      instructorPayoutPaidAt: true,
+      paidAt: true,
+      fundingSource: true,
+      provider: true,
+      payoutWithdrawalId: true,
+      enrollment: {
+        select: {
+          id: true,
+          user: { select: { name: true, email: true } },
+          course: { select: { title: true, mentor: { select: { name: true, email: true } } } },
+        },
+      },
     },
   });
-  return payments.map(({ enrollment, ...payment }) => ({ id: enrollment.id, ...payment,
-    learner: enrollment.user, course: enrollment.course.title, instructor: enrollment.course.mentor,
+  return payments.map(({ enrollment, id: paymentId, ...payment }) => ({
+    id: enrollment.id,
+    paymentId,
+    ...payment,
+    learner: enrollment.user,
+    course: enrollment.course.title,
+    instructor: enrollment.course.mentor,
     instructorPayoutPaidAt: payment.instructorPayoutPaidAt?.toISOString() ?? null,
+    paidAt: payment.paidAt?.toISOString() ?? null,
   }));
 }
 
 export async function markManualInstructorPayoutPaid(enrollmentId: string, actor: AdminActor) {
-  await prisma.$transaction(async tx => {
-    const payment = await tx.payment.findUnique({ where: { enrollmentId }, include: { enrollment: { include: { course: true } } } });
-    if (!payment || payment.status !== "SUCCEEDED" || payment.provider !== "manual" || payment.instructorPayoutStatus !== "PENDING") {
-      throw new ConflictError("This manual instructor payout is not pending.");
+  await prisma.$transaction(async (tx) => {
+    const payment = await tx.payment.findUnique({
+      where: { enrollmentId },
+      include: { enrollment: { include: { course: true } } },
+    });
+    if (!payment || payment.status !== "SUCCEEDED" || payment.instructorPayoutStatus !== "PENDING" || payment.instructorShareCents <= 0) {
+      throw new ConflictError("This instructor payout is not pending.");
     }
-    const updated = await tx.payment.updateMany({ where: { enrollmentId, instructorPayoutStatus: "PENDING" }, data: { instructorPayoutStatus: "PAID", instructorPayoutPaidAt: new Date() } });
-    if (!updated.count) throw new ConflictError("This instructor payout was already recorded.");
-    await recordAdminAction(tx, { actor, action: ADMIN_AUDIT_ACTIONS.MANUAL_INSTRUCTOR_PAYOUT_PAID, targetType: "Payment", targetId: payment.id,
-      summary: `Recorded manual instructor payout of ${payment.instructorShareCents} ${payment.currency} cents for ${payment.enrollment.course.title}.` });
+    if (payment.payoutWithdrawalId !== null) {
+      throw new ConflictError("This payment is reserved inside an instructor withdrawal request. Process the withdrawal instead.");
+    }
+    const updated = await tx.payment.updateMany({
+      where: { enrollmentId, instructorPayoutStatus: "PENDING", payoutWithdrawalId: null },
+      data: { instructorPayoutStatus: "PAID", instructorPayoutPaidAt: new Date() },
+    });
+    if (!updated.count) throw new ConflictError("This instructor payout was already recorded or reserved.");
+    await recordAdminAction(tx, {
+      actor,
+      action: ADMIN_AUDIT_ACTIONS.MANUAL_INSTRUCTOR_PAYOUT_PAID,
+      targetType: "Payment",
+      targetId: payment.id,
+      summary: `Recorded instructor payout of ${payment.instructorShareCents} ${payment.currency} cents for ${payment.enrollment.course.title}.`,
+    });
   });
 }

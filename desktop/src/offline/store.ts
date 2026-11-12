@@ -24,7 +24,19 @@ type OfflineData = {
 };
 export type PendingChange =
   | { kind: 'log'; chapterId: string; answers: Record<string, string> }
-  | { kind: 'checklist'; chapterId: string; item: string; checked: boolean };
+  | { kind: 'checklist'; chapterId: string; item: string; checked: boolean }
+  | { kind: 'complete'; chapterId: string };
+let encryptionReady = false;
+
+/** Asks Electron once, after startup, whether secure storage is available. */
+export async function prepareEncryption(): Promise<void> {
+  try {
+    encryptionReady = Boolean(await safeStorage?.isAsyncEncryptionAvailable?.());
+  } catch {
+    encryptionReady = false;
+  }
+}
+
 const empty = (): OfflineData => ({
   version: 1,
   session: null,
@@ -45,7 +57,7 @@ export interface OfflineStorageDriver {
 const defaultDriver: OfflineStorageDriver = {
   available() {
     return Boolean(
-      safeStorage?.isEncryptionAvailable?.() &&
+      encryptionReady &&
       (process.platform !== 'linux' ||
         typeof safeStorage.getSelectedStorageBackend !== 'function' ||
         safeStorage.getSelectedStorageBackend() !== 'basic_text'),
@@ -209,6 +221,13 @@ export class OfflineStore {
         };
       }
     }
+    await this.save();
+  }
+
+  /** Queue a change that does not touch downloaded lesson content (for example, completing a lesson). */
+  async queueAction(change: PendingChange) {
+    if (!this.session()) throw new Error('Sign in to save progress offline.');
+    this.data.pending.push(change);
     await this.save();
   }
 

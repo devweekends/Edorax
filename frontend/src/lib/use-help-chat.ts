@@ -176,6 +176,7 @@ export function useHelpChat({
   useEffect(() => {
     if (!threadId || !active) return;
     if (connected) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- refreshes messages when the live connection changes
       void refetch();
       return;
     }

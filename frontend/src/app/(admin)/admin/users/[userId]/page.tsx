@@ -1,12 +1,14 @@
 import Link from "next/link";
-import type { AdminUserDetail } from "@/shared/api/admin";
-import { serverApiFetchOrNotFound } from "@/lib/api-server";
+import type { AdminCoursesView, AdminUserDetail } from "@/shared/api/admin";
+import { serverApiFetch, serverApiFetchOrNotFound } from "@/lib/api-server";
 import { Badge } from "@/components/ui/badge";
 import { AdminActionForm } from "@/components/admin/admin-action-form";
+import { AdminEnrollUserDialog } from "@/components/admin/admin-enroll-user-dialog";
 import { requireRole } from "@/server/auth/guards";
 import {
   forceVerifyEmailAction,
   reinstateUserAction,
+  removeUserEnrollmentAction,
   revokeUserSessionsAction,
   suspendUserAction,
 } from "@/server/actions/admin/users";
@@ -15,7 +17,6 @@ import {
   AdminActionRow,
   AdminBackLink,
   AdminEmptyState,
-  AdminPageHeader,
   AdminPanel,
   AdminSection,
   AdminTable,
@@ -27,11 +28,11 @@ import {
   adminSelectClassName,
 } from "@/components/admin/admin-ui";
 
-function DetailItem({ label, value }: { label: string; value: React.ReactNode }) {
+function StatTile({ label, value }: { label: string; value: string | number }) {
   return (
-    <div>
-      <dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</dt>
-      <dd className="mt-1 text-sm">{value}</dd>
+    <div className="rounded-2xl border border-border/80 bg-card p-4 shadow-sm sm:p-5">
+      <p className="text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">{label}</p>
+      <p className="mt-2 text-2xl font-semibold tabular-nums tracking-tight">{value}</p>
     </div>
   );
 }
@@ -43,34 +44,56 @@ export default async function AdminUserDetailPage({
 }) {
   const { userId } = await params;
   const currentAdmin = await requireRole("ADMIN");
-  const { user, enrollments, coursesOwned } = await serverApiFetchOrNotFound<AdminUserDetail>(
-    `/api/v1/admin/users/${encodeURIComponent(userId)}`
+  const [{ user, enrollments, coursesOwned }, coursesData] = await Promise.all([
+    serverApiFetchOrNotFound<AdminUserDetail>(
+      `/api/v1/admin/users/${encodeURIComponent(userId)}`
+    ),
+    serverApiFetch<AdminCoursesView>("/api/v1/admin/courses?pageSize=100&status=PUBLISHED").catch(() => ({
+      courses: [],
+    })),
+  ]);
+
+  const enrolledCourseIds = new Set(enrollments.map((e) => e.courseId));
+  const availableCourses = (coursesData?.courses ?? []).filter(
+    (c) => !enrolledCourseIds.has(c.id)
   );
 
   const isSelf = user.id === currentAdmin.id;
+  const displayName = user.name ?? user.email;
+  const initials =
+    displayName
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0])
+      .join("")
+      .toUpperCase() || "?";
 
   return (
-    <div>
+    <div className="space-y-8">
       <AdminBackLink href="/admin/users">← Back to users</AdminBackLink>
 
-      <div className="mt-4">
-        <AdminPageHeader
-          eyebrow="Account"
-          title={user.name ?? user.email}
-          description={<span className="font-mono text-xs">{user.email}</span>}
-          actions={
-            <div className="flex flex-wrap gap-2">
-              <Badge variant="outline">{user.role}</Badge>
-              {user.emailVerified ? (
-                <Badge variant="secondary">Verified</Badge>
-              ) : (
-                <Badge variant="outline">Unverified</Badge>
-              )}
-              {user.suspended ? <Badge variant="destructive">Suspended</Badge> : null}
-            </div>
-          }
-        />
-      </div>
+      <section className="flex flex-col gap-5 rounded-2xl border border-border/80 bg-card p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-6">
+        <div className="flex min-w-0 items-center gap-4">
+          <span aria-hidden className="grid size-14 shrink-0 place-items-center rounded-2xl bg-primary/10 text-lg font-semibold text-primary">
+            {initials}
+          </span>
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">Account</p>
+            <h1 className="mt-0.5 truncate text-2xl font-semibold tracking-tight sm:text-3xl">{displayName}</h1>
+            <p className="truncate font-mono text-xs text-muted-foreground">{user.email}</p>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="outline">{user.role}</Badge>
+          {user.emailVerified ? (
+            <Badge variant="secondary">Verified</Badge>
+          ) : (
+            <Badge variant="outline">Unverified</Badge>
+          )}
+          {user.suspended ? <Badge variant="destructive">Suspended</Badge> : null}
+        </div>
+      </section>
 
       {user.suspended ? (
         <AdminPanel className="mt-6 border-destructive/30 bg-destructive/5">
@@ -82,16 +105,20 @@ export default async function AdminUserDetailPage({
         </AdminPanel>
       ) : null}
 
-      <AdminPanel className="mt-8">
-        <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <DetailItem label="Created" value={new Date(user.createdAt).toLocaleDateString()} />
-          <DetailItem label="Enrollments" value={<span className="tabular-nums">{user.enrollmentCount}</span>} />
-          <DetailItem label="Courses owned" value={<span className="tabular-nums">{user.courseCount}</span>} />
-          <DetailItem label="Active sessions" value={<span className="tabular-nums">{user.activeSessions}</span>} />
-          <DetailItem label="ZIP import" value={user.zipImportEnabled ? "Enabled" : "Disabled"} />
-          <DetailItem label="Tester" value={user.testerEnabled ? "Enabled (skips sequential locks)" : "Disabled"} />
-        </dl>
-      </AdminPanel>
+      <section aria-label="Account summary" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatTile label="Joined" value={new Date(user.createdAt).toLocaleDateString()} />
+        <StatTile label="Enrollments" value={user.enrollmentCount} />
+        <StatTile label="Courses owned" value={user.courseCount} />
+        <StatTile label="Active sessions" value={user.activeSessions} />
+      </section>
+
+      <section aria-label="Access settings" className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <span className="font-medium text-foreground">Access</span>
+        <Badge variant="outline">ZIP import {user.zipImportEnabled ? "on" : "off"}</Badge>
+        <Badge variant="outline">
+          Tester {user.testerEnabled ? "on (skips sequential locks)" : "off"}
+        </Badge>
+      </section>
 
       <AdminSection title="Account actions" description="Changes take effect immediately.">
         <AdminPanel>
@@ -232,18 +259,32 @@ export default async function AdminUserDetailPage({
 
       <AdminSection
         title="Enrollments"
-        description="The 20 most recent courses this account is enrolled in."
+        description={
+          user.enrollmentCount > enrollments.length
+            ? `Showing the ${enrollments.length} most recent confirmed enrollments of ${user.enrollmentCount}.`
+            : "Confirmed course enrollments for this account."
+        }
+        action={
+          availableCourses.length > 0 ? (
+            <AdminEnrollUserDialog
+              userId={user.id}
+              userEmail={user.email}
+              courses={availableCourses}
+            />
+          ) : null
+        }
       >
         {enrollments.length === 0 ? (
-          <AdminEmptyState title="No enrollments" description="This account has not joined any course yet." />
+          <AdminEmptyState title="No enrollments" description="This account has no confirmed course enrollments yet." />
         ) : (
           <AdminTable minWidth="640px">
             <AdminTableHead>
               <tr>
                 <AdminTableHeaderCell>Course</AdminTableHeaderCell>
-                <AdminTableHeaderCell>Lifecycle</AdminTableHeaderCell>
+                <AdminTableHeaderCell>Status</AdminTableHeaderCell>
                 <AdminTableHeaderCell align="right">Progress</AdminTableHeaderCell>
                 <AdminTableHeaderCell>Last active</AdminTableHeaderCell>
+                <AdminTableHeaderCell align="right">Action</AdminTableHeaderCell>
               </tr>
             </AdminTableHead>
             <AdminTableBody>
@@ -258,13 +299,32 @@ export default async function AdminUserDetailPage({
                     </Link>
                   </AdminTableCell>
                   <AdminTableCell>
-                    <Badge variant="outline">{row.lifecycle}</Badge>
+                    <Badge variant={row.lifecycle === "COMPLETED" ? "secondary" : "outline"}>
+                      {row.lifecycle === "COMPLETED" ? "Completed" : "Active"}
+                    </Badge>
                   </AdminTableCell>
                   <AdminTableCell align="right" className="tabular-nums">
                     {row.percentComplete}%
                   </AdminTableCell>
                   <AdminTableCell className="text-muted-foreground">
                     {row.lastActiveAt ? new Date(row.lastActiveAt).toLocaleDateString() : "—"}
+                  </AdminTableCell>
+                  <AdminTableCell align="right">
+                    <AdminActionForm
+                      action={removeUserEnrollmentAction}
+                      submitLabel="Remove"
+                      pendingLabel="Removing…"
+                      variant="destructive"
+                      size="sm"
+                      confirm={{
+                        question: `Remove enrollment from ${row.courseTitle}?`,
+                        description: `This removes ${user.email ?? "the user"}'s enrollment and course progress from ${row.courseTitle}.`,
+                        confirmLabel: "Remove enrollment",
+                      }}
+                    >
+                      <input type="hidden" name="userId" value={user.id} />
+                      <input type="hidden" name="enrollmentId" value={row.id} />
+                    </AdminActionForm>
                   </AdminTableCell>
                 </AdminTableRow>
               ))}

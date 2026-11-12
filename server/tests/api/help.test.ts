@@ -93,6 +93,58 @@ describe("/api/v1/help", () => {
     expect(after.body.data.threads[0].unread).toBe(false);
   });
 
+  it("creates a lesson report with a category and quote, and the mentor can filter it", async () => {
+    const short = await request(app)
+      .post("/api/v1/help/reports")
+      .set(learner())
+      .send({ courseId: fx.course.id, chapterId: fx.chapterA.id, category: "TYPO", body: "short" });
+    expect(short.status).toBe(400);
+
+    const created = await request(app)
+      .post("/api/v1/help/reports")
+      .set(learner())
+      .send({
+        courseId: fx.course.id,
+        chapterId: fx.chapterA.id,
+        category: "TYPO",
+        body: "The second paragraph has a missing word.",
+        quote: "two copies of the truth",
+      });
+    expect(created.status).toBe(201);
+
+    const list = await request(app).get("/api/v1/help/threads").set(learner());
+    const report = list.body.data.threads.find(
+      (thread: { id: string }) => thread.id === created.body.data.threadId,
+    );
+    expect(report).toMatchObject({
+      kind: "LESSON_REPORT",
+      category: "TYPO",
+      quote: "two copies of the truth",
+    });
+
+    const reports = await request(app).get("/api/v1/teach/help/threads?kind=reports").set(mentor());
+    expect(reports.status).toBe(200);
+    expect(
+      reports.body.data.threads.some(
+        (thread: { id: string }) => thread.id === created.body.data.threadId,
+      ),
+    ).toBe(true);
+
+    const questions = await request(app).get("/api/v1/teach/help/threads?kind=questions").set(mentor());
+    expect(
+      questions.body.data.threads.some(
+        (thread: { id: string }) => thread.id === created.body.data.threadId,
+      ),
+    ).toBe(false);
+
+    // Chapter reader Q&A keeps pointing at the mentor question thread, not the lesson report.
+    const reader = await request(app)
+      .get(`/api/v1/courses/${fx.course.slug}/chapters/${fx.chapterA.slug}`)
+      .set(learner());
+    expect(reader.status).toBe(200);
+    expect(reader.body.data.content.helpThread?.id).toBe(threadId);
+  });
+
   it("only the mentor resolves, and a resolved thread rejects replies", async () => {
     const denied = await request(app).post(`/api/v1/help/threads/${threadId}/resolve`).set(learner());
     expect(denied.status).toBe(403);
@@ -103,5 +155,14 @@ describe("/api/v1/help", () => {
     const closed = await request(app).post(`/api/v1/help/threads/${threadId}/messages`).set(learner()).send({ body: "One more thing I wanted to ask." });
     expect(closed.status).toBe(409);
     expect(closed.body.code).toBe("THREAD_CLOSED");
+
+    // Asking a new mentor question after resolution starts a new QUESTION thread instead of hijacking an open LESSON_REPORT.
+    const freshQuestion = await request(app)
+      .post("/api/v1/help/threads")
+      .set(learner())
+      .send({ courseId: fx.course.id, chapterId: fx.chapterA.id, body: "Follow-up study question after resolving the first thread." });
+    expect(freshQuestion.status).toBe(201);
+    expect(freshQuestion.body.data.created).toBe(true);
+    expect(freshQuestion.body.data.threadId).not.toBe(threadId);
   });
 });

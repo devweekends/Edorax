@@ -110,9 +110,10 @@ export async function generateReviewDraft(
   context: ReviewDraftContext,
   options: GenerateOptions = {},
 ): Promise<{ draft: AiReviewDraft; model: string }> {
-  const apiKey = options.apiKey ?? env.OPENROUTER_API_KEY;
+  // Bring-your-own-key only: the instructor's saved OpenRouter key is passed in.
+  const apiKey = options.apiKey;
   if (!apiKey) {
-    throw new Error("AI drafting is not configured. Add OPENROUTER_API_KEY on the server.");
+    throw new Error("Add your OpenRouter key in Settings to use AI drafting.");
   }
 
   const model = options.model ?? env.OPENROUTER_REVIEW_MODEL ?? DEFAULT_MODEL;

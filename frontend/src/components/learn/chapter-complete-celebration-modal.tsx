@@ -98,6 +98,7 @@ export function ChapterCompleteCelebrationModal({
             <p className="mt-2 text-xs text-muted-foreground">{percent}% complete</p>
           </div>
         ) : null}
+
         <div className="mt-5 flex flex-col gap-2">
           {courseComplete ? (
             <Link href="/my-courses" className={buttonVariants({ className: "min-h-11" })}>View my courses <ArrowRight aria-hidden /></Link>
