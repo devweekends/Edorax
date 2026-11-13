@@ -40,7 +40,7 @@ export function createApp() {
   );
 
   // Polar signature verification needs the raw body; mount before express.json.
-  app.use("/webhooks/polar", express.raw({ type: "application/json" }), polarWebhookRoutes);
+  app.use("/webhook/polar", express.raw({ type: "application/json" }), polarWebhookRoutes);
 
   app.use(express.json({ limit: "1mb" }));
   app.use(cookieParser());
