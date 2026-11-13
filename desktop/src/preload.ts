@@ -56,6 +56,16 @@ const api: DesktopAPI = {
     },
   },
   shellLabs: {
+    dockerState: () => ipcRenderer.invoke('shell-labs:docker-state'),
+    startDocker: () => ipcRenderer.invoke('shell-labs:docker-start'),
+    setUpDocker: () => ipcRenderer.invoke('shell-labs:docker-setup'),
+    onDockerProgress: (listener) => {
+      const receive = (_event: Electron.IpcRendererEvent, data: Parameters<typeof listener>[0]) => listener(data);
+      ipcRenderer.on('shell-labs:docker-progress', receive);
+      return () => {
+        ipcRenderer.removeListener('shell-labs:docker-progress', receive);
+      };
+    },
     list: () => ipcRenderer.invoke('shell-labs:list'),
     view: (slug) => ipcRenderer.invoke('shell-labs:view', slug),
     status: (slug) => ipcRenderer.invoke('shell-labs:status', slug),

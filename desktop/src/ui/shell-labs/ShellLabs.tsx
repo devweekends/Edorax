@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft, Clock, Terminal } from 'lucide-react';
-import type { ShellLabSummary, ShellTopic } from '../../domain/shell-labs';
+import { SHELL_TOPICS, type ShellLabSummary, type ShellTopic } from '../../domain/shell-labs';
 import { ShellLabPage } from './ShellLabPage';
 import { errorText, passedSteps } from './progress';
 
@@ -17,14 +17,9 @@ const NEEDS_LAB_VM: { topic: ShellTopic; title: string; summary: string; level: 
 
 const LEVEL_LABEL = { beginner: 'Beginner', intermediate: 'Intermediate' } as const;
 
-const TOPICS: { id: ShellTopic; title: string; description: string }[] = [
-  { id: 'linux', title: 'Linux', description: 'Users, permissions, files, processes and services on a real server.' },
-  { id: 'docker', title: 'Docker', description: 'Build images, run containers and fix a broken Compose stack.' },
-  { id: 'ansible', title: 'Ansible', description: 'Configure a fleet of servers from one control node.' },
-  { id: 'kubernetes', title: 'Kubernetes', description: 'Deploy, scale and debug workloads on a real cluster.' },
-];
-
-export function ShellLabs({ onBack }: { onBack: () => void }) {
+export function ShellLabs({ onBack, topic: only }: { onBack: () => void; topic?: ShellTopic }) {
+  const topics = SHELL_TOPICS.filter((item) => !only || item.id === only);
+  const heading = only ? `${topics[0]?.title ?? 'Shell'} labs` : 'Fix real machines from the terminal';
   const [labs, setLabs] = useState<ShellLabSummary[] | null>(null);
   const [error, setError] = useState('');
   const [open, setOpen] = useState<string | null>(null);
@@ -48,9 +43,9 @@ export function ShellLabs({ onBack }: { onBack: () => void }) {
       </button>
       <header>
         <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-primary/70">Shell labs</p>
-        <h1 className="font-heading mt-2 text-3xl font-bold tracking-tight text-foreground">Fix real machines from the terminal</h1>
+        <h1 className="font-heading mt-2 text-3xl font-bold tracking-tight text-foreground">{heading}</h1>
         <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-          Each lab starts a real Linux machine on your computer in Docker. You get a goal, hints when you want them, and a Check button that looks at
+          Each lab starts a real machine on your computer in Docker. You get a goal, hints when you want them, and a Check button that looks at
           the machine itself. The machine has no network and cannot touch your files. Reset gives you a fresh one.
         </p>
       </header>
@@ -61,7 +56,7 @@ export function ShellLabs({ onBack }: { onBack: () => void }) {
         </p>
       )}
 
-      {TOPICS.map((topic) => {
+      {topics.map((topic) => {
         const inTopic = labs?.filter((lab) => lab.topic === topic.id) ?? [];
         return (
           <div key={topic.id} className="mt-10">

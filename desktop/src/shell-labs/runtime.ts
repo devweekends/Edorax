@@ -58,7 +58,8 @@ export function shellContainerOptions(lab: ShellLab, scope: string) {
       CapAdd: [...SHELL_LAB_CAPABILITIES, ...extra],
       SecurityOpt: ['no-new-privileges:true'],
       NetworkMode: 'none',
-      Tmpfs: { '/tmp': 'rw,nosuid,size=32m' },
+      // exec: learners write small scripts in /tmp and run them, and Docker mounts a tmpfs noexec by default.
+      Tmpfs: { '/tmp': 'rw,exec,nosuid,size=32m' },
     },
   };
 }
@@ -315,18 +316,60 @@ ${build ? `printf %s '${encoded}' | base64 -d > /tmp/edorax-build.sh; bash -e /t
       const match = new RegExp(`^${RESULT_MARK} (\\d+) (\\d+)$`).exec(line.trim());
       if (match) codes.set(Number(match[1]), Number(match[2]));
     }
-    return steps.map((step) => {
+    const results: ShellStepResult[] = steps.map((step) => {
       const checks = step.checks.map((check) => {
         const passed = codes.get(all.findIndex((item) => item.check === check)) === 0;
         return { id: check.id, label: check.label, passed, message: passed ? '' : check.fail };
       });
       return { stepId: step.id, passed: checks.every((check) => check.passed), checks };
     });
+    // Only a failing step is asked about its listed mistakes, so a passing lab costs nothing extra.
+    const failing = results.filter((result) => !result.passed && steps.find((step) => step.id === result.stepId)?.mistakes?.length);
+    if (failing.length) {
+      const asked = failing.flatMap((result) => (steps.find((step) => step.id === result.stepId)?.mistakes ?? []).map((mistake) => ({ result, mistake })));
+      const mistakeScript = asked
+        .map(({ mistake }, index) => {
+          const encoded = Buffer.from(mistake.when).toString('base64');
+          return `timeout ${CHECK_SECONDS} bash -c "$(printf %s '${encoded}' | base64 -d)" </dev/null >/dev/null 2>&1; echo "${RESULT_MARK}m ${index} $?"`;
+        })
+        .join('\n');
+      const answered = await this.run(container, mistakeScript, (CHECK_SECONDS * asked.length + 10) * 1000).catch(() => ({ code: 1, output: '' }));
+      const hits = new Map<number, number>();
+      for (const line of answered.output.split('\n')) {
+        const match = new RegExp(`^${RESULT_MARK}m (\\d+) (\\d+)$`).exec(line.trim());
+        if (match) hits.set(Number(match[1]), Number(match[2]));
+      }
+      asked.forEach(({ result, mistake }, index) => {
+        if (!result.mistake && hits.get(index) === 0) result.mistake = mistake.say;
+      });
+    }
+    return results;
   }
 
   private disconnect() {
-    this.terminal?.stream.destroy();
+    const old = this.terminal;
+    old?.stream.destroy();
     this.terminal = undefined;
+    // Closing the connection does not end the shell inside the machine, so each reconnect would
+    // leave one more bash behind until the process limit is reached. Ask the old shell to hang up.
+    if (old) void this.hangUp(old.id);
+  }
+
+  /** Best effort: sends the old terminal's shell a hang-up signal, as closing a real terminal window does. */
+  private async hangUp(id: string) {
+    try {
+      if (!/^[a-zA-Z0-9-]{1,80}$/.test(id)) return;
+      const container = this.docker.getContainer(this.name);
+      const execution = await container.exec({
+        Cmd: ['bash', '-c', `p=/run/edorax-term-${id}; [ -f $p ] && kill -HUP "$(cat $p)" 2>/dev/null; rm -f $p`],
+        User: 'root',
+        AttachStdout: false,
+        AttachStderr: false,
+      });
+      await execution.start({ Detach: true });
+    } catch {
+      /* The machine may be stopped already, which ends every shell. */
+    }
   }
 
   dispose() {
@@ -339,7 +382,8 @@ ${build ? `printf %s '${encoded}' | base64 -d > /tmp/edorax-build.sh; bash -e /t
       this.disconnect();
       const container = await this.running();
       const execution = await container.exec({
-        Cmd: ['bash', '-l'],
+        // The shell writes its own process id first, so hangUp can find it later, then replaces itself with bash.
+        Cmd: ['bash', '-c', `echo $$ > /run/edorax-term-${id}; exec bash -l`],
         User: 'root',
         Tty: true,
         AttachStdin: true,

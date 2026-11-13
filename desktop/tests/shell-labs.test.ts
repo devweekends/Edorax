@@ -1,9 +1,13 @@
 import test from 'node:test';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { dump as dumpYaml } from 'js-yaml';
 import assert from 'node:assert/strict';
 import { SHELL_LABS, getShellLab } from '../src/shell-labs/catalog';
 import { shellLabView, validateShellLab, type ShellLab } from '../src/domain/shell-labs';
 import { SHELL_LAB_CAPABILITIES, ShellLabRuntime, shellContainerOptions, shellLabName } from '../src/shell-labs/runtime';
-import { LESSONS } from '../src/shell-labs/lessons';
+import { loadShellLabs } from '../src/shell-labs/loader';
 
 test('every shell lab is valid and has a unique slug', () => {
   const slugs = new Set<string>();
@@ -36,12 +40,26 @@ test('the learner view carries no setup, check scripts or solutions', () => {
   }
 });
 
-test('every lesson belongs to a real lab step, so renaming a step cannot drop its lesson silently', () => {
-  for (const [slug, steps] of Object.entries(LESSONS)) {
-    const lab = SHELL_LABS.find((item) => item.slug === slug);
-    assert.ok(lab, `lessons for unknown lab ${slug}`);
-    for (const stepId of Object.keys(steps))
-      assert.ok(lab.steps.some((step) => step.id === stepId), `lesson for unknown step ${slug} ${stepId}`);
+test('all labs load from the Core files with no errors', () => {
+  const { labs, errors } = loadShellLabs();
+  assert.deepEqual(errors, []);
+  assert.equal(labs.length, SHELL_LABS.length);
+  assert.ok(labs.length >= 19, 'run "pnpm sync:labs" if the labs folder is empty');
+});
+
+test('a broken lab file is skipped and named, and the other labs still load', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'labs-'));
+  try {
+    const first = SHELL_LABS[0];
+    fs.writeFileSync(path.join(dir, 'index.yaml'), dumpYaml({ labs: [first.slug, 'broken-lab'] }));
+    fs.writeFileSync(path.join(dir, `${first.slug}.yaml`), dumpYaml(first));
+    fs.writeFileSync(path.join(dir, 'broken-lab.yaml'), dumpYaml({ ...first, slug: 'broken-lab', machine: { ...first.machine, image: 'ubuntu:latest' } }));
+    const { labs, errors } = loadShellLabs(dir);
+    assert.deepEqual(labs.map((lab) => lab.slug), [first.slug]);
+    assert.match(errors.join('\n'), /broken-lab.*not latest/);
+    assert.match(loadShellLabs(path.join(dir, 'missing')).errors.join(''), /pnpm sync:labs/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
   }
 });
 

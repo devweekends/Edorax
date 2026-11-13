@@ -15,6 +15,7 @@ import { AudiobookLibrary } from './audiobooks/AudiobookLibrary';
 import { MiniPlayer } from './audiobooks/MiniPlayer';
 import { VisualLabs } from './visual-labs/VisualLabs';
 import { ShellLabs } from './shell-labs/ShellLabs';
+import type { ShellTopic } from '../domain/shell-labs';
 import { BrandMark } from './auth/BrandMark';
 import { LeaderboardPage } from './leaderboard/LeaderboardPage';
 import { StreakPopup } from './streak/StreakPopup';
@@ -50,6 +51,7 @@ export function App() {
     if (main.current) main.current.scrollTop = 0;
   }
   const [section, setSection] = useState<Section>('home');
+  const [shellTopic, setShellTopic] = useState<ShellTopic>('linux');
 
   function navigate(next: Section) {
     setSection(next);
@@ -280,9 +282,12 @@ export function App() {
           ) : section === 'audiobooks' ? (
             <AudiobookLibrary />
           ) : section === 'labs' ? (
-            <VisualLabs courses={courses} onOpenCourse={openBySlug} onOpenShellLabs={() => navigate('shell-labs')} />
+            <VisualLabs courses={courses} onOpenCourse={openBySlug} onOpenShellLabs={(topic) => {
+                setShellTopic(topic);
+                navigate('shell-labs');
+              }} />
           ) : section === 'shell-labs' ? (
-            <ShellLabs onBack={() => navigate('labs')} />
+            <ShellLabs topic={shellTopic} onBack={() => navigate('labs')} />
           ) : (
             <CourseCatalog
               {...{

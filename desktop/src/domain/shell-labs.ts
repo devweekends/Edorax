@@ -20,6 +20,20 @@ export interface ShellCommandNote {
   meaning: string;
   /** A key or line used inside a program (vi, a config file), not a shell command: nothing to type for you. */
   key?: boolean;
+  /** A real example of the command, on something that is not the step's answer: `ls /etc`. */
+  example?: string;
+  /** What the example prints, copied from a real machine. Shown with the example. */
+  output?: string;
+}
+
+/** A common wrong turn. When the step fails and `when` passes, the learner sees `say` instead of the generic message. */
+export interface ShellMistake {
+  /** A bash script run as root inside the machine. Exit 0 means the learner made this mistake. Never shown. */
+  when: string;
+  /** What went wrong and how to fix it, in plain words. */
+  say: string;
+  /** Commands that make this mistake. Used by the lab verifier in Edorax Core, never shown. */
+  repro?: string;
 }
 
 export interface ShellStep {
@@ -30,8 +44,7 @@ export interface ShellStep {
   body: string;
   /**
    * The lesson before the task: what the idea is, how it works and why it matters, in a few short
-   * paragraphs. Written in the lesson files (src/shell-labs/lessons) and joined in by the catalog;
-   * validation requires it on every step.
+   * paragraphs. Written in the lab's YAML file in Edorax Core; validation requires it on every step.
    */
   learn?: string[];
   /** The commands this step teaches, in general form. Required on every step, like learn. */
@@ -39,6 +52,14 @@ export interface ShellStep {
   /** The hint ladder: a nudge, then a hint, then a worked example. */
   hints: [string, string, string];
   checks: ShellCheck[];
+  /** A short message from the lab's character that opens the step, so the task has a person and a reason. */
+  story?: string;
+  /** One short, friendly line shown when the step passes. */
+  win?: string;
+  /** "What just happened": why it worked and what changed on the machine, in 2 or 3 sentences. Shown when the step passes. */
+  after?: string;
+  /** Common mistakes, tried in order when the step fails. The first that matches replaces the generic message. */
+  mistakes?: ShellMistake[];
   /** Commands that complete the step. Used by tests and never shown before the last hint. */
   solution: string;
 }
@@ -78,6 +99,14 @@ export const SHELL_LAB_EXTRA_CAPABILITIES: readonly string[] = [
 ];
 
 export type ShellTopic = 'linux' | 'docker' | 'ansible' | 'kubernetes';
+
+/** The kinds of machine a shell lab can be about, in the order the app shows them. A topic with no labs yet shows as coming soon. */
+export const SHELL_TOPICS: readonly { id: ShellTopic; title: string; description: string; machine: string }[] = [
+  { id: 'linux', title: 'Linux', description: 'Users, permissions, files, processes and services on a real server.', machine: 'A real Linux machine' },
+  { id: 'docker', title: 'Docker', description: 'Build images, run containers and fix a broken Compose stack.', machine: 'A real Docker host' },
+  { id: 'ansible', title: 'Ansible', description: 'Configure a fleet of servers from one control node.', machine: 'A control node and servers' },
+  { id: 'kubernetes', title: 'Kubernetes', description: 'Deploy, scale and debug workloads on a real cluster.', machine: 'A real cluster' },
+];
 export type ShellLevel = 'beginner' | 'intermediate';
 
 export interface ShellLab {
@@ -92,6 +121,12 @@ export interface ShellLab {
   /** The story the learner is dropped into. */
   scenario: string;
   minutes: number;
+  /** The person who sends the learner the tasks. Optional; labs without one use the plain scenario. */
+  character?: { name: string; role: string };
+  /** Shown when the lab is complete: what the learner can now do, in the story's voice. */
+  outro?: string;
+  /** The badge earned at the end, for example "Terminal Explorer". */
+  badge?: string;
   machine: ShellMachine;
   /** A bash script run once as root when the machine is first created. */
   setup: string;
@@ -123,6 +158,9 @@ export interface ShellLabSummary {
 export interface ShellLabView extends ShellLabSummary {
   scenario: string;
   machine: string;
+  character?: { name: string; role: string };
+  outro?: string;
+  badge?: string;
   steps: number;
   stepList: {
     id: string;
@@ -132,6 +170,9 @@ export interface ShellLabView extends ShellLabSummary {
     commands: ShellCommandNote[];
     hints: [string, string, string];
     checks: { id: string; label: string }[];
+    story?: string;
+    win?: string;
+    after?: string;
   }[];
 }
 
@@ -146,6 +187,8 @@ export interface ShellStepResult {
   stepId: string;
   passed: boolean;
   checks: ShellCheckResult[];
+  /** When the step fails and one of its listed mistakes matches, what the learner most likely did wrong. */
+  mistake?: string;
 }
 
 export interface ShellLabStatus {
@@ -157,7 +200,26 @@ export interface ShellLabStatus {
   message: string;
 }
 
+export type DockerReadiness =
+  | { state: 'ready' }
+  | { state: 'not-running'; canStart: boolean }
+  | { state: 'missing'; platform: string };
+
+export interface DockerSetupProgress {
+  phase: 'download' | 'verify' | 'install' | 'done' | 'error';
+  percent?: number;
+  message: string;
+  savedTo?: string;
+}
+
 export interface ShellLabsAPI {
+  /** Is Docker ready for labs, installed but closed, or missing? */
+  dockerState(): Promise<DockerReadiness>;
+  /** Opens an installed Docker Desktop. Returns false where the app cannot. */
+  startDocker(): Promise<boolean>;
+  /** Downloads and opens the official installer (Windows, macOS) or opens the install guide (Linux). Progress arrives through onDockerProgress. */
+  setUpDocker(): Promise<DockerSetupProgress>;
+  onDockerProgress(listener: (progress: DockerSetupProgress) => void): () => void;
   list(): Promise<ShellLabSummary[]>;
   view(slug: string): Promise<ShellLabView>;
   status(slug: string): Promise<ShellLabStatus>;
@@ -193,6 +255,8 @@ export function validateShellLab(lab: ShellLab): string[] {
     if (!/^[a-z0-9][a-z0-9+.-]{0,60}$/.test(pkg)) problems.push(`package "${pkg}" is not a valid package name`);
   for (const cap of lab.machine.capabilities ?? [])
     if (!SHELL_LAB_EXTRA_CAPABILITIES.includes(cap)) problems.push(`capability "${cap}" is not allowed in a shell lab`);
+  if (lab.character && (!lab.character.name?.trim() || !lab.character.role?.trim())) problems.push('a lab character needs a name and a role');
+  for (const key of ['outro', 'badge'] as const) if (lab[key] !== undefined && !String(lab[key]).trim()) problems.push(`${key} cannot be empty`);
   if (!lab.steps.length) problems.push('a lab needs at least one step');
   const stepIds = new Set<string>();
   for (const step of lab.steps) {
@@ -205,9 +269,15 @@ export function validateShellLab(lab: ShellLab): string[] {
     if (!step.checks.length) problems.push(`step "${step.id}" needs at least one check`);
     if (!step.solution.trim()) problems.push(`step "${step.id}" needs a solution`);
     if (!step.learn?.length || step.learn.some((paragraph) => !paragraph.trim()))
-      problems.push(`step "${step.id}" needs a lesson: add it to the lab's lesson file`);
+      problems.push(`step "${step.id}" needs a lesson: add "learn" to the step in the lab's YAML file`);
     if (!step.commands?.length || step.commands.some((note) => !note.command.trim() || !note.meaning.trim()))
       problems.push(`step "${step.id}" needs the commands it teaches, each with its meaning`);
+    for (const key of ['story', 'win', 'after'] as const) if (step[key] !== undefined && !String(step[key]).trim()) problems.push(`step "${step.id}": ${key} cannot be empty`);
+    for (const mistake of step.mistakes ?? [])
+      if (!mistake.when?.trim() || !mistake.say?.trim()) problems.push(`step "${step.id}": every mistake needs "when" (a bash check) and "say" (the message)`);
+    for (const note of step.commands ?? [])
+      if ((note.example !== undefined && !note.example.trim()) || (note.output !== undefined && !note.example?.trim()))
+        problems.push(`step "${step.id}": command "${note.command}" has an output but no example, or an empty example`);
     const checkIds = new Set<string>();
     for (const check of step.checks) {
       if (!ID.test(check.id)) problems.push(`check id "${check.id}" in step "${step.id}" is not valid`);
@@ -230,6 +300,9 @@ export function shellLabView(lab: ShellLab): ShellLabView {
     ...shellLabSummary(lab),
     scenario: lab.scenario,
     machine: lab.machine.name,
+    ...(lab.character ? { character: lab.character } : {}),
+    ...(lab.outro ? { outro: lab.outro } : {}),
+    ...(lab.badge ? { badge: lab.badge } : {}),
     stepList: lab.steps.map((step) => ({
       id: step.id,
       goal: step.goal,
@@ -238,6 +311,9 @@ export function shellLabView(lab: ShellLab): ShellLabView {
       commands: step.commands ?? [],
       hints: step.hints,
       checks: step.checks.map((check) => ({ id: check.id, label: check.label })),
+      ...(step.story ? { story: step.story } : {}),
+      ...(step.win ? { win: step.win } : {}),
+      ...(step.after ? { after: step.after } : {}),
     })),
   };
 }
