@@ -145,7 +145,8 @@ export function ChapterReaderShell({
   const router = useRouter();
   const hydrated = useHydrated();
   const [focusStored, setFocusStored] = useBrowserStorage("buildment:reader-focus", "0");
-  const focusMode = hydrated && focusStored === "1";
+  // "1": the reader chose focus mode. "quiz": a quiz chapter turned it on, so it ends with the quiz.
+  const focusMode = hydrated && (focusStored === "1" || focusStored === "quiz");
 
   const [showSkeleton, setShowSkeleton] = useState(!skipSkeleton);
   const [mentorOpen, setMentorOpen] = useState(false);
@@ -174,12 +175,14 @@ export function ChapterReaderShell({
     }
   }, [setFocusStored, setLeftCollapsed, setRightCollapsed]);
 
-  const enterFocusMode = useCallback(async () => {
+  const enterFocusMode = useCallback(async (source: "reader" | "quiz" = "reader") => {
     skipFocusRestore.current = true;
-    if (focusStored !== "1") {
+    const alreadyOn = focusStored === "1" || focusStored === "quiz";
+    if (!alreadyOn) {
       layoutBeforeFocus.current = { left: leftCollapsed, right: rightCollapsed };
     }
-    setFocusStored("1");
+    // A quiz never downgrades focus mode the reader chose.
+    if (!(source === "quiz" && focusStored === "1")) setFocusStored(source === "quiz" ? "quiz" : "1");
     setLeftCollapsed(true);
     setRightCollapsed(true);
     try {
@@ -198,7 +201,7 @@ export function ChapterReaderShell({
   }, [focusMode, enterFocusMode, exitFocusMode]);
 
   useEffect(() => {
-    if (!hydrated || focusStored !== "1") {
+    if (!hydrated || (focusStored !== "1" && focusStored !== "quiz")) {
       skipFocusRestore.current = false;
       return;
     }
@@ -253,8 +256,18 @@ export function ChapterReaderShell({
     if (readerMode !== "QUIZ") return;
     if (quizAutoFocusSlug.current === chapterSlug) return;
     quizAutoFocusSlug.current = chapterSlug;
-    void enterFocusMode();
+    void enterFocusMode("quiz");
   }, [chapterSlug, readerMode, enterFocusMode]);
+
+  // Focus mode that a quiz turned on must not follow the reader to a reading chapter,
+  // where it would hide the chapter list with no sign of why. The saved layout may be
+  // lost by then (a reload, a new chapter), so bring the chapter list back on desktop.
+  useEffect(() => {
+    if (!hydrated || readerMode === "QUIZ" || focusStored !== "quiz") return;
+    void exitFocusMode().then(() => {
+      if (!isMobile) setLeftCollapsed(false);
+    });
+  }, [hydrated, readerMode, focusStored, exitFocusMode, isMobile, setLeftCollapsed]);
 
   useEffect(() => {
     if (readerMode !== "QUIZ") return;
@@ -275,7 +288,7 @@ export function ChapterReaderShell({
     if (readerMode !== "QUIZ") return;
     const onQuizFocus = () => {
       if (!focusMode) {
-        void enterFocusMode();
+        void enterFocusMode("quiz");
         return;
       }
       if (!document.fullscreenElement) void document.documentElement.requestFullscreen?.().catch(() => undefined);
