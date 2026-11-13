@@ -4,6 +4,8 @@
 
 export interface ShellCheck {
   id: string;
+  /** Which machine runs this check: the name of a machine in the lab. Default: the main machine. */
+  on?: string;
   /** Shown next to the result: "Group devs exists". */
   label: string;
   /** A bash script run as root inside the machine. Exit 0 passes. */
@@ -32,6 +34,8 @@ export interface ShellMistake {
   when: string;
   /** What went wrong and how to fix it, in plain words. */
   say: string;
+  /** Which machine runs `when`: the name of a machine in the lab. Default: the main machine. */
+  on?: string;
   /** Commands that make this mistake. Used by the lab verifier in Edorax Core, never shown. */
   repro?: string;
 }
@@ -83,7 +87,33 @@ export interface ShellMachine {
   build?: string;
   /** Linux capabilities beyond the default set, from SHELL_LAB_EXTRA_CAPABILITIES only. */
   capabilities?: string[];
+  /** Memory in MB. Default 256, at most 2048. A Kubernetes control plane needs about 1024. */
+  memoryMb?: number;
+  /** Processes the machine may run at once. Default 128, at most 1024. */
+  pids?: number;
+  /** CPU cores. Default 1, at most 2. */
+  cpus?: number;
+  /**
+   * Lets setuid programs such as `sudo` work in this machine (turns off no-new-privileges). For servers a learner
+   * logs in to as a normal user and then uses sudo, as Ansible does with `become`. The machine still has no network
+   * and few capabilities.
+   */
+  sudo?: boolean;
 }
+
+/** An extra machine on the lab's private network. The learner's terminal always opens on the main `machine`. */
+export interface ShellExtraMachine extends ShellMachine {
+  /** A bash script run as root once when this machine is first created. Runs before the main machine's setup. */
+  setup?: string;
+  /** Run each time this machine starts again. */
+  boot?: string;
+  /** Run just before this machine stops. */
+  shutdown?: string;
+}
+
+export const SHELL_MAX_EXTRA_MACHINES = 4;
+
+export const SHELL_MACHINE_LIMITS = { memoryMb: [128, 2048], pids: [32, 1024], cpus: [0.5, 2] } as const;
 
 /** Capabilities a lab may ask for on top of the default set, and why each is safe here. */
 export const SHELL_LAB_EXTRA_CAPABILITIES: readonly string[] = [
@@ -128,6 +158,11 @@ export interface ShellLab {
   /** The badge earned at the end, for example "Terminal Explorer". */
   badge?: string;
   machine: ShellMachine;
+  /**
+   * Extra machines for labs about more than one server (Ansible: a control node and its servers).
+   * All machines share one private network with no way out, and reach each other by name.
+   */
+  machines?: ShellExtraMachine[];
   /** A bash script run once as root when the machine is first created. */
   setup: string;
   /**
@@ -257,6 +292,25 @@ export function validateShellLab(lab: ShellLab): string[] {
     if (!SHELL_LAB_EXTRA_CAPABILITIES.includes(cap)) problems.push(`capability "${cap}" is not allowed in a shell lab`);
   if (lab.character && (!lab.character.name?.trim() || !lab.character.role?.trim())) problems.push('a lab character needs a name and a role');
   for (const key of ['outro', 'badge'] as const) if (lab[key] !== undefined && !String(lab[key]).trim()) problems.push(`${key} cannot be empty`);
+  const extras = lab.machines ?? [];
+  if (extras.length > SHELL_MAX_EXTRA_MACHINES) problems.push(`a lab can have at most ${SHELL_MAX_EXTRA_MACHINES} extra machines`);
+  const machineNames = new Set<string>([lab.machine.name]);
+  for (const extra of extras) {
+    if (!/^[a-z0-9-]{1,40}$/.test(extra.name ?? '')) problems.push(`extra machine name "${extra.name}" must be a short hostname`);
+    if (machineNames.has(extra.name)) problems.push(`machine name "${extra.name}" is used twice`);
+    machineNames.add(extra.name);
+    if (!PINNED.test(extra.image ?? '') || String(extra.image).endsWith(':latest')) problems.push(`machine "${extra.name}": the image must have a fixed tag or digest, not latest`);
+    for (const pkg of extra.packages ?? []) if (!/^[a-z0-9][a-z0-9+.-]{0,60}$/.test(pkg)) problems.push(`machine "${extra.name}": package "${pkg}" is not a valid package name`);
+    for (const cap of extra.capabilities ?? []) if (!SHELL_LAB_EXTRA_CAPABILITIES.includes(cap)) problems.push(`machine "${extra.name}": capability "${cap}" is not allowed in a shell lab`);
+    for (const [key, [low, high]] of Object.entries(SHELL_MACHINE_LIMITS) as [keyof typeof SHELL_MACHINE_LIMITS, readonly [number, number]][]) {
+      const value = extra[key];
+      if (value !== undefined && !(typeof value === 'number' && value >= low && value <= high)) problems.push(`machine "${extra.name}": ${key} must be a number from ${low} to ${high}`);
+    }
+  }
+  for (const [key, [low, high]] of Object.entries(SHELL_MACHINE_LIMITS) as [keyof typeof SHELL_MACHINE_LIMITS, readonly [number, number]][]) {
+    const value = lab.machine[key];
+    if (value !== undefined && !(typeof value === 'number' && value >= low && value <= high)) problems.push(`machine.${key} must be a number from ${low} to ${high}`);
+  }
   if (!lab.steps.length) problems.push('a lab needs at least one step');
   const stepIds = new Set<string>();
   for (const step of lab.steps) {
@@ -275,6 +329,7 @@ export function validateShellLab(lab: ShellLab): string[] {
     for (const key of ['story', 'win', 'after'] as const) if (step[key] !== undefined && !String(step[key]).trim()) problems.push(`step "${step.id}": ${key} cannot be empty`);
     for (const mistake of step.mistakes ?? [])
       if (!mistake.when?.trim() || !mistake.say?.trim()) problems.push(`step "${step.id}": every mistake needs "when" (a bash check) and "say" (the message)`);
+      else if (mistake.on !== undefined && !machineNames.has(mistake.on)) problems.push(`step "${step.id}": a mistake runs on "${mistake.on}", which is not a machine in this lab`);
     for (const note of step.commands ?? [])
       if ((note.example !== undefined && !note.example.trim()) || (note.output !== undefined && !note.example?.trim()))
         problems.push(`step "${step.id}": command "${note.command}" has an output but no example, or an empty example`);
@@ -285,6 +340,7 @@ export function validateShellLab(lab: ShellLab): string[] {
       checkIds.add(check.id);
       if (!check.run.trim()) problems.push(`check "${check.id}" in step "${step.id}" has nothing to run`);
       if (!check.fail.trim()) problems.push(`check "${check.id}" in step "${step.id}" needs a fail message`);
+      if (check.on !== undefined && !machineNames.has(check.on)) problems.push(`check "${check.id}" in step "${step.id}" runs on "${check.on}", which is not a machine in this lab`);
     }
   }
   return problems;
