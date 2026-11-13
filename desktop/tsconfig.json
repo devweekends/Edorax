@@ -10,7 +10,8 @@
     "esModuleInterop": true,
     "noImplicitAny": true,
     "sourceMap": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "noEmit": true
   },
   "include": ["src/**/*", "tests/**/*", "*.ts", "*.mts", "../packages/learning-ui/src/types/**/*.d.ts"]
 }

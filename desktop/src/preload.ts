@@ -55,6 +55,27 @@ const api: DesktopAPI = {
       };
     },
   },
+  shellLabs: {
+    list: () => ipcRenderer.invoke('shell-labs:list'),
+    view: (slug) => ipcRenderer.invoke('shell-labs:view', slug),
+    status: (slug) => ipcRenderer.invoke('shell-labs:status', slug),
+    start: (slug) => ipcRenderer.invoke('shell-labs:start', slug),
+    stop: (slug) => ipcRenderer.invoke('shell-labs:stop', slug),
+    reset: (slug) => ipcRenderer.invoke('shell-labs:reset', slug),
+    check: (slug, stepId) => ipcRenderer.invoke('shell-labs:check', slug, stepId),
+    openTerminal: (slug, id) => ipcRenderer.invoke('shell-labs:terminal-open', slug, id),
+    closeTerminal: (slug, id) => ipcRenderer.invoke('shell-labs:terminal-close', slug, id),
+    terminalInput: (slug, id, data) => ipcRenderer.invoke('shell-labs:terminal-input', slug, id, data),
+    resizeTerminal: (slug, id, cols, rows) =>
+      ipcRenderer.invoke('shell-labs:terminal-resize', slug, id, cols, rows),
+    onTerminalData: (listener) => {
+      const receive = (_event: Electron.IpcRendererEvent, data: { id: string; data: string }) => listener(data);
+      ipcRenderer.on('shell-labs:terminal-data', receive);
+      return () => {
+        ipcRenderer.removeListener('shell-labs:terminal-data', receive);
+      };
+    },
+  },
   remote: {
     request: (path, method, body) =>
       ipcRenderer.invoke('remote:request', path, method, body),

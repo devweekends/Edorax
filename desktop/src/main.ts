@@ -37,16 +37,38 @@ import { createBrowserAuth } from './auth/browser-auth';
 import { OfflineStore, type DownloadedCourse, prepareEncryption } from './offline/store';
 
 import { LabRuntime, localDocker } from './labs/runtime';
+import { ShellLabRuntime } from './shell-labs/runtime';
+import { SHELL_LABS, getShellLab } from './shell-labs/catalog';
+import { shellLabSummary, shellLabView } from './domain/shell-labs';
 
 let ideController: ReturnType<typeof installIDE> | undefined;
 const locals = new Map<string, LocalRuntime>();
 const labs = new Map<string, LabRuntime>();
+const shellLabs = new Map<string, ShellLabRuntime>();
 const runtimeRequire = createRequire(__filename);
 function disposeLabs() {
   for (const lab of labs.values()) lab.dispose();
   labs.clear();
   for (const local of locals.values()) local.dispose();
   locals.clear();
+  for (const shell of shellLabs.values()) shell.dispose();
+  shellLabs.clear();
+}
+async function shellLabRuntime(slug: unknown) {
+  const lab = getShellLab(slug);
+  if (!lab) throw new Error('Unknown shell lab.');
+  const user = await previewClient.resolveLocalLabUser();
+  if (!user) throw new Error('Sign in to open a shell lab.');
+  const scope = `${user}:shell:${lab.slug}`;
+  if (!shellLabs.has(scope))
+    shellLabs.set(
+      scope,
+      new ShellLabRuntime(localDocker(), lab, scope, (data) => {
+        if (mainWindow && !mainWindow.isDestroyed())
+          mainWindow.webContents.send('shell-labs:terminal-data', data);
+      }),
+    );
+  return shellLabs.get(scope)!;
 }
 async function labRuntime(blockId: string) {
   if (
@@ -652,6 +674,37 @@ else {
       ipcMain.handle(`labs:${name}`, async (event, blockId, ...args) => {
         requireRenderer(event);
         return handler(await labRuntime(blockId), ...args);
+      });
+    }
+    ipcMain.handle('shell-labs:list', (event) => {
+      requireRenderer(event);
+      return SHELL_LABS.map(shellLabSummary);
+    });
+    ipcMain.handle('shell-labs:view', (event, slug) => {
+      requireRenderer(event);
+      const lab = getShellLab(slug);
+      if (!lab) throw new Error('Unknown shell lab.');
+      return shellLabView(lab);
+    });
+    const shellHandlers: Record<
+      string,
+      (lab: ShellLabRuntime, ...args: unknown[]) => unknown
+    > = {
+      status: (lab) => lab.status(),
+      start: (lab) => lab.start(),
+      stop: (lab) => lab.stop(),
+      reset: (lab) => lab.reset(),
+      check: (lab, stepId) => lab.check(stepId),
+      'terminal-open': (lab, id) => lab.openTerminal(id),
+      'terminal-close': (lab, id) => lab.closeTerminal(id),
+      'terminal-input': (lab, id, data) => lab.terminalInput(id, data),
+      'terminal-resize': (lab, id, cols, rows) =>
+        lab.resizeTerminal(id, cols, rows),
+    };
+    for (const [name, handler] of Object.entries(shellHandlers)) {
+      ipcMain.handle(`shell-labs:${name}`, async (event, slug, ...args) => {
+        requireRenderer(event);
+        return handler(await shellLabRuntime(slug), ...args);
       });
     }
     ipcMain.handle('course:start-learning', (event, slug) => {

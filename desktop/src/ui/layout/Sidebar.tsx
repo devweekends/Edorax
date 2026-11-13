@@ -15,7 +15,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
-export type Section = 'home' | 'courses' | 'mine' | 'progress' | 'leaderboard' | 'audiobooks' | 'labs' | 'questions' | 'settings';
+export type Section = 'home' | 'courses' | 'mine' | 'progress' | 'leaderboard' | 'audiobooks' | 'labs' | 'shell-labs' | 'questions' | 'settings';
 
 type NavItem = { id?: Section; label: string; icon: LucideIcon; soon?: boolean };
 
@@ -113,7 +113,7 @@ function NavGroup({
       <ul className="space-y-1">
         {items.map((item) => (
           <li key={item.label}>
-            <NavButton item={item} active={item.id !== undefined && section === item.id} collapsed={collapsed} onNavigate={onNavigate} badge={item.id ? badges?.[item.id] : undefined} />
+            <NavButton item={item} active={item.id !== undefined && (section === item.id || (item.id === 'labs' && section === 'shell-labs'))} collapsed={collapsed} onNavigate={onNavigate} badge={item.id ? badges?.[item.id] : undefined} />
           </li>
         ))}
       </ul>

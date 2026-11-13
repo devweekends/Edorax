@@ -14,6 +14,7 @@ import { SignInPrompt } from './auth/SignInPrompt';
 import { AudiobookLibrary } from './audiobooks/AudiobookLibrary';
 import { MiniPlayer } from './audiobooks/MiniPlayer';
 import { VisualLabs } from './visual-labs/VisualLabs';
+import { ShellLabs } from './shell-labs/ShellLabs';
 import { BrandMark } from './auth/BrandMark';
 import { LeaderboardPage } from './leaderboard/LeaderboardPage';
 import { StreakPopup } from './streak/StreakPopup';
@@ -279,7 +280,9 @@ export function App() {
           ) : section === 'audiobooks' ? (
             <AudiobookLibrary />
           ) : section === 'labs' ? (
-            <VisualLabs />
+            <VisualLabs courses={courses} onOpenCourse={openBySlug} onOpenShellLabs={() => navigate('shell-labs')} />
+          ) : section === 'shell-labs' ? (
+            <ShellLabs onBack={() => navigate('labs')} />
           ) : (
             <CourseCatalog
               {...{

@@ -3,7 +3,14 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 
+import type { LabsAPI } from '../../domain/labs';
+
 export type TerminalCommand = { text: string; nonce: number };
+/** The terminal calls a lab runtime makes. Course workspaces and shell labs both provide them. */
+export type TerminalAPI = Pick<
+  LabsAPI,
+  'openTerminal' | 'closeTerminal' | 'terminalInput' | 'resizeTerminal' | 'onTerminalData'
+>;
 
 export function LabTerminal({
   blockId,
@@ -11,8 +18,11 @@ export function LabTerminal({
   label,
   runCommand,
   onSent,
+  api: apiOverride,
 }: {
   label?: string;
+  /** Defaults to the course workspace API. */
+  api?: TerminalAPI;
   blockId: string;
   onError: (message: string) => void;
   runCommand?: TerminalCommand | null;
@@ -41,16 +51,16 @@ export function LabTerminal({
     // Execute every snippet line: newlines become shell submits.
     const payload = command.text.replace(/\r?\n/g, '\r');
     const submit = payload.endsWith('\r') ? payload : payload + '\r';
-    const api = window.buildment.labs;
+    const api = apiOverride ?? window.buildment.labs;
     for (let offset = 0; offset < submit.length; offset += 2048)
       void api
         .terminalInput(blockId, active.id, submit.slice(offset, offset + 2048))
         .catch((error: unknown) => onError(String(error)));
     onSent?.();
-  }, [blockId, onError, onSent]);
+  }, [blockId, onError, onSent, apiOverride]);
   useEffect(() => {
     if (!host.current) return;
-    const api = window.buildment.labs;
+    const api = apiOverride ?? window.buildment.labs;
     const id = crypto.randomUUID();
     let active = true;
     let ready = false;
@@ -120,7 +130,7 @@ export function LabTerminal({
       terminal.dispose();
       void api.closeTerminal(blockId, id).catch(() => {});
     };
-  }, [blockId, revision, onError, dark, send]);
+  }, [blockId, revision, onError, dark, send, apiOverride]);
   useEffect(() => {
     send();
   }, [send, runCommand]);

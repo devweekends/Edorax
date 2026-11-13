@@ -28,15 +28,22 @@ export const VISUAL_LAB_GROUPS: readonly { id: string; title: string; descriptio
   },
 ];
 
-export type VisualLabSummary = { slug: string; title: string; purpose: string };
+export type VisualLabSummary = {
+  slug: string;
+  title: string;
+  purpose: string;
+  /** A full challenge: checks, scenarios and a budget. */
+  challenge: boolean;
+  checks: number;
+};
 
 /** Every registered visual lab, grouped by topic. Groups with no labs are left out. */
 export function visualLabGroups() {
-  const all: VisualLabSummary[] = Object.keys(labRegistry).map((slug) => ({
-    slug,
-    title: labRegistry[slug].title,
-    purpose: labRegistry[slug].purpose,
-  }));
+  const all: VisualLabSummary[] = Object.keys(labRegistry).map((slug) => {
+    const spec = labRegistry[slug];
+    const challenge = spec.family === 'hld' ? spec.challenge : undefined;
+    return { slug, title: spec.title, purpose: spec.purpose, challenge: Boolean(challenge), checks: challenge?.checks.length ?? 0 };
+  });
   return VISUAL_LAB_GROUPS.map((group) => ({ ...group, labs: all.filter((lab) => group.prefix(lab.slug)) })).filter(
     (group) => group.labs.length > 0,
   );
