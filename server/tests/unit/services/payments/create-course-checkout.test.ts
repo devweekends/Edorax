@@ -6,13 +6,13 @@ const db = vi.hoisted(() => ({
 }));
 
 const polarCreate = vi.hoisted(() => vi.fn());
+const ensureProduct = vi.hoisted(() => vi.fn());
 
 vi.mock("../../../../src/db/prisma.js", () => ({ prisma: db }));
 vi.mock("../../../../src/config/env.js", () => ({
   env: {
     APP_URL: "http://localhost:3000",
     POLAR_ACCESS_TOKEN: "polar_token",
-    POLAR_PRODUCT_ID: "prod_course",
     POLAR_WEBHOOK_SECRET: "whsec_test",
     POLAR_ENVIRONMENT: "sandbox",
   },
@@ -21,22 +21,23 @@ vi.mock("../../../../src/config/env.js", () => ({
 vi.mock("../../../../src/services/payments/polar.js", () => ({
   requirePolarConfig: () => ({
     accessToken: "polar_token",
-    productId: "prod_course",
     webhookSecret: "whsec_test",
     environment: "sandbox" as const,
   }),
   getPolarClient: () => ({ checkouts: { create: polarCreate } }),
   resetPolarClientForTests: () => undefined,
 }));
+vi.mock("../../../../src/services/payments/course-product.js", () => ({ ensureCoursePolarProduct: ensureProduct }));
 
 import { createCourseCheckout } from "../../../../src/services/payments/create-course-checkout.js";
 
 describe("createCourseCheckout", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    ensureProduct.mockResolvedValue("prod_course");
   });
 
-  it("creates a Polar session with an ad-hoc price and stores the checkout id", async () => {
+  it("creates a Polar session for the course's own product with an ad-hoc price and stores the checkout id", async () => {
     db.enrollment.findFirst.mockResolvedValue({
       id: "enr_1",
       userId: "user_1",
@@ -58,6 +59,7 @@ describe("createCourseCheckout", () => {
     const result = await createCourseCheckout("enr_1", "user_1", { customerIpAddress: "1.2.3.4" });
 
     expect(result).toEqual({ url: "https://sandbox.polar.sh/checkout/chk_1", checkoutId: "chk_1" });
+    expect(ensureProduct).toHaveBeenCalledWith(expect.objectContaining({ id: "course_1", title: "System Design" }));
     expect(polarCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         products: ["prod_course"],
@@ -87,5 +89,6 @@ describe("createCourseCheckout", () => {
     });
     await expect(createCourseCheckout("enr_1", "user_1")).rejects.toThrow(/not awaiting payment/i);
     expect(polarCreate).not.toHaveBeenCalled();
+    expect(ensureProduct).not.toHaveBeenCalled();
   });
 });

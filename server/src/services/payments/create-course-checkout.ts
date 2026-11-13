@@ -2,6 +2,7 @@ import { env } from "../../config/env.js";
 import { prisma } from "../../db/prisma.js";
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../utils/errors.js";
 import { getPolarClient, requirePolarConfig } from "./polar.js";
+import { ensureCoursePolarProduct } from "./course-product.js";
 
 export type CourseCheckoutSession = { url: string; checkoutId: string };
 
@@ -18,12 +19,12 @@ export async function createCourseCheckout(
   userId: string,
   options: { customerIpAddress?: string | null } = {}
 ): Promise<CourseCheckoutSession> {
-  const polarConfig = requirePolarConfig();
+  requirePolarConfig();
   const enrollment = await prisma.enrollment.findFirst({
     where: { id: enrollmentId, userId },
     include: {
       user: { select: { id: true, email: true, name: true } },
-      course: { select: { id: true, slug: true, title: true, status: true, pricingType: true, priceCents: true, currency: true } },
+      course: { select: { id: true, slug: true, title: true, description: true, status: true, pricingType: true, priceCents: true, currency: true } },
       payment: true,
     },
   });
@@ -49,11 +50,13 @@ export async function createCourseCheckout(
   const successUrl = `${env.APP_URL}/courses/${encodeURIComponent(enrollment.course.slug)}/checkout?paid=1`;
   const returnUrl = `${env.APP_URL}/courses/${encodeURIComponent(enrollment.course.slug)}/checkout`;
 
+  // Every course has its own Polar product, created on its first checkout.
+  const productId = await ensureCoursePolarProduct(enrollment.course);
   const polar = getPolarClient();
   const checkout = await polar.checkouts.create({
-    products: [polarConfig.productId],
+    products: [productId],
     prices: {
-      [polarConfig.productId]: [
+      [productId]: [
         {
           amount_type: "fixed",
           price_amount: amountDueCents,

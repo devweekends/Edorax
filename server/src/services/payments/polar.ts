@@ -6,12 +6,11 @@ let client: Polar | null = null;
 
 /** Throws when Polar env is incomplete so callers get a stable client-facing code. */
 export function requirePolarConfig() {
-  if (!polarPaymentsConfigured || !env.POLAR_ACCESS_TOKEN || !env.POLAR_PRODUCT_ID || !env.POLAR_WEBHOOK_SECRET) {
+  if (!polarPaymentsConfigured || !env.POLAR_ACCESS_TOKEN || !env.POLAR_WEBHOOK_SECRET) {
     throw new AppError("Online payments are not configured on this server.", 503, "PAYMENTS_NOT_CONFIGURED");
   }
   return {
     accessToken: env.POLAR_ACCESS_TOKEN,
-    productId: env.POLAR_PRODUCT_ID,
     webhookSecret: env.POLAR_WEBHOOK_SECRET,
     environment: env.POLAR_ENVIRONMENT,
   };
