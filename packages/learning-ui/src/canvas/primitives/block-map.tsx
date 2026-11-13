@@ -7,6 +7,7 @@ import { BeatButton, BeatFrame } from "./beat-frame";
 import { DotGrid, VerdictBanner } from "./svg-parts";
 import { FOCUS_RING, NEUTRAL, TONES, type Tone } from "./tones";
 import { useBeatClock } from "./use-beat-clock";
+import { spreadBoxes } from "../renderers/scene/fit";
 import { fitOneLine } from "../renderers/scene/geometry";
 import type { ActorKind } from "../renderers/scene/types";
 import {
@@ -43,7 +44,7 @@ export type BlockMapConfig = {
   cloudLabel: string;
 };
 
-const W = 420;
+const MAP_W = 420;
 /** A compact SvgNode: the same look, smaller, so ten or more blocks fit on a phone. */
 export const MAP_CARD_W = 120;
 export const MAP_CARD_H = 50;
@@ -142,9 +143,13 @@ export function mapLift(blocks: { y: number }[]): number {
 
 export function BlockMap({ title, limits, blocks: placed, links: extra = [], height: givenHeight, defaultSelected, cloudLabel }: BlockMapConfig & { title: string; limits: string }) {
   // A map whose top card was placed under the banner is moved down as a whole, and the picture grows by the same amount.
-  const lift = mapLift(placed);
-  const blocks = lift ? placed.map((b) => ({ ...b, y: b.y + lift })) : placed;
-  const height = givenHeight + lift;
+  // Cards placed too close together or over the edge are spread out first, in a wider or taller picture.
+  const fit = spreadBoxes(placed.map((b) => ({ x: b.x, top: b.y - MAP_CARD_H / 2, w: MAP_CARD_W, h: MAP_CARD_H })), MAP_W, givenHeight);
+  const spaced = fit.kx === 1 && fit.ky === 1 && fit.dx === 0 && fit.dy === 0 ? placed : placed.map((b) => ({ ...b, x: b.x * fit.kx + fit.dx, y: (b.y - MAP_CARD_H / 2) * fit.ky + fit.dy + MAP_CARD_H / 2 }));
+  const W = fit.width;
+  const lift = mapLift(spaced);
+  const blocks = lift ? spaced.map((b) => ({ ...b, y: b.y + lift })) : spaced;
+  const height = fit.height + lift;
   const ref = useRef<HTMLDivElement>(null);
   const clock = useBeatClock(ref);
   const { restart } = clock;
