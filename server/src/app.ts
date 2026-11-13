@@ -8,7 +8,7 @@ import { logger } from "./utils/logger.js";
 import { apiLimiter } from "./middlewares/rate-limit.js";
 import { errorHandler, notFoundHandler } from "./middlewares/error-handler.js";
 import routes from "./routes/index.js";
-import polarWebhookRoutes from "./routes/webhooks/polar.js";
+import polarWebhookRoutes from "./routes/webhook/polar.js";
 import { NOTIFICATION_STREAM_PATH } from "./shared/api/notifications.js";
 
 /** Builds the Express app without listening, so tests can drive it with supertest. */

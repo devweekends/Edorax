@@ -24,7 +24,7 @@ vi.mock("../../../../src/config/env.js", () => ({
 vi.mock("../../../../src/services/payments/fulfill-polar-order.js", () => ({ fulfillPolarOrderPaid }));
 vi.mock("../../../../src/utils/logger.js", () => ({ logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn() } }));
 
-import polarWebhookRoutes from "../../../../src/routes/webhooks/polar.js";
+import polarWebhookRoutes from "../../../../src/routes/webhook/polar.js";
 import { webhooks } from "@polar-sh/sdk/2026-10";
 
 function app() {
