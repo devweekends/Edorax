@@ -12,6 +12,8 @@ import {
   leaderboardHubQuery,
   leaderboardQuery,
   profileBody,
+  publicProfileBody,
+  rewardsActiveBody,
   streakMilestoneParams,
   weeklyGoalBody,
 } from "../../validations/learner.js";
@@ -23,6 +25,7 @@ router.use(authenticate, requireVerified);
 
 router.get("/workspace", learner.workspace);
 router.get("/dashboard", learner.dashboard);
+router.get("/habit", learner.habit);
 router.get("/progress", learner.progress);
 router.put("/weekly-goal", validateBody(weeklyGoalBody), learner.putWeeklyGoal);
 router.delete("/weekly-goal", learner.deleteWeeklyGoal);
@@ -33,7 +36,16 @@ router.get("/gamification", learner.gamification);
 router.patch("/gamification", validateBody(gamificationPreferencesBody), learner.patchGamification);
 router.get("/leaderboard", validateQuery(leaderboardQuery), learner.leaderboard);
 router.get("/leaderboards", validateQuery(leaderboardHubQuery), learner.leaderboards);
+router.get("/rewards", learner.rewards);
+router.post("/rewards/:rewardId/purchase", learner.purchaseReward);
+router.post("/rewards/:rewardId/use", learner.rewardsUse);
+router.get("/quests", learner.quests);
+router.post("/quests/:questId/claim", learner.questsClaim);
+router.patch("/rewards/active", validateBody(rewardsActiveBody), learner.rewardsActive);
 router.get("/profile", learner.profile);
+router.get("/public-profile", learner.publicProfileGet);
+router.patch("/public-profile", validateBody(publicProfileBody), learner.publicProfilePatch);
+router.get("/my-profile", learner.myProfileGet);
 router.patch("/profile", validateBody(profileBody), learner.patchProfile);
 router.post("/instructor-access-requests", validateBody(instructorAccessRequestBody), learner.requestInstructor);
 

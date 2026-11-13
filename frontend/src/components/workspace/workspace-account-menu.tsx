@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronsUpDown, GraduationCap, LayoutDashboard, Loader2, LogOut, Plug, Settings, Shield } from "lucide-react";
+import { Check, ChevronsUpDown, GraduationCap, LayoutDashboard, Loader2, LogOut, Plug, Settings, Shield, User } from "lucide-react";
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -101,6 +101,11 @@ export function WorkspaceAccountMenu({
           )}
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
+        {current === "learn" && (
+          <DropdownMenuItem disabled={pending} className="min-h-9 gap-2 px-2" onClick={() => runAction(() => router.push("/profile"))}>
+            <User className="size-4" /> View profile
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem disabled={pending} className="min-h-9 gap-2 px-2" onClick={() => runAction(() => router.push(profile))}>
           <Settings className="size-4" /> Profile settings
         </DropdownMenuItem>

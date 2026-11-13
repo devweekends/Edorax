@@ -156,6 +156,12 @@ export type LearnerProgressView = {
     maxScore: number;
     weekSeconds: number;
     pendingReviews: number;
+    /** Aggregated daily study seconds for the selected calendar year (for the activity grid). */
+    yearActivity: DashboardDay[];
+    /** The calendar year the grid is showing. */
+    year: number;
+    /** Years that have any recorded activity (for the year switcher). */
+    activityYears: number[];
   };
 };
 

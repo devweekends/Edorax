@@ -286,6 +286,10 @@ model User {
   xpTotal       Int          @default(0)
   /// Cached build-credit balance; the CreditEntry ledger is the source of truth.
   buildCredits  Int          @default(0)
+  /// The equipped reward cosmetic applied to the mascot; must be owned.
+  activeCosmetic String?
+  /// A purchased "session XP boost" is active until this instant (XP ×2 while active).
+  xpBoostUntil DateTime?
   /// Streak freezes held, 0..2 (shared/lib/streak.ts MAX_STREAK_FREEZES).
   streakFreezes Int          @default(0)
   /// "Hide game elements": no XP, levels, freezes or leaderboards shown, and off every board.
@@ -295,6 +299,9 @@ model User {
   leagueTier         LeagueTier @default(BRONZE)
   /// Highest career tier reached, permanently (never demotes). Advanced on verified mastery.
   careerTier         CareerTier @default(INTERN)
+  /// Public Career Identity page: opt-in switch + unique handle used at /u/<slug>. Null until set.
+  profilePublic      Boolean    @default(false)
+  publicSlug         String?    @unique
   createdAt     DateTime     @default(now())
   accounts      Account[]
   sessions      Session[]
@@ -336,6 +343,8 @@ model User {
   leaguePlacements              LeaguePlacement[]
   couponUsages                  CouponUsage[]
   creditEntries                 CreditEntry[]
+  unlockedCosmetics             UnlockedCosmetic[]
+  rewardInventory               RewardInventory[]
   instructorWithdrawals         InstructorWithdrawal[]
 }
 
@@ -407,6 +416,10 @@ model UserProfile {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   timezone  String   @default("UTC")
   skills    String[] @default([])
+  /// One-line profile headline shown on the Career Identity page (e.g. "Backend Engineering · Learning in public").
+  headline         String?
+  /// Appends " · Learning in public" to the headline on the public page.
+  learningInPublic Boolean @default(false)
   updatedAt DateTime @updatedAt
 }
 
@@ -517,6 +530,33 @@ model CreditEntry {
 
   @@unique([userId, sourceKey])
   @@index([userId, createdAt])
+}
+
+model UnlockedCosmetic {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Reward id from shared/gamification/rewards.ts.
+  cosmetic  String
+  createdAt DateTime @default(now())
+
+  @@unique([userId, cosmetic])
+  @@index([userId])
+}
+
+/// Quantities of consumable rewards (league shields, session XP boosts) the learner holds.
+/// Permanent cosmetic unlocks live in `UnlockedCosmetic` instead; only consumables count here.
+model RewardInventory {
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Reward id from shared/gamification/rewards.ts (kind: "consumable").
+  rewardId  String
+  /// Number held; 0 rows are pruned on use.
+  quantity  Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, rewardId])
+  @@index([userId])
 }
 
 model CourseInstructor {

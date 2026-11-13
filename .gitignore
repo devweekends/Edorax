@@ -48,6 +48,7 @@ server/src/generated/
 .claude/
 .agents/
 .qwen/
+AGENTS.md
 
 # prebundled mermaid copied from node_modules (see frontend/scripts/copy-mermaid.mjs)
 frontend/public/vendor/mermaid.min.js

@@ -16,6 +16,7 @@ import { serverApiFetch } from "@/lib/api-server";
 import { formatStudyAmount } from "@/lib/format-study-duration";
 import { cn } from "@/lib/utils";
 import { ActivityInsights } from "@/components/learn/progress/activity-insights";
+import { ActivityGrid } from "@/components/learn/progress/activity-grid";
 import { ProgressCourseSelector } from "@/components/learn/progress/course-selector";
 
 export const metadata: Metadata = { title: "Progress" };
@@ -31,16 +32,16 @@ function accuracyState(value: number | null) {
   return { label: "Look at these again", detail: "Revisit the scored chapters below and try the checks again.", className: "text-destructive", icon: CircleAlert };
 }
 
-export default async function MenteeProgressPage({ searchParams }: { searchParams: Promise<{ course?: string }> }) {
+export default async function MenteeProgressPage({ searchParams }: { searchParams: Promise<{ course?: string; year?: string }> }) {
   await requireLearnSurface();
+  const { course: requestedCourse, year: requestedYearParam } = await searchParams;
+  const requestedYear = requestedYearParam && /^\d{4}$/.test(requestedYearParam) ? Number(requestedYearParam) : undefined;
   const [{ courses: courseProgress, closedWrong, overall }, dashboard] = await Promise.all([
-    serverApiFetch<LearnerProgressView>("/api/v1/learner/progress"),
+    serverApiFetch<LearnerProgressView>(`/api/v1/learner/progress${requestedYear ? `?year=${requestedYear}` : ""}`),
     serverApiFetch<MenteeDashboardViewModel>("/api/v1/learner/dashboard").catch(() => null),
   ]);
-  const streak = dashboard?.habit.streakCount ?? 0;
   const weeklyGoal = dashboard?.habit.weeklyGoal ?? null;
   const nextUp = courseProgress.find((item) => item.continueHref) ?? null;
-  const { course: requestedCourse } = await searchParams;
   const selectedCourse = courseProgress.find((item) => item.course.slug === requestedCourse) ?? null;
   const visibleCourses = selectedCourse ? [selectedCourse] : courseProgress;
   const selectedSummary = selectedCourse
@@ -74,16 +75,7 @@ export default async function MenteeProgressPage({ searchParams }: { searchParam
         </div>
       ) : (
         <>
-          <section aria-label="Your week" className="mt-8 grid gap-4 lg:grid-cols-3">
-            <div className="border border-border bg-card p-6">
-              <p className="text-sm font-bold text-muted-foreground">Streak</p>
-              <p className="mt-2 font-[family-name:var(--font-heading)] text-[40px] font-bold leading-none tracking-[-0.035em]">
-                {streak > 0 ? `${streak} ${streak === 1 ? "day" : "days"}` : "Start today"}
-              </p>
-              <p className="mt-4 text-base text-muted-foreground">
-                {streak > 0 ? "Days in a row you studied. Today is still open." : "One short chapter starts a streak."}
-              </p>
-            </div>
+          <section aria-label="Your week" className="mt-8 grid gap-4 sm:grid-cols-2">
             <div className="border border-border bg-card p-6">
               <p className="text-sm font-bold text-muted-foreground">This week</p>
               <p className="mt-2 font-[family-name:var(--font-heading)] text-[40px] font-bold leading-none tracking-[-0.035em]">
@@ -130,6 +122,31 @@ export default async function MenteeProgressPage({ searchParams }: { searchParam
           </section>
 
           <ActivityInsights courses={visibleCourses} />
+          <div className="mt-4">
+            {overall.activityYears.length > 1 ? (
+              <div className="mb-3 flex flex-wrap items-center gap-1">
+                <span className="mr-1 text-xs font-medium text-muted-foreground">Year</span>
+                {overall.activityYears.map((y) => {
+                  const params = new URLSearchParams();
+                  if (selectedCourse) params.set("course", selectedCourse.course.slug);
+                  params.set("year", String(y));
+                  return (
+                    <Link
+                      key={y}
+                      href={`/progress?${params.toString()}`}
+                      className={cn(
+                        "rounded-md border px-2.5 py-1 text-xs tabular-nums",
+                        y === overall.year ? "bg-primary text-primary-foreground" : "hover:bg-muted"
+                      )}
+                    >
+                      {y}
+                    </Link>
+                  );
+                })}
+              </div>
+            ) : null}
+            <ActivityGrid days={overall.yearActivity} />
+          </div>
 
           {visibleWrong.length > 0 ? (
             <section aria-labelledby="closed-wrong-heading" className="mt-8">

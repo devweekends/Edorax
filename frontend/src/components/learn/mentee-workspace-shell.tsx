@@ -1,9 +1,10 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpenText, CircleHelp, Compass, Home, Trophy, TrendingUp, type LucideIcon } from "lucide-react";
+import { Award, BookOpenText, CircleHelp, Coins, Compass, Flame, Home, Star, Trophy, TrendingUp, User, type LucideIcon } from "lucide-react";
 import { WorkspaceAccountMenu } from "@/components/workspace/workspace-account-menu";
 import { Logo } from "@/components/brand/logo";
 import { cn } from "@/lib/utils";
@@ -24,6 +25,47 @@ type LearnerNavItem = {
   soon?: boolean;
 };
 
+export type LearnerStats = {
+  streak: number;
+  level: number | null;
+  career: string | null;
+  credits: number | null;
+  hidden: boolean;
+};
+
+function LearnerStatStrip({ stats }: { stats: LearnerStats }) {
+  if (stats.hidden) return null;
+  const items: Array<{ href: string; icon: LucideIcon; value: string; label: string; hint: string }> = [
+    { href: "/progress", icon: Flame, value: String(stats.streak), label: "day streak", hint: "Day streak: days in a row you studied. Opens Progress." },
+  ];
+  if (stats.level != null)
+    items.push({ href: "/profile", icon: Star, value: String(stats.level), label: "level", hint: "Level: earned from XP. Opens your profile." });
+  if (stats.career)
+    items.push({ href: "/profile", icon: Award, value: stats.career, label: "", hint: "Career tier: permanent, earned from completed courses and quiz mastery. Opens your profile." });
+  if (stats.credits != null)
+    items.push({ href: "/rewards", icon: Coins, value: stats.credits.toLocaleString(), label: "credits", hint: "Build Credits: spend on mascot cosmetics and consumables. Opens Rewards." });
+  return (
+    <div className="sticky top-16 z-30 flex items-center justify-end gap-x-4 gap-y-1 overflow-x-auto border-b border-border bg-card/80 px-4 py-2 text-sm backdrop-blur lg:top-0 lg:px-6">
+      {items.map((item) => {
+        const Icon = item.icon;
+        return (
+          <Link
+            key={item.label || item.value}
+            href={item.href}
+            title={item.hint}
+            aria-label={item.hint}
+            className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap hover:underline"
+          >
+            <Icon className="size-4 text-primary" aria-hidden />
+            <span className="font-semibold tabular-nums">{item.value}</span>
+            {item.label ? <span className="text-muted-foreground">{item.label}</span> : null}
+          </Link>
+        );
+      })}
+    </div>
+  );
+}
+
 export function MenteeWorkspaceShell({
   children,
   user,
@@ -32,6 +74,7 @@ export function MenteeWorkspaceShell({
   openHelpRequests,
   pendingReviews,
   signOutAction,
+  stats,
 }: {
   children: ReactNode;
   user: { name?: string | null; email?: string | null; role?: string };
@@ -40,8 +83,44 @@ export function MenteeWorkspaceShell({
   openHelpRequests: number;
   pendingReviews: number;
   signOutAction: () => Promise<void>;
+  stats?: LearnerStats;
 }) {
   const pathname = usePathname();
+
+  // Keep the stat strip fresh: it starts from the server-rendered values, then refetches on every
+  // navigation so a balance change (reward/quest/claim) never leaves it stale.
+  const [liveStats, setLiveStats] = useState<LearnerStats | undefined>(stats);
+  useEffect(() => {
+    setLiveStats(stats);
+  }, [stats]);
+  useEffect(() => {
+    if (pathname.startsWith("/courses/")) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const [g, h] = await Promise.all([
+          fetch("/api/v1/learner/gamification").then((r) => (r.ok ? r.json() : null)),
+          fetch("/api/v1/learner/habit").then((r) => (r.ok ? r.json() : null)),
+        ]);
+        if (cancelled) return;
+        const gd = g?.data;
+        const hd = h?.data;
+        if (!gd && !hd) return;
+        setLiveStats((prev) => ({
+          streak: hd?.streakCount ?? prev?.streak ?? 0,
+          level: gd?.level?.level ?? null,
+          career: gd?.career?.title ?? null,
+          credits: gd?.credits?.balance ?? null,
+          hidden: gd?.hidden ?? false,
+        }));
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname]);
 
   // Course overviews and chapter readers have their own focused navigation. The wrapper keeps them
   // full width: as bare children of the layout's flex column, their mx-auto roots shrink to fit the
@@ -65,6 +144,12 @@ export function MenteeWorkspaceShell({
     active: pathname === "/my-courses",
     count: assignedCourses,
   };
+  const profile: LearnerNavItem = {
+    label: "Profile",
+    href: "/profile",
+    icon: User,
+    active: pathname === "/profile",
+  };
   const youItems: LearnerNavItem[] = [
     { label: "Progress", href: "/progress", icon: TrendingUp, active: pathname === "/progress" },
     { label: "Leaderboard", mobileLabel: "Ranks", href: "/leaderboard", icon: Trophy, active: pathname === "/leaderboard" },
@@ -80,7 +165,7 @@ export function MenteeWorkspaceShell({
   const sidebarGroups: { label?: string; items: LearnerNavItem[] }[] = [
     { items: [home] },
     { label: "Learn", items: areaItems },
-    { label: "You", items: [myLearning, ...youItems] },
+    { label: "You", items: [myLearning, youItems[0]!, profile, ...youItems.slice(1)] },
   ];
   // Five slots on a phone: the areas share one "Learn" tab that opens the hub, and the hub's tabs switch between them.
   const mobileItems: LearnerNavItem[] = [
@@ -149,7 +234,10 @@ export function MenteeWorkspaceShell({
         </div>
       </aside>
 
-      <main className="min-h-dvh pb-20 lg:pb-0 lg:pl-60">{children}</main>
+      <main className="min-h-dvh pb-20 lg:pb-0 lg:pl-60">
+        {liveStats ? <LearnerStatStrip stats={liveStats} /> : null}
+        {children}
+      </main>
 
       <nav aria-label="Learner workspace" data-learner-bottom-nav="" className="fixed inset-x-0 bottom-0 z-40 flex border-t border-border bg-card pb-[env(safe-area-inset-bottom)] lg:hidden">
         {mobileItems.map((item) => {

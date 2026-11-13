@@ -6,6 +6,7 @@ import { leagueDemotionZone, leaguePromotionZone, nextLeagueTier, prevLeagueTier
 import { currentLeaderboardWeek, loadListableLearners } from "./leaderboard.js";
 import { gamificationFeatures } from "./flags.js";
 import { LEAGUE_PROMOTION_CREDITS, creditKeys, earnCredits } from "./credits.js";
+import { LEAGUE_SHIELD_REWARD } from "../../shared/gamification/rewards.js";
 
 // Global weekly XP leagues. Every opted-in learner sits in a tier (Bronze → Diamond); at the
 // Monday 00:00 UTC reset the week's global XP ranks each tier, the top 10% promote and the bottom
@@ -55,6 +56,15 @@ export async function resetLeaguesForWeek(weekKey: Date): Promise<LeagueResetRes
       byTier.set(learner.leagueTier, rows);
     }
 
+    // League shields: a learner in the demotion zone with a shield held holds their tier instead of
+    // demoting, and the shield is consumed. Quantities are preloaded so consumption is one pass.
+    const shields = new Map(
+      (await tx.rewardInventory.findMany({ where: { rewardId: LEAGUE_SHIELD_REWARD, quantity: { gt: 0 } } })).map(
+        (row) => [row.userId, row.quantity]
+      )
+    );
+    const shieldHolders = new Set<string>();
+
     const placements: Prisma.LeaguePlacementCreateManyInput[] = [];
     const moves = new Map<LeagueTier, string[]>();
     const promoted: string[] = [];
@@ -70,8 +80,13 @@ export async function resetLeaguesForWeek(weekKey: Date): Promise<LeagueResetRes
           outcome = "PROMOTED";
           tierAfter = nextLeagueTier(tier)!;
         } else if (rank >= demotionZone && tierIndex(tier) > 0) {
-          outcome = "DEMOTED";
-          tierAfter = prevLeagueTier(tier)!;
+          const shielded = (shields.get(row.userId) ?? 0) > 0;
+          if (shielded) {
+            shieldHolders.add(row.userId);
+          } else {
+            outcome = "DEMOTED";
+            tierAfter = prevLeagueTier(tier)!;
+          }
         }
         if (outcome === "PROMOTED") result.promoted += 1;
         else if (outcome === "DEMOTED") result.demoted += 1;
@@ -84,6 +99,12 @@ export async function resetLeaguesForWeek(weekKey: Date): Promise<LeagueResetRes
           moves.set(tierAfter, ids);
         }
       });
+    }
+
+    // Consume one shield per protected learner.
+    if (shieldHolders.size > 0) {
+      await tx.rewardInventory.updateMany({ where: { rewardId: LEAGUE_SHIELD_REWARD, userId: { in: [...shieldHolders] }, quantity: { gt: 0 } }, data: { quantity: { decrement: 1 } } });
+      await tx.rewardInventory.deleteMany({ where: { rewardId: LEAGUE_SHIELD_REWARD, quantity: { lte: 0 } } });
     }
 
     for (const [tier, userIds] of moves) {

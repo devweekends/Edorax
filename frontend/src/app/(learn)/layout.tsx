@@ -1,4 +1,5 @@
-import type { LearnerWorkspace } from "@/shared/api/learner";
+import type { LearnerHabit, LearnerWorkspace } from "@/shared/api/learner";
+import type { GamificationSummary } from "@/shared/api/gamification";
 import { canAccessLearnSurface, getSessionUser } from "@/server/auth/guards";
 import { getActiveSurface } from "@/server/auth/surface";
 import { serverApiFetch } from "@/lib/api-server";
@@ -16,7 +17,20 @@ export default async function LearnLayout({ children }: { children: React.ReactN
 
   if (!user || !learner) return <>{children}</>;
 
-  const workspace = await serverApiFetch<LearnerWorkspace>("/api/v1/learner/workspace");
+  const [workspace, gamification, habit] = await Promise.all([
+    serverApiFetch<LearnerWorkspace>("/api/v1/learner/workspace"),
+    serverApiFetch<GamificationSummary>("/api/v1/learner/gamification").catch(() => null),
+    serverApiFetch<LearnerHabit>("/api/v1/learner/habit").catch(() => null),
+  ]);
+
+  const stats = {
+    streak: habit?.streakCount ?? 0,
+    level: gamification?.level?.level ?? null,
+    career: gamification?.career?.title ?? null,
+    credits: gamification?.credits?.balance ?? null,
+    hidden: gamification?.hidden ?? false,
+  };
+
   return (
     <div className="flex min-h-full flex-1 flex-col bg-background">
       <AppActivityTracker />
@@ -31,6 +45,7 @@ export default async function LearnLayout({ children }: { children: React.ReactN
         pendingReviews={workspace.pendingReviews}
         openHelpRequests={workspace.openHelpRequests}
         signOutAction={signOutAction}
+        stats={stats}
       >
         {children}
       </MenteeWorkspaceShell>

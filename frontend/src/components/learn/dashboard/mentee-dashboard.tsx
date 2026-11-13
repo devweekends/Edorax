@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { helpUiCopy } from "@/shared/lib/help-ui-copy";
 import { formatStudyAmount } from "@/lib/format-study-duration";
 import { WeeklyGoalEditor } from "@/components/learn/dashboard/weekly-goal-editor";
+import { WeeklyQuests } from "@/components/learn/dashboard/weekly-quests";
 import { CourseStageLine, LearningMomentum } from "@/components/learn/dashboard/gamification";
 import { showsGameElements } from "@/lib/gamification";
 import { MascotStill } from "@/components/mascot/mascot-tip";
@@ -488,6 +489,7 @@ export function MenteeDashboard({ model }: { model: MenteeDashboardViewModel }) 
         <div className="mt-8"><EmptyDashboard name={model.learner.name} /></div>
       ) : (
         <div className="mt-6 space-y-6">
+          <WeeklyQuests />
           {model.activity.runningSession ? <ResumeBanner session={model.activity.runningSession} /> : null}
           <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_20rem]">
             {model.primaryCourse ? <ContinueLearning course={model.primaryCourse} /> : null}

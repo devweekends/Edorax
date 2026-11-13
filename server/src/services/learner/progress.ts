@@ -4,7 +4,7 @@ import { closedWrongCheckpoints } from "../progress/attention.js";
 import { loadEnrollmentSyllabus, resolveContinueChapterPath } from "../progress/enrollment-syllabus.js";
 
 /** Completion, scored accuracy and study consistency per course for the "My progress" page. */
-export async function loadLearnerProgress(input: { userId: string; bypassLocking: boolean }): Promise<LearnerProgressView> {
+export async function loadLearnerProgress(input: { userId: string; bypassLocking: boolean; year?: number }): Promise<LearnerProgressView> {
   const enrollments = await prisma.enrollment.findMany({
     where: { userId: input.userId, status: { not: "DROPPED" } },
     orderBy: [{ lastActiveAt: "desc" }, { createdAt: "asc" }],
@@ -31,7 +31,12 @@ export async function loadLearnerProgress(input: { userId: string; bypassLocking
   const weekStart = new Date(since);
   weekStart.setUTCDate(weekStart.getUTCDate() + 83);
 
-  const [missedResponses, dailyRows] = await Promise.all([
+  const currentYear = new Date().getUTCFullYear();
+  const year = input.year ?? currentYear;
+  const yearStart = new Date(Date.UTC(year, 0, 1));
+  const yearEnd = new Date(Date.UTC(year, 11, 31));
+
+  const [missedResponses, dailyRows, yearRows] = await Promise.all([
     enrollmentIds.length === 0
       ? []
       : prisma.response.findMany({
@@ -62,7 +67,33 @@ export async function loadLearnerProgress(input: { userId: string; bypassLocking
           where: { enrollmentId: { in: enrollmentIds }, date: { gte: since } },
           select: { enrollmentId: true, date: true, activeSeconds: true },
         }),
+    enrollmentIds.length === 0
+      ? []
+      : prisma.dailyActivity.groupBy({
+          by: ["date"],
+          where: { enrollmentId: { in: enrollmentIds }, date: { gte: yearStart, lte: yearEnd } },
+          _sum: { activeSeconds: true },
+        }),
   ]);
+
+  const earliest = enrollmentIds.length
+    ? await prisma.dailyActivity.findFirst({
+        where: { enrollmentId: { in: enrollmentIds } },
+        orderBy: { date: "asc" },
+        select: { date: true },
+      })
+    : null;
+  const earliestYear = earliest ? earliest.date.getUTCFullYear() : currentYear;
+  const activityYears = Array.from({ length: Math.max(1, currentYear - earliestYear + 1) }, (_, i) => earliestYear + i);
+
+  const yearByDate = new Map(yearRows.map((row) => [row.date.toISOString().slice(0, 10), row._sum.activeSeconds ?? 0]));
+  const daysInYear = Math.round((Date.UTC(year + 1, 0, 1) - yearStart.getTime()) / 86_400_000);
+  const yearActivity = Array.from({ length: daysInYear }, (_, index) => {
+    const date = new Date(yearStart);
+    date.setUTCDate(yearStart.getUTCDate() + index);
+    const day = date.toISOString().slice(0, 10);
+    return { day, seconds: yearByDate.get(day) ?? 0 };
+  });
 
   const closedWrong = closedWrongCheckpoints(missedResponses)
     .slice(0, 12)
@@ -132,5 +163,5 @@ export async function loadLearnerProgress(input: { userId: string; bypassLocking
     { chaptersCompleted: 0, totalChapters: 0, score: 0, maxScore: 0, weekSeconds: 0, pendingReviews: 0 }
   );
 
-  return { courses, closedWrong, overall };
+  return { courses, closedWrong, overall: { ...overall, year, activityYears, yearActivity } };
 }

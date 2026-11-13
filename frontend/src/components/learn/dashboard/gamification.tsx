@@ -183,7 +183,7 @@ function CareerRow({ career }: { career: NonNullable<GamificationSummary["career
           <span className="ml-auto text-xs text-muted-foreground">Next: {career.nextTitle}</span>
         ) : null}
         <InfoTip label="About the career path">
-          <p>Your career tier is earned from completed courses and your average quiz score — and it is never lost.</p>
+          <p>Your career tier is earned from completed courses and your average quiz score, and it is never lost.</p>
           <p className="mt-2">The career is your permanent level of mastery, separate from your weekly league tier.</p>
         </InfoTip>
       </div>

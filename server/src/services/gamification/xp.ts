@@ -34,9 +34,16 @@ export async function awardXp(tx: Tx, award: XpAward): Promise<number> {
 
   const user = await tx.user.findUnique({
     where: { id: award.userId },
-    select: { role: true, profile: { select: { timezone: true } } },
+    select: { role: true, xpBoostUntil: true, profile: { select: { timezone: true } } },
   });
   if (!user || user.role !== "MENTEE") return 0;
+
+  const at = award.at ?? new Date();
+
+  // A purchased "×2 XP boost (session)" doubles XP while its window is unexpired. It is temporary,
+  // so it never raises lifetime XP or the career ladder permanently — only this award's amount.
+  const boosting = user.xpBoostUntil !== null && user.xpBoostUntil.getTime() > at.getTime();
+  const awardedAmount = boosting ? amount * 2 : amount;
 
   let organizationId: string | null = null;
   if (award.enrollmentId) {
@@ -49,7 +56,6 @@ export async function awardXp(tx: Tx, award: XpAward): Promise<number> {
     organizationId = enrollment.organizationId;
   }
 
-  const at = award.at ?? new Date();
   const dayKey = dayKeyToDate(localDayKey(at, safeTimeZone(user.profile?.timezone)));
   const weekKey = dayKeyToDate(weekStartKey(dateToDayKey(at)));
 
@@ -67,7 +73,7 @@ export async function awardXp(tx: Tx, award: XpAward): Promise<number> {
         courseId: award.courseId,
         source: award.source,
         sourceKey: award.sourceKey,
-        amount,
+        amount: awardedAmount,
         dayKey,
         weekKey,
         createdAt: at,
@@ -77,14 +83,14 @@ export async function awardXp(tx: Tx, award: XpAward): Promise<number> {
   });
   if (count === 0) return 0;
 
-  await tx.user.update({ where: { id: award.userId }, data: { xpTotal: { increment: amount } } });
+  await tx.user.update({ where: { id: award.userId }, data: { xpTotal: { increment: awardedAmount } } });
   if (award.enrollmentId) {
-    await tx.enrollment.update({ where: { id: award.enrollmentId }, data: { xpTotal: { increment: amount } } });
+    await tx.enrollment.update({ where: { id: award.enrollmentId }, data: { xpTotal: { increment: awardedAmount } } });
   }
   if (award.courseId) {
     await joinLeaderboardForAward(tx, { userId: award.userId, courseId: award.courseId, organizationId, weekKey });
   }
-  return amount;
+  return awardedAmount;
 }
 
 /**

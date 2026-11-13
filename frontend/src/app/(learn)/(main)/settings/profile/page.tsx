@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import type { LearnerProfile } from "@/shared/api/learner";
 import type { AiCredentialStatus } from "@/shared/api/ai";
 import type { GamificationSummary } from "@/shared/api/gamification";
+import type { PublicProfileSettings } from "@/shared/api/public-profile";
 import type { NotificationPreferences } from "@/shared/api/notifications";
 import type { AdminMfaStatus } from "@/shared/api/admin";
 import { requireVerifiedUser } from "@/server/auth/guards";
@@ -14,18 +15,20 @@ import { GamificationPreferences } from "@/components/auth/gamification-preferen
 import { ProfileSettingsTabs } from "@/components/auth/profile-settings-tabs";
 import { NotificationPreferencesForm } from "@/components/notifications/notification-preferences-form";
 import { MfaSettingsCard } from "@/components/admin/admin-mfa-card";
+import { PublicProfileSettingsForm } from "@/components/profile/public-profile-settings";
 import { showsGameElements } from "@/lib/gamification";
 
 export const metadata: Metadata = { title: "Profile" };
 
 export default async function ProfileSettingsPage() {
   await requireVerifiedUser();
-  const [profile, aiStatus, gamification, notifications, mfa] = await Promise.all([
+  const [profile, aiStatus, gamification, notifications, mfa, publicProfile] = await Promise.all([
     serverApiFetch<LearnerProfile>("/api/v1/learner/profile"),
     serverApiFetch<AiCredentialStatus>("/api/v1/learner/ai-credential"),
     serverApiFetch<GamificationSummary>("/api/v1/learner/gamification").catch(() => null),
     serverApiFetch<NotificationPreferences>("/api/v1/notifications/preferences"),
     serverApiFetch<AdminMfaStatus>("/api/v1/auth/mfa"),
+    serverApiFetch<PublicProfileSettings>("/api/v1/learner/public-profile").catch(() => null),
   ]);
   const gameFeaturesOn = Boolean(gamification && (gamification.features.xp || gamification.features.streakFreezes));
 
@@ -73,6 +76,15 @@ export default async function ProfileSettingsPage() {
                   <AiKeySettings initial={aiStatus} />
                   {gamification && gameFeaturesOn ? <GamificationPreferences initial={gamification} /> : null}
                 </div>
+              ),
+            },
+            {
+              id: "public",
+              label: "Public",
+              content: publicProfile ? (
+                <PublicProfileSettingsForm initial={publicProfile} />
+              ) : (
+                <p className="text-sm text-muted-foreground">Public profiles aren&apos;t available right now.</p>
               ),
             },
             {

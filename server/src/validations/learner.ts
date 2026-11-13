@@ -43,6 +43,14 @@ export const gamificationPreferencesBody = z
 
 export const leaderboardQuery = z.object({ courseId: z.string().trim().min(1).max(64) });
 
+export const publicProfileBody = z.object({
+  profilePublic: z.boolean().optional(),
+  headline: z.string().trim().max(120).nullable().optional(),
+  learningInPublic: z.boolean().optional(),
+});
+
+export const rewardsActiveBody = z.object({ rewardId: z.string().trim().min(1).max(64).nullable().optional() });
+
 // The hub page sends all three params explicitly; the controller defaults the scope to global
 // (the league board) and only needs courseId when scope=course.
 export const leaderboardHubQuery = z.object({
