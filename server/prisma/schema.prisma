@@ -436,6 +436,8 @@ model Course {
   pricingType    CoursePricingType @default(FREE)
   priceCents     Int          @default(0)
   currency       String       @default("USD")
+  /// The course's Polar product, created on its first paid checkout. Null until then.
+  polarProductId String?      @unique
   /// Global instructor share used by the financial calculator.
   instructorPayoutPercent Int  @default(70)
   sequential     Boolean      @default(true)

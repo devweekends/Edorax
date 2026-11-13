@@ -72,7 +72,7 @@ export function CatalogCourseCard({
           {enrolledLabel === "Enrolled"
             ? "Continue learning"
             : enrolledLabel === "Payment due"
-              ? "Request access"
+              ? "Complete purchase"
               : pricingType === "PAID"
                 ? `Enroll · ${formatPriceCents(priceCents ?? 0, currency ?? "USD")}`
                 : "Enroll"}

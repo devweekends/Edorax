@@ -160,6 +160,15 @@ const schema = z.object({
     .string()
     .optional()
     .transform((value) => value === "true"),
+
+  /**
+   * Polar checkout for paid course enrollment. The token and the webhook secret must both be set
+   * before learners can start a Polar session; the API still boots without them so local/dev stays
+   * usable. Each course gets its own Polar product on its first checkout, so no product id is set.
+   */
+  POLAR_ACCESS_TOKEN: optionalString,
+  POLAR_WEBHOOK_SECRET: optionalString,
+  POLAR_ENVIRONMENT: z.enum(["sandbox", "production"]).default("sandbox"),
 });
 
 export type Env = z.infer<typeof schema>;
@@ -190,3 +199,5 @@ export const isTest = env.NODE_ENV === "test";
 export const learnerQaAvailable = env.LEARNER_QA_ENABLED && Boolean(env.ANTHROPIC_API_KEY);
 /** Capstone AI checks need both the switch and the key; automated checks never run without them either. */
 export const capstoneCheckAvailable = env.CAPSTONE_CHECK_ENABLED && Boolean(env.ANTHROPIC_API_KEY);
+/** Paid course Polar checkout needs the org token and the webhook secret. */
+export const polarPaymentsConfigured = Boolean(env.POLAR_ACCESS_TOKEN && env.POLAR_WEBHOOK_SECRET);
