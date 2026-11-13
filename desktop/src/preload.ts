@@ -79,6 +79,13 @@ const api: DesktopAPI = {
     terminalInput: (slug, id, data) => ipcRenderer.invoke('shell-labs:terminal-input', slug, id, data),
     resizeTerminal: (slug, id, cols, rows) =>
       ipcRenderer.invoke('shell-labs:terminal-resize', slug, id, cols, rows),
+    onStartProgress: (listener) => {
+      const receive = (_event: Electron.IpcRendererEvent, data: Parameters<typeof listener>[0]) => listener(data);
+      ipcRenderer.on('shell-labs:start-progress', receive);
+      return () => {
+        ipcRenderer.removeListener('shell-labs:start-progress', receive);
+      };
+    },
     onTerminalData: (listener) => {
       const receive = (_event: Electron.IpcRendererEvent, data: { id: string; data: string }) => listener(data);
       ipcRenderer.on('shell-labs:terminal-data', receive);

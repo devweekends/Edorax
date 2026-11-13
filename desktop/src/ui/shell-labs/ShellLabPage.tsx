@@ -20,10 +20,11 @@ import {
   Trophy,
   XCircle,
 } from 'lucide-react';
-import type { ShellLabStatus, ShellLabView, ShellStepResult } from '../../domain/shell-labs';
+import type { ShellLabStatus, ShellLabView, ShellStartProgress, ShellStepResult } from '../../domain/shell-labs';
 import { LabTerminal, type TerminalCommand } from '../labs/LabTerminal';
 import { LabWorkspace, useLabLayout } from './LabWorkspace';
 import { DockerSetup } from './DockerSetup';
+import { StartProgress } from './StartProgress';
 import { errorText, passedSteps, savePassedSteps } from './progress';
 
 /** Plain text with `code` spans. */
@@ -55,6 +56,7 @@ export function ShellLabPage({ slug, onBack }: { slug: string; onBack: () => voi
   const [view, setView] = useState<ShellLabView | null>(null);
   const [status, setStatus] = useState<ShellLabStatus | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [startProgress, setStartProgress] = useState<ShellStartProgress | null>(null);
   const [error, setError] = useState('');
   const [passed, setPassed] = useState<string[]>(() => passedSteps(slug));
   const [results, setResults] = useState<Record<string, ShellStepResult>>({});
@@ -89,6 +91,17 @@ export function ShellLabPage({ slug, onBack }: { slug: string; onBack: () => voi
       .catch((reason: unknown) => setError(errorText(reason)));
     void refresh();
   }, [api, slug, refresh]);
+
+  useEffect(() => {
+    // Older builds of the preload have no progress channel: the panel then shows a plain "Starting…".
+    return api.onStartProgress?.((progress) => {
+      if (progress.slug === slug) setStartProgress(progress);
+    });
+  }, [api, slug]);
+
+  useEffect(() => {
+    if (!busy) setStartProgress(null);
+  }, [busy]);
 
   useEffect(() => {
     if (busy) return;
@@ -242,6 +255,8 @@ export function ShellLabPage({ slug, onBack }: { slug: string; onBack: () => voi
     <div className="flex h-full items-center justify-center">
       <DockerSetup api={api} onReady={() => void refresh()} />
     </div>
+  ) : busy === 'start' || busy === 'reset' ? (
+    <StartProgress machine={view.machine} progress={startProgress} />
   ) : (
     <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center text-white/80">
       <p className="font-semibold text-white">{`${view.machine} is not running`}</p>

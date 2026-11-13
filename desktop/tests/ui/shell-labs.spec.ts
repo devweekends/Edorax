@@ -85,3 +85,67 @@ test('a shell lab teaches one step at a time, ticks live and lets the terminal m
   await page.getByRole('button', { name: 'Show the steps again' }).click();
   await expect(page.getByText('Mission 2 of 4')).toBeVisible();
 });
+
+test('the first start shows the steps, a percent for a download and a live line for a build', async ({ page }) => {
+  await page.addInitScript((data) => {
+    const quiet = (): unknown =>
+      new Proxy(function () {}, {
+        get: (_target, key) => (key === 'then' ? (resolve?: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) => Promise.resolve({ ok: false, message: 'Not in this test', code: 'TEST' }).then(resolve, reject) : quiet()),
+        apply: () => quiet(),
+      });
+    const listeners: ((progress: unknown) => void)[] = [];
+    const w = window as unknown as { send: (progress: unknown) => void; finish: () => void };
+    w.send = (progress) => listeners.forEach((listener) => listener({ slug: 'linux-101', ...(progress as object) }));
+    let release: () => void = () => {};
+    w.finish = () => release();
+    let running = false;
+    const shellLabs = {
+      list: async () => data.summaries,
+      view: async () => data.view,
+      status: async () => ({ available: true, created: running, running, message: 'box1' }),
+      start: () => new Promise<void>((resolve) => (release = () => { running = true; resolve(); })),
+      stop: async () => {},
+      reset: async () => {},
+      check: async () => ({}),
+      checkAll: async () => null,
+      openTerminal: async () => {},
+      closeTerminal: async () => {},
+      terminalInput: async () => {},
+      resizeTerminal: async () => {},
+      onTerminalData: () => () => {},
+      onStartProgress: (listener: (progress: unknown) => void) => {
+        listeners.push(listener);
+        return () => {};
+      },
+    };
+    window.buildment = new Proxy(
+      { authStatus: async () => ({ ok: true, data: { signedIn: true } }), listCourses: async () => ({ ok: true, courses: [] }), shellLabs } as Record<string, unknown>,
+      { get: (target, key: string) => (key in target ? target[key] : quiet()) },
+    ) as typeof window.buildment;
+  }, data);
+
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Labs', exact: true }).click();
+  await page.getByRole('button', { name: 'Shell', exact: true }).click();
+  await page.getByRole('button', { name: /^Linux/ }).click();
+  await page.getByRole('button', { name: /Linux 101: first steps in the terminal/ }).click();
+  await page.getByRole('button', { name: 'Start machine' }).click();
+
+  const plan = ['Download the base system', 'Install the tools', 'Start the machine', 'Prepare the lab'];
+  const now = Date.now();
+  await page.evaluate((plan) => (window as unknown as { send: (p: unknown) => void }).send({ plan, step: 0, percent: 42, detail: '12 MB of 29 MB', stepStartedAt: Date.now() }), plan);
+  await expect(page.getByRole('progressbar', { name: 'Download the base system' })).toHaveAttribute('aria-valuenow', '42');
+  await expect(page.getByText('12 MB of 29 MB')).toBeVisible();
+  await expect(page.getByText('42%')).toBeVisible();
+  await page.screenshot({ path: 'test-results/shell-start-download.png' });
+
+  // A step with no percent shows its last line and a moving bar; finished steps get a tick.
+  await page.evaluate((plan) => (window as unknown as { send: (p: unknown) => void }).send({ plan, step: 1, detail: 'Installing nano', stepStartedAt: Date.now() }), plan);
+  await expect(page.getByText('Installing nano')).toBeVisible();
+  await expect(page.getByRole('progressbar', { name: 'Install the tools' })).not.toHaveAttribute('aria-valuenow');
+  await page.screenshot({ path: 'test-results/shell-start-install.png' });
+  expect(Date.now() - now).toBeLessThan(30_000);
+
+  await page.evaluate(() => (window as unknown as { finish: () => void }).finish());
+  await expect(page.getByRole('progressbar')).toHaveCount(0);
+});

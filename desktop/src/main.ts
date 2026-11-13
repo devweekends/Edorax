@@ -67,6 +67,9 @@ async function shellLabRuntime(slug: unknown) {
       new ShellLabRuntime(localDocker(), lab, scope, (data) => {
         if (mainWindow && !mainWindow.isDestroyed())
           mainWindow.webContents.send('shell-labs:terminal-data', data);
+      }, (progress) => {
+        if (mainWindow && !mainWindow.isDestroyed())
+          mainWindow.webContents.send('shell-labs:start-progress', { slug: lab.slug, ...progress });
       }),
     );
   return shellLabs.get(scope)!;

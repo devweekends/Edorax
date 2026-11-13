@@ -247,6 +247,21 @@ export interface DockerSetupProgress {
   savedTo?: string;
 }
 
+/** Where a first start is: the plan, the step in progress and, when known, how far that step is. */
+export interface ShellStartProgress {
+  slug: string;
+  /** Names of every step of this start, in order. */
+  plan: string[];
+  /** Index in `plan` of the step in progress. */
+  step: number;
+  /** 0 to 100 when the step can be measured (downloads, package installs). Missing means it cannot. */
+  percent?: number;
+  /** A short line: bytes downloaded so far, or the last line the step printed. */
+  detail?: string;
+  /** When this step began, in milliseconds since 1970. */
+  stepStartedAt: number;
+}
+
 export interface ShellLabsAPI {
   /** Is Docker ready for labs, installed but closed, or missing? */
   dockerState(): Promise<DockerReadiness>;
@@ -269,6 +284,8 @@ export interface ShellLabsAPI {
   terminalInput(slug: string, id: string, data: string): Promise<void>;
   resizeTerminal(slug: string, id: string, cols: number, rows: number): Promise<void>;
   onTerminalData(listener: (event: { id: string; data: string }) => void): () => void;
+  /** Progress of a first start (download, install, build, setup). Resuming a stopped machine sends none. */
+  onStartProgress(listener: (progress: ShellStartProgress) => void): () => void;
 }
 
 const SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/;

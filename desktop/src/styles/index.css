@@ -221,3 +221,12 @@ input:focus-visible {
   color: var(--shiki-dark) !important;
   background-color: var(--shiki-dark-bg) !important;
 }
+
+/* The moving bar shown while a step has no percent (shell lab first start). */
+@keyframes shell-slide {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(300%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-\[shell-slide_1\.4s_ease-in-out_infinite\] { animation: none; }
+}
