@@ -1,9 +1,13 @@
 import test from 'node:test';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { dump as dumpYaml } from 'js-yaml';
 import assert from 'node:assert/strict';
 import { SHELL_LABS, getShellLab } from '../src/shell-labs/catalog';
 import { shellLabView, validateShellLab, type ShellLab } from '../src/domain/shell-labs';
-import { SHELL_LAB_CAPABILITIES, ShellLabRuntime, shellContainerOptions, shellLabName } from '../src/shell-labs/runtime';
-import { LESSONS } from '../src/shell-labs/lessons';
+import { SHELL_LAB_CAPABILITIES, ShellLabRuntime, shellContainerOptions, shellLabName, shellNetworkName } from '../src/shell-labs/runtime';
+import { loadShellLabs } from '../src/shell-labs/loader';
 
 test('every shell lab is valid and has a unique slug', () => {
   const slugs = new Set<string>();
@@ -36,12 +40,26 @@ test('the learner view carries no setup, check scripts or solutions', () => {
   }
 });
 
-test('every lesson belongs to a real lab step, so renaming a step cannot drop its lesson silently', () => {
-  for (const [slug, steps] of Object.entries(LESSONS)) {
-    const lab = SHELL_LABS.find((item) => item.slug === slug);
-    assert.ok(lab, `lessons for unknown lab ${slug}`);
-    for (const stepId of Object.keys(steps))
-      assert.ok(lab.steps.some((step) => step.id === stepId), `lesson for unknown step ${slug} ${stepId}`);
+test('all labs load from the Core files with no errors', () => {
+  const { labs, errors } = loadShellLabs();
+  assert.deepEqual(errors, []);
+  assert.equal(labs.length, SHELL_LABS.length);
+  assert.ok(labs.length >= 19, 'run "pnpm sync:labs" if the labs folder is empty');
+});
+
+test('a broken lab file is skipped and named, and the other labs still load', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'labs-'));
+  try {
+    const first = SHELL_LABS[0];
+    fs.writeFileSync(path.join(dir, 'index.yaml'), dumpYaml({ labs: [first.slug, 'broken-lab'] }));
+    fs.writeFileSync(path.join(dir, `${first.slug}.yaml`), dumpYaml(first));
+    fs.writeFileSync(path.join(dir, 'broken-lab.yaml'), dumpYaml({ ...first, slug: 'broken-lab', machine: { ...first.machine, image: 'ubuntu:latest' } }));
+    const { labs, errors } = loadShellLabs(dir);
+    assert.deepEqual(labs.map((lab) => lab.slug), [first.slug]);
+    assert.match(errors.join('\n'), /broken-lab.*not latest/);
+    assert.match(loadShellLabs(path.join(dir, 'missing')).errors.join(''), /pnpm sync:labs/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
   }
 });
 
@@ -95,4 +113,51 @@ test('reset refuses a container the lab does not own', async () => {
 test('checking an unknown step is refused before Docker is touched', async () => {
   const runtime = new ShellLabRuntime({} as any, SHELL_LABS[0], 'user:shell:x');
   await assert.rejects(runtime.check('not-a-step'), /Unknown lab step/);
+});
+
+function multiLab(): ShellLab {
+  const base = structuredClone(SHELL_LABS[0]) as ShellLab;
+  base.machine.name = 'control';
+  base.machines = [
+    { name: 'web1', image: 'ubuntu:24.04', capabilities: ['SYS_CHROOT'], sudo: true, memoryMb: 512 },
+    { name: 'web2', image: 'ubuntu:24.04' },
+  ];
+  base.steps[0].checks[0].on = 'web1';
+  return base;
+}
+
+test('a lab with extra machines puts them all on one private network with no way out', () => {
+  const lab = multiLab();
+  assert.deepEqual(validateShellLab(lab), []);
+  const main = shellContainerOptions(lab, 'u:shell:x');
+  const web1 = shellContainerOptions(lab, 'u:shell:x', lab.machines![0]);
+  assert.equal(main.HostConfig.NetworkMode, shellNetworkName('u:shell:x'));
+  assert.equal(web1.HostConfig.NetworkMode, shellNetworkName('u:shell:x'));
+  assert.equal(web1.name, `${shellLabName('u:shell:x')}-web1`);
+  assert.deepEqual(web1.NetworkingConfig?.EndpointsConfig[shellNetworkName('u:shell:x')].Aliases, ['web1']);
+  // Every machine carries the lead container's name as owner label, so ownership is one check.
+  assert.equal(web1.Labels['com.edorax.shell-lab'], shellLabName('u:shell:x'));
+  // A single-machine lab keeps no network at all.
+  assert.equal(shellContainerOptions(SHELL_LABS[0], 'u:shell:x').HostConfig.NetworkMode, 'none');
+});
+
+test('sudo and resources are per machine, and sudo is the only way no-new-privileges is lifted', () => {
+  const lab = multiLab();
+  assert.deepEqual(shellContainerOptions(lab, 'u:shell:x').HostConfig.SecurityOpt, ['no-new-privileges:true']);
+  assert.deepEqual(shellContainerOptions(lab, 'u:shell:x', lab.machines![0]).HostConfig.SecurityOpt, []);
+  assert.equal(shellContainerOptions(lab, 'u:shell:x', lab.machines![0]).HostConfig.Memory, 512 * 1024 * 1024);
+  assert.equal(shellContainerOptions(lab, 'u:shell:x', lab.machines![1]).HostConfig.Memory, 256 * 1024 * 1024);
+});
+
+test('the validator checks extra machines, resource limits and where a check runs', () => {
+  const lab = multiLab();
+  lab.machines![1].name = 'web1';
+  lab.machine.memoryMb = 99999;
+  lab.steps[0].checks[0].on = 'db9';
+  lab.machines!.push(...Array.from({ length: 4 }, (_, i) => ({ name: `x${i}`, image: 'ubuntu:24.04' })));
+  const problems = validateShellLab(lab).join('\n');
+  assert.match(problems, /used twice/);
+  assert.match(problems, /memoryMb must be a number/);
+  assert.match(problems, /"db9", which is not a machine/);
+  assert.match(problems, /at most 4 extra machines/);
 });

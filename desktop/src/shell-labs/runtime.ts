@@ -7,7 +7,7 @@ import type Docker from 'dockerode';
 import { createHash } from 'node:crypto';
 import { StringDecoder } from 'node:string_decoder';
 import { PassThrough, type Duplex } from 'node:stream';
-import { SHELL_LAB_EXTRA_CAPABILITIES, type ShellLab, type ShellLabStatus, type ShellStepResult } from '../domain/shell-labs';
+import { SHELL_LAB_EXTRA_CAPABILITIES, type ShellLab, type ShellLabStatus, type ShellMachine, type ShellStepResult } from '../domain/shell-labs';
 
 const LABEL = 'com.edorax.shell-lab';
 const OUTPUT_LIMIT = 64 * 1024;
@@ -27,38 +27,51 @@ export const SHELL_LAB_CAPABILITIES = ['CHOWN', 'DAC_OVERRIDE', 'FOWNER', 'FSETI
  * The image a lab machine runs: the pinned base image, or for a lab with packages or a build
  * script, a local image built from it once. The tag is a hash of all three, so any change builds anew.
  */
-export function shellLabImage(lab: ShellLab) {
-  const packages = [...new Set(lab.machine.packages ?? [])].sort();
-  const build = lab.machine.build?.trim() ?? '';
-  if (!packages.length && !build) return lab.machine.image;
-  const identity = `${lab.machine.image}\n${packages.join('\n')}${build ? `\n--build--\n${build}` : ''}`;
+export function shellLabImage(lab: ShellLab, machine: ShellMachine = lab.machine) {
+  const packages = [...new Set(machine.packages ?? [])].sort();
+  const build = machine.build?.trim() ?? '';
+  if (!packages.length && !build) return machine.image;
+  const identity = `${machine.image}\n${packages.join('\n')}${build ? `\n--build--\n${build}` : ''}`;
   const hash = createHash('sha256').update(identity).digest('hex').slice(0, 20);
   return `edorax-shell-lab:${hash}`;
 }
 
-export function shellContainerOptions(lab: ShellLab, scope: string) {
-  const name = shellLabName(scope);
-  const extra = (lab.machine.capabilities ?? []).filter((cap) => SHELL_LAB_EXTRA_CAPABILITIES.includes(cap));
+/** The private network of a lab with more than one machine. It has no way out: machines reach each other, nothing else. */
+export function shellNetworkName(scope: string) {
+  return `${shellLabName(scope)}-net`;
+}
+
+/** Container settings for one machine of a lab. With no `machine` argument, the main machine. */
+export function shellContainerOptions(lab: ShellLab, scope: string, machine: ShellMachine = lab.machine) {
+  const lead = shellLabName(scope);
+  const main = machine === lab.machine;
+  const name = main ? lead : `${lead}-${machine.name}`;
+  const multi = (lab.machines?.length ?? 0) > 0;
+  const network = shellNetworkName(scope);
+  const extra = (machine.capabilities ?? []).filter((cap) => SHELL_LAB_EXTRA_CAPABILITIES.includes(cap));
   return {
     name,
-    Image: shellLabImage(lab),
-    Hostname: lab.machine.name,
-    Labels: { [LABEL]: name, 'com.edorax.shell-lab.slug': lab.slug },
+    Image: shellLabImage(lab, machine),
+    Hostname: machine.name,
+    // Every machine carries the lead container's name as its owner label, so one check proves ownership of all of them.
+    Labels: { [LABEL]: lead, 'com.edorax.shell-lab.slug': lab.slug, 'com.edorax.shell-lab.machine': machine.name },
     WorkingDir: '/root',
     Cmd: ['sleep', 'infinity'],
+    ...(multi ? { NetworkingConfig: { EndpointsConfig: { [network]: { Aliases: [machine.name] } } } } : {}),
     HostConfig: {
       // A tiny init as PID 1 reaps exited processes, so daemons a learner starts and stops
       // (sshd, dnsmasq) do not pile up as zombies against the process limit.
       Init: true,
-      Memory: 256 * 1024 * 1024,
-      MemorySwap: 256 * 1024 * 1024,
-      NanoCpus: 1_000_000_000,
-      PidsLimit: 128,
+      Memory: (machine.memoryMb ?? 256) * 1024 * 1024,
+      MemorySwap: (machine.memoryMb ?? 256) * 1024 * 1024,
+      NanoCpus: Math.round((machine.cpus ?? 1) * 1_000_000_000),
+      PidsLimit: machine.pids ?? 128,
       CapDrop: ['ALL'],
       CapAdd: [...SHELL_LAB_CAPABILITIES, ...extra],
-      SecurityOpt: ['no-new-privileges:true'],
-      NetworkMode: 'none',
-      Tmpfs: { '/tmp': 'rw,nosuid,size=32m' },
+      SecurityOpt: machine.sudo ? [] : ['no-new-privileges:true'],
+      NetworkMode: multi ? network : 'none',
+      // exec: learners write small scripts in /tmp and run them, and Docker mounts a tmpfs noexec by default.
+      Tmpfs: { '/tmp': 'rw,exec,nosuid,size=32m' },
     },
   };
 }
@@ -84,17 +97,39 @@ export class ShellLabRuntime {
     return result;
   }
 
-  private async owned() {
-    const container = this.docker.getContainer(this.name);
+  /** Every machine of the lab: the main one first, then the extras. */
+  private machines(): { spec: ShellMachine; container: string; main: boolean; setup?: string; boot?: string; shutdown?: string }[] {
+    return [
+      { spec: this.lab.machine, container: this.name, main: true, setup: this.lab.setup, boot: this.lab.boot, shutdown: this.lab.shutdown },
+      ...(this.lab.machines ?? []).map((extra) => ({ spec: extra as ShellMachine, container: `${this.name}-${extra.name}`, main: false, setup: extra.setup, boot: extra.boot, shutdown: extra.shutdown })),
+    ];
+  }
+
+  private async inspectOwned(container: string) {
+    const handle = this.docker.getContainer(container);
     try {
-      const info = await container.inspect();
-      if (info.Config.Labels?.[LABEL] !== this.name)
-        throw new Error('A container with the lab name already exists and is not owned by Edorax.');
-      return { container, info };
+      const info = await handle.inspect();
+      if (info.Config.Labels?.[LABEL] !== this.name) throw new Error('A container with the lab name already exists and is not owned by Edorax.');
+      return { container: handle, info };
     } catch (error) {
       if (missing(error)) return null;
       throw error;
     }
+  }
+
+  /** The main machine, or null when it does not exist. */
+  private owned() {
+    return this.inspectOwned(this.name);
+  }
+
+  /** Every machine that exists, keyed by lab machine name. */
+  private async allOwned() {
+    const found = new Map<string, NonNullable<Awaited<ReturnType<ShellLabRuntime['inspectOwned']>>>>();
+    for (const machine of this.machines()) {
+      const resource = await this.inspectOwned(machine.container);
+      if (resource) found.set(machine.spec.name, resource);
+    }
+    return found;
   }
 
   async status(): Promise<ShellLabStatus> {
@@ -109,13 +144,16 @@ export class ShellLabRuntime {
       };
     }
     try {
-      const resource = await this.owned();
-      const running = Boolean(resource?.info.State.Running);
+      const found = await this.allOwned();
+      const total = this.machines().length;
+      const created = found.has(this.lab.machine.name);
+      const running = created && found.size === total && [...found.values()].every((resource) => resource.info.State.Running);
+      const label = total > 1 ? `${this.lab.machine.name} and ${total - 1} more machine${total > 2 ? 's' : ''}` : this.lab.machine.name;
       return {
         available: true,
-        created: Boolean(resource),
+        created,
         running,
-        message: running ? `${this.lab.machine.name} is running` : resource ? `${this.lab.machine.name} is stopped` : 'Not started yet',
+        message: running ? `${label} ${total > 1 ? 'are' : 'is'} running` : created ? `${label} ${total > 1 ? 'are' : 'is'} stopped` : 'Not started yet',
       };
     } catch (error) {
       return { available: false, created: false, running: false, message: error instanceof Error ? error.message : 'Could not read the lab.' };
@@ -133,26 +171,28 @@ export class ShellLabRuntime {
   }
 
   private async pull() {
-    const target = shellLabImage(this.lab);
-    if (await this.hasImage(target)) return;
-    if (!(await this.hasImage(this.lab.machine.image))) {
-      const stream = await this.docker.pull(this.lab.machine.image);
-      await new Promise<void>((resolve, reject) =>
-        this.docker.modem.followProgress(stream, (error: unknown) => (error ? reject(error) : resolve())),
-      );
+    for (const machine of this.machines()) {
+      const target = shellLabImage(this.lab, machine.spec);
+      if (await this.hasImage(target)) continue;
+      if (!(await this.hasImage(machine.spec.image))) {
+        const stream = await this.docker.pull(machine.spec.image);
+        await new Promise<void>((resolve, reject) =>
+          this.docker.modem.followProgress(stream, (error: unknown) => (error ? reject(error) : resolve())),
+        );
+      }
+      if (target !== machine.spec.image) await this.bake(target, machine.spec);
     }
-    if (target !== this.lab.machine.image) await this.bake(target);
   }
 
   /**
-   * Install the lab's packages in a throwaway container that has network, and save the result
-   * as the lab image. Runs once per package list; the lab machine itself never has network.
+   * Install a machine's packages in a throwaway container that has network, and save the result
+   * as the lab image. Runs once per package list; the lab machines themselves never have outside network.
    */
-  private async bake(target: string) {
+  private async bake(target: string, spec: ShellMachine) {
     const [repo, tag] = target.split(':');
-    const packages = [...new Set(this.lab.machine.packages ?? [])].sort();
+    const packages = [...new Set(spec.packages ?? [])].sort();
     const builder = await this.docker.createContainer({
-      Image: this.lab.machine.image,
+      Image: spec.image,
       Cmd: ['sleep', 'infinity'],
       Labels: { [`${LABEL}.builder`]: target },
     });
@@ -175,7 +215,7 @@ elif command -v dnf >/dev/null; then
 else
   echo "The image has neither apt-get nor dnf."; exit 1
 fi`;
-      const build = this.lab.machine.build?.trim();
+      const build = spec.build?.trim();
       const encoded = build ? Buffer.from(build).toString('base64') : '';
       const result = await this.run(
         builder,
@@ -183,7 +223,7 @@ fi`;
 ${install}
 rm -f /tmp/install.log
 ${build ? `printf %s '${encoded}' | base64 -d > /tmp/edorax-build.sh; bash -e /tmp/edorax-build.sh </dev/null 2>&1 | tail -20; status=\${PIPESTATUS[0]}; rm -f /tmp/edorax-build.sh; exit $status` : ''}`,
-        600_000,
+        1_200_000,
       );
       if (result.code)
         throw new Error(`The lab tools could not be installed. Check your internet connection and try again. ${result.output.trim().slice(-400)}`);
@@ -233,28 +273,70 @@ ${build ? `printf %s '${encoded}' | base64 -d > /tmp/edorax-build.sh; bash -e /t
     return resource.container;
   }
 
+  /** Every machine, running, by lab machine name. Throws when any is missing or stopped. */
+  private async runningAll() {
+    const found = await this.allOwned();
+    const out = new Map<string, Docker.Container>();
+    for (const machine of this.machines()) {
+      const resource = found.get(machine.spec.name);
+      if (!resource?.info.State.Running) throw new Error('The lab machine is stopped. Select Start to continue.');
+      out.set(machine.spec.name, resource.container);
+    }
+    return out;
+  }
+
+  private async removeAll() {
+    const machines = this.machines();
+    for (const machine of [...machines].reverse()) {
+      const resource = await this.inspectOwned(machine.container);
+      if (resource) await resource.container.remove({ force: true }).catch(() => {});
+    }
+    if (machines.length > 1) await this.docker.getNetwork(shellNetworkName(this.scope)).remove().catch(() => {});
+  }
+
   start() {
     return this.serial(async () => {
-      let resource = await this.owned();
-      if (!resource) {
+      const found = await this.allOwned();
+      if (!found.has(this.lab.machine.name)) {
+        // A leftover extra machine without the main one is a broken lab: start clean.
+        if (found.size) await this.removeAll();
         await this.pull();
-        const container = await this.docker.createContainer(shellContainerOptions(this.lab, this.scope));
-        await container.start();
-        // Setup runs once, on a fresh machine. Resuming never runs it again.
-        const result = await this.run(container, this.lab.setup, 60_000).catch((error: unknown) => ({
-          code: 1,
-          output: error instanceof Error ? error.message : String(error),
-        }));
-        if (result.code) {
-          await container.remove({ force: true }).catch(() => {});
-          throw new Error(`The lab could not be prepared. ${result.output.trim().slice(-500)}`);
+        const machines = this.machines();
+        try {
+          if (machines.length > 1)
+            await this.docker.createNetwork({ Name: shellNetworkName(this.scope), Driver: 'bridge', Internal: true, Labels: { [LABEL]: this.name } });
+          const created: { machine: (typeof machines)[number]; container: Docker.Container }[] = [];
+          for (const machine of machines) {
+            const container = await this.docker.createContainer(shellContainerOptions(this.lab, this.scope, machine.spec));
+            await container.start();
+            created.push({ machine, container });
+          }
+          // Setup runs once, on fresh machines. Resuming never runs it again. Extra machines go first,
+          // so the main machine's setup can already reach them.
+          for (const { machine, container } of [...created.slice(1), created[0]]) {
+            if (!machine.setup) continue;
+            const result = await this.run(container, machine.setup, 420_000).catch((error: unknown) => ({
+              code: 1,
+              output: error instanceof Error ? error.message : String(error),
+            }));
+            if (result.code) throw new Error(`The lab could not be prepared${machine.main ? '' : ` (machine ${machine.spec.name})`}. ${result.output.trim().slice(-500)}`);
+          }
+        } catch (error) {
+          await this.removeAll();
+          throw error;
         }
         return;
       }
-      if (!resource.info.State.Running) {
-        await resource.container.start();
-        // Best effort: a boot script that fails leaves the machine running, as a real boot would.
-        if (this.lab.boot) await this.run(resource.container, this.lab.boot, 30_000).catch(() => {});
+      const machines = this.machines();
+      const stopped = machines.filter((machine) => !found.get(machine.spec.name)?.info.State.Running);
+      for (const machine of machines) {
+        const resource = found.get(machine.spec.name);
+        if (resource && !resource.info.State.Running) await resource.container.start();
+      }
+      // Best effort: a boot script that fails leaves the machine running, as a real boot would.
+      for (const machine of [...stopped.filter((item) => !item.main), ...stopped.filter((item) => item.main)]) {
+        const resource = await this.inspectOwned(machine.container);
+        if (resource && machine.boot) await this.run(resource.container, machine.boot, 90_000).catch(() => {});
       }
     });
   }
@@ -262,9 +344,11 @@ ${build ? `printf %s '${encoded}' | base64 -d > /tmp/edorax-build.sh; bash -e /t
   stop() {
     return this.serial(async () => {
       this.disconnect();
-      const resource = await this.owned();
-      if (resource?.info.State.Running) {
-        if (this.lab.shutdown) await this.run(resource.container, this.lab.shutdown, 15_000).catch(() => {});
+      const found = await this.allOwned();
+      for (const machine of [...this.machines()].reverse()) {
+        const resource = found.get(machine.spec.name);
+        if (!resource?.info.State.Running) continue;
+        if (machine.shutdown) await this.run(resource.container, machine.shutdown, 15_000).catch(() => {});
         await resource.container.stop({ t: 1 });
       }
     });
@@ -273,60 +357,114 @@ ${build ? `printf %s '${encoded}' | base64 -d > /tmp/edorax-build.sh; bash -e /t
   reset() {
     return this.serial(async () => {
       this.disconnect();
-      const resource = await this.owned();
-      if (resource) await resource.container.remove({ force: true });
+      await this.removeAll();
     });
   }
 
   check(stepId: unknown): Promise<ShellStepResult> {
     const step = this.lab.steps.find((item) => item.id === stepId);
     if (!step) return Promise.reject(new Error('Unknown lab step.'));
-    return this.serial(async () => (await this.evaluate(await this.running(), [step]))[0]);
+    return this.serial(async () => (await this.evaluate(await this.runningAll(), [step]))[0]);
   }
 
   /**
-   * Every step's checks against the machine as it is now. The lab page polls this while the
-   * machine runs, so steps tick off the moment the machine really does what the step asks.
-   * Resolves to null when the machine is not running, so polling a stopped lab is not an error.
+   * Every step's checks against the machines as they are now. The lab page polls this while the
+   * machines run, so steps tick off the moment the machines really do what the step asks.
+   * Resolves to null when the lab is not running, so polling a stopped lab is not an error.
    */
   checkAll(): Promise<ShellStepResult[] | null> {
     return this.serial(async () => {
-      const resource = await this.owned();
-      if (!resource?.info.State.Running) return null;
-      return this.evaluate(resource.container, this.lab.steps);
+      const found = await this.allOwned();
+      const all = new Map<string, Docker.Container>();
+      for (const machine of this.machines()) {
+        const resource = found.get(machine.spec.name);
+        if (!resource?.info.State.Running) return null;
+        all.set(machine.spec.name, resource.container);
+      }
+      return this.evaluate(all, this.lab.steps);
     });
   }
 
-  /**
-   * Run checks in one exec, so live checking stays cheap. Each check runs in its own bash with
-   * its own time limit, so one that exits early or hangs cannot affect the others.
-   */
-  private async evaluate(container: Docker.Container, steps: ShellLab['steps']): Promise<ShellStepResult[]> {
-    const all = steps.flatMap((step) => step.checks.map((check) => ({ step, check })));
-    const script = all
-      .map(({ check }, index) => {
-        const encoded = Buffer.from(check.run).toString('base64');
-        return `timeout ${CHECK_SECONDS} bash -c "$(printf %s '${encoded}' | base64 -d)" </dev/null >/dev/null 2>&1; echo "${RESULT_MARK} ${index} $?"`;
+  /** Runs scripts on one machine, one bash per script with its own time limit. Returns the exit code of each, by index. */
+  private async runEach(container: Docker.Container, scripts: string[], mark: string): Promise<Map<number, number>> {
+    const body = scripts
+      .map((script, index) => {
+        const encoded = Buffer.from(script).toString('base64');
+        return `timeout ${CHECK_SECONDS} bash -c "$(printf %s '${encoded}' | base64 -d)" </dev/null >/dev/null 2>&1; echo "${mark} ${index} $?"`;
       })
       .join('\n');
-    const { output } = await this.run(container, script, (CHECK_SECONDS * all.length + 10) * 1000).catch(() => ({ code: 1, output: '' }));
+    const { output } = await this.run(container, body, (CHECK_SECONDS * scripts.length + 10) * 1000).catch(() => ({ code: 1, output: '' }));
     const codes = new Map<number, number>();
     for (const line of output.split('\n')) {
-      const match = new RegExp(`^${RESULT_MARK} (\\d+) (\\d+)$`).exec(line.trim());
+      const match = new RegExp(`^${mark} (\\d+) (\\d+)$`).exec(line.trim());
       if (match) codes.set(Number(match[1]), Number(match[2]));
     }
-    return steps.map((step) => {
+    return codes;
+  }
+
+  /**
+   * Run checks with one exec per machine, so live checking stays cheap. Each check runs in its own
+   * bash with its own time limit, so one that exits early or hangs cannot affect the others.
+   */
+  private async evaluate(containers: Map<string, Docker.Container>, steps: ShellLab['steps']): Promise<ShellStepResult[]> {
+    const lead = this.lab.machine.name;
+    const all = steps.flatMap((step) => step.checks.map((check) => ({ step, check, on: check.on ?? lead })));
+    const passedAll = new Map<number, boolean>();
+    for (const [machine, container] of containers) {
+      const mine = all.map((item, index) => ({ item, index })).filter(({ item }) => item.on === machine);
+      if (!mine.length) continue;
+      const codes = await this.runEach(container, mine.map(({ item }) => item.check.run), RESULT_MARK);
+      mine.forEach(({ index }, position) => passedAll.set(index, codes.get(position) === 0));
+    }
+    const results: ShellStepResult[] = steps.map((step) => {
       const checks = step.checks.map((check) => {
-        const passed = codes.get(all.findIndex((item) => item.check === check)) === 0;
+        const passed = passedAll.get(all.findIndex((item) => item.check === check)) === true;
         return { id: check.id, label: check.label, passed, message: passed ? '' : check.fail };
       });
       return { stepId: step.id, passed: checks.every((check) => check.passed), checks };
     });
+    // Only a failing step is asked about its listed mistakes, so a passing lab costs nothing extra.
+    const failing = results.filter((result) => !result.passed && steps.find((step) => step.id === result.stepId)?.mistakes?.length);
+    if (failing.length) {
+      const asked = failing.flatMap((result) => (steps.find((step) => step.id === result.stepId)?.mistakes ?? []).map((mistake) => ({ result, mistake, on: mistake.on ?? lead })));
+      const hit = new Map<number, boolean>();
+      for (const [machine, container] of containers) {
+        const mine = asked.map((item, index) => ({ item, index })).filter(({ item }) => item.on === machine);
+        if (!mine.length) continue;
+        const codes = await this.runEach(container, mine.map(({ item }) => item.mistake.when), `${RESULT_MARK}m`);
+        mine.forEach(({ index }, position) => hit.set(index, codes.get(position) === 0));
+      }
+      asked.forEach(({ result, mistake }, index) => {
+        if (!result.mistake && hit.get(index)) result.mistake = mistake.say;
+      });
+    }
+    return results;
   }
 
   private disconnect() {
-    this.terminal?.stream.destroy();
+    const old = this.terminal;
+    old?.stream.destroy();
     this.terminal = undefined;
+    // Closing the connection does not end the shell inside the machine, so each reconnect would
+    // leave one more bash behind until the process limit is reached. Ask the old shell to hang up.
+    if (old) void this.hangUp(old.id);
+  }
+
+  /** Best effort: sends the old terminal's shell a hang-up signal, as closing a real terminal window does. */
+  private async hangUp(id: string) {
+    try {
+      if (!/^[a-zA-Z0-9-]{1,80}$/.test(id)) return;
+      const container = this.docker.getContainer(this.name);
+      const execution = await container.exec({
+        Cmd: ['bash', '-c', `p=/run/edorax-term-${id}; [ -f $p ] && kill -HUP "$(cat $p)" 2>/dev/null; rm -f $p`],
+        User: 'root',
+        AttachStdout: false,
+        AttachStderr: false,
+      });
+      await execution.start({ Detach: true });
+    } catch {
+      /* The machine may be stopped already, which ends every shell. */
+    }
   }
 
   dispose() {
@@ -339,7 +477,8 @@ ${build ? `printf %s '${encoded}' | base64 -d > /tmp/edorax-build.sh; bash -e /t
       this.disconnect();
       const container = await this.running();
       const execution = await container.exec({
-        Cmd: ['bash', '-l'],
+        // The shell writes its own process id first, so hangUp can find it later, then replaces itself with bash.
+        Cmd: ['bash', '-c', `echo $$ > /run/edorax-term-${id}; exec bash -l`],
         User: 'root',
         Tty: true,
         AttachStdin: true,

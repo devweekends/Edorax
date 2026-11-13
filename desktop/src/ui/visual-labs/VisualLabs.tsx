@@ -1,7 +1,8 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ArrowLeft, ArrowRight, FlaskConical, Route, Terminal } from 'lucide-react';
 import { Lab } from '@buildment/learning-ui/labs/Lab';
 import { visualLabGroups } from '../../domain/visual-labs';
+import { SHELL_TOPICS, type ShellLabSummary, type ShellTopic } from '../../domain/shell-labs';
 import { guidedTrackViews } from '../../domain/guided-labs';
 import { coursePrice, type Course } from '../../domain/catalog';
 
@@ -30,13 +31,21 @@ export function VisualLabs({
 }: {
   courses: Course[];
   onOpenCourse: (slug: string) => void;
-  onOpenShellLabs?: () => void;
+  onOpenShellLabs?: (topic: ShellTopic) => void;
 }) {
   const groups = useMemo(() => visualLabGroups(), []);
   const guided = useMemo(() => guidedTrackViews(courses.length ? courses : null, coursePrice), [courses]);
   const [kind, setKind] = useState<Kind>('all');
   const [topic, setTopic] = useState<string>('all');
   const [openSlug, setOpenSlug] = useState<string | null>(null);
+  const [shellLabs, setShellLabs] = useState<ShellLabSummary[]>([]);
+  useEffect(() => {
+    if (!onOpenShellLabs) return;
+    window.buildment.shellLabs
+      .list()
+      .then(setShellLabs)
+      .catch(() => setShellLabs([]));
+  }, [onOpenShellLabs]);
 
   if (openSlug) {
     return (
@@ -160,15 +169,32 @@ export function VisualLabs({
       {(kind === 'all' || kind === 'shell') && onOpenShellLabs && (
         <div className="mt-12">
           <h2 className="font-heading text-xl font-bold tracking-tight text-foreground">Shell labs</h2>
-          <button
-            onClick={onOpenShellLabs}
-            className="mt-5 flex w-full max-w-xl flex-col gap-1 rounded-2xl border border-primary/40 bg-primary/5 p-5 text-left transition-shadow hover:shadow-lg hover:shadow-primary/5"
-          >
-            <span className="inline-flex items-center gap-2 font-semibold text-foreground">
-              <Terminal size={16} className="text-primary" /> Fix real machines from the terminal
-            </span>
-            <span className="text-sm text-muted-foreground">A real Linux machine on your computer, with a goal, hints and checks. Needs Docker Desktop.</span>
-          </button>
+          <ul className="mt-5 grid max-w-4xl grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4">
+            {SHELL_TOPICS.map((topic) => {
+              const labs = shellLabs.filter((lab) => lab.topic === topic.id);
+              const minutes = labs.reduce((sum, lab) => sum + lab.minutes, 0);
+              const ready = labs.length > 0;
+              return (
+                <li key={topic.id}>
+                  <button
+                    type="button"
+                    disabled={!ready}
+                    onClick={() => onOpenShellLabs(topic.id)}
+                    className={`flex h-full w-full flex-col gap-1.5 rounded-2xl border p-5 text-left transition-shadow ${ready ? 'border-primary/40 bg-primary/5 hover:shadow-lg hover:shadow-primary/5' : 'cursor-default border-dashed border-border opacity-70'}`}
+                  >
+                    <span className="inline-flex items-center gap-2 font-semibold text-foreground">
+                      <Terminal size={16} className="text-primary" /> {topic.title}
+                      {!ready && <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Coming soon</span>}
+                    </span>
+                    <span className="text-sm text-muted-foreground">{topic.description}</span>
+                    <span className="mt-1 text-xs font-medium text-muted-foreground">
+                      {ready ? `${labs.length} labs · about ${Math.round(minutes / 60)} hours · ${topic.machine} on your computer` : `${topic.machine} on your computer`}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
         </div>
       )}
 

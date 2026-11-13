@@ -16,12 +16,14 @@ import {
   RotateCcw,
   Square,
   Target,
+  Sparkles,
   Trophy,
   XCircle,
 } from 'lucide-react';
 import type { ShellLabStatus, ShellLabView, ShellStepResult } from '../../domain/shell-labs';
 import { LabTerminal, type TerminalCommand } from '../labs/LabTerminal';
 import { LabWorkspace, useLabLayout } from './LabWorkspace';
+import { DockerSetup } from './DockerSetup';
 import { errorText, passedSteps, savePassedSteps } from './progress';
 
 /** Plain text with `code` spans. */
@@ -215,6 +217,7 @@ export function ShellLabPage({ slug, onBack }: { slug: string; onBack: () => voi
           index={steps.indexOf(shown)}
           total={steps.length}
           scenario={view.scenario}
+          character={view.character}
           done={passed.includes(shown.id)}
           result={results[shown.id]}
           explained={Boolean(explained[shown.id])}
@@ -235,17 +238,19 @@ export function ShellLabPage({ slug, onBack }: { slug: string; onBack: () => voi
 
   const terminalPane = running ? (
     <LabTerminal key={terminal} api={api} blockId={slug} onError={onTerminalError} runCommand={typed} onSent={() => setTyped(null)} />
+  ) : status?.available === false ? (
+    <div className="flex h-full items-center justify-center">
+      <DockerSetup api={api} onReady={() => void refresh()} />
+    </div>
   ) : (
     <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center text-white/80">
-      <p className="font-semibold text-white">{status?.available === false ? 'Docker is needed for shell labs' : `${view.machine} is not running`}</p>
+      <p className="font-semibold text-white">{`${view.machine} is not running`}</p>
       <p className="max-w-sm text-sm text-white/60">
-        {status?.available === false
-          ? status.message
-          : status?.created
-            ? 'Resume to continue where you left off. Your changes on the machine are kept.'
-            : 'Start creates the machine. The first start downloads and prepares it, which can take a minute or two.'}
+        {status?.created
+          ? 'Resume to continue where you left off. Your changes on the machine are kept.'
+          : 'Start creates the machine. The first start downloads and prepares it, which can take a minute or two.'}
       </p>
-      {status?.available !== false && (
+      {(
         <button
           disabled={Boolean(busy)}
           onClick={() => void act('start', () => api.start(slug))}
@@ -401,6 +406,22 @@ function Stepper({
   );
 }
 
+/** Teaching that sits behind the mission: open on the first step, closed after, always one click away. */
+function Fold({ icon, title, hint, open, children }: { icon: ReactNode; title: string; hint?: string; open?: boolean; children: ReactNode }) {
+  return (
+    <details open={open} className="group mt-4 rounded-2xl border border-border bg-card/50">
+      <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-semibold text-foreground">
+        <span className="text-muted-foreground">{icon}</span>
+        {title}
+        {hint && <span className="hidden font-normal text-muted-foreground sm:inline">· {hint}</span>}
+        <span className="ml-auto text-xs font-medium text-muted-foreground group-open:hidden">Show</span>
+        <span className="ml-auto hidden text-xs font-medium text-muted-foreground group-open:inline">Hide</span>
+      </summary>
+      <div className="border-t border-border px-4 pb-4 pt-3">{children}</div>
+    </details>
+  );
+}
+
 function Section({ icon, title, children }: { icon: ReactNode; title: string; children: ReactNode }) {
   return (
     <section className="mt-6">
@@ -417,6 +438,7 @@ function StepView({
   index,
   total,
   scenario,
+  character,
   done,
   result,
   explained,
@@ -433,6 +455,7 @@ function StepView({
   index: number;
   total: number;
   scenario: string;
+  character?: ShellLabView['character'];
   done: boolean;
   result?: ShellStepResult;
   explained: boolean;
@@ -449,26 +472,53 @@ function StepView({
   return (
     <article aria-labelledby={`goal-${step.id}`}>
       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">
-        Step {index + 1} of {total}
+        Mission {index + 1} of {total}
       </p>
-      <h2 id={`goal-${step.id}`} className="font-heading mt-1.5 text-xl font-bold leading-snug tracking-tight text-foreground">
+      <h2 id={`goal-${step.id}`} className="font-heading mt-1.5 text-2xl font-bold leading-snug tracking-tight text-foreground">
         <Inline text={step.goal} />
       </h2>
 
-      {index === 0 && (
-        <details open className="mt-4 rounded-xl border border-border bg-muted/30 p-4 text-sm">
-          <summary className="cursor-pointer font-semibold text-foreground">The situation</summary>
-          <p className="mt-2 leading-relaxed text-muted-foreground">
-            <Inline text={scenario} />
-          </p>
-        </details>
+      {(index === 0 || step.story) && (
+        <section className="mt-4 overflow-hidden rounded-2xl border border-border bg-card shadow-sm" aria-label={index === 0 ? 'Your briefing' : 'Message'}>
+          {index === 0 && (
+            <div className="border-b border-border bg-gradient-to-br from-primary/10 via-card to-card px-5 py-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">Your briefing</p>
+              <p className="mt-1.5 text-[16px] leading-relaxed text-foreground">
+                <Inline text={scenario} />
+              </p>
+            </div>
+          )}
+          {step.story && (
+            <div className="flex items-start gap-3 px-5 py-4" aria-label={character ? `Message from ${character.name}` : 'Message'}>
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground" aria-hidden>
+                {(character?.name ?? '?').slice(0, 1)}
+              </span>
+              <div className="min-w-0 flex-1 text-[16px] leading-relaxed text-foreground">
+                {character && (
+                  <p className="mb-0.5 text-xs font-semibold text-muted-foreground">
+                    {character.name} <span className="font-normal">· {character.role}</span>
+                  </p>
+                )}
+                <Inline text={step.story} />
+              </div>
+            </div>
+          )}
+        </section>
       )}
 
       {done && (
         <div className="mt-4 flex items-start gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4">
           <CheckCircle2 size={20} className="mt-0.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
           <div className="min-w-0 flex-1">
-            <p className="font-semibold text-emerald-800 dark:text-emerald-200">Step done. The machine does what this step asked.</p>
+            <p className="font-semibold text-emerald-800 dark:text-emerald-200">{step.win ?? 'Step done. The machine does what this step asked.'}</p>
+            {step.after && (
+              <div className="mt-2 text-sm leading-relaxed text-emerald-900/90 dark:text-emerald-100/90">
+                <p className="mb-0.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide">
+                  <Sparkles size={12} /> What just happened
+                </p>
+                <Inline text={step.after} />
+              </div>
+            )}
             {result && !result.passed && (
               <p className="mt-1 flex items-start gap-1.5 text-sm text-amber-800 dark:text-amber-300">
                 <AlertTriangle size={14} className="mt-0.5 shrink-0" />
@@ -482,57 +532,22 @@ function StepView({
         </div>
       )}
 
-      <Section icon={<BookOpen size={13} />} title="Learn">
-        <div className="space-y-3 text-[15px] leading-relaxed text-foreground/90">
-          {step.learn.map((paragraph, n) => (
-            <p key={n}>
-              <Inline text={paragraph} />
+
+      <section className="mt-5 overflow-hidden rounded-2xl border border-primary/30 bg-primary/[0.04]" aria-label="Your mission">
+        <div className="border-b border-primary/15 bg-primary/[0.06] px-5 py-3">
+          <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">
+            <Target size={13} /> Your mission
+          </p>
+        </div>
+        <div className="space-y-4 px-5 py-4">
+          <p className="text-[16px] leading-relaxed text-foreground">
+            <Inline text={step.body} />
+          </p>
+          <div>
+            <p className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+              <ListChecks size={13} /> Done when
             </p>
-          ))}
-        </div>
-      </Section>
-
-      {step.commands.length > 0 && (
-        <Section icon={<Keyboard size={13} />} title="Commands you will use">
-          <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border">
-            {step.commands.map((note) => (
-              <li key={note.command} className="flex items-start gap-3 bg-card px-4 py-3">
-                <div className="min-w-0 flex-1">
-                  <code className="block break-words font-mono text-sm font-semibold text-foreground">{note.command}</code>
-                  <p className="mt-0.5 text-sm text-muted-foreground">
-                    <Inline text={note.meaning} />
-                  </p>
-                </div>
-                {note.key ? (
-                  <span className="shrink-0 rounded-md bg-muted px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground" title="Used inside a program or a file, not typed at the prompt">
-                    Key
-                  </span>
-                ) : (
-                  <button
-                    type="button"
-                    disabled={!running}
-                    onClick={() => onType(note.command)}
-                    title={running ? 'Type this into the terminal. Edit the CAPITAL words, then press Enter.' : 'Start the machine first'}
-                    className="shrink-0 rounded-md border border-border px-2 py-1 text-xs font-medium text-muted-foreground hover:border-primary hover:text-primary disabled:opacity-40"
-                  >
-                    Type it
-                  </button>
-                )}
-              </li>
-            ))}
-          </ul>
-          <p className="mt-2 text-xs text-muted-foreground">Words in CAPITALS are placeholders: replace them with your own values.</p>
-        </Section>
-      )}
-
-      <Section icon={<Target size={13} />} title="Your task">
-        <div className="rounded-xl border-l-4 border-primary bg-primary/5 p-4 text-[15px] leading-relaxed text-foreground">
-          <Inline text={step.body} />
-        </div>
-      </Section>
-
-      <Section icon={<ListChecks size={13} />} title="What we check">
-        <ul className="space-y-2" aria-label="Checks">
+            <ul className="space-y-2" aria-label="Checks">
           {step.checks.map((item) => {
             const live = result?.checks.find((check) => check.id === item.id);
             const passing = Boolean(live?.passed);
@@ -555,8 +570,71 @@ function StepView({
             );
           })}
         </ul>
-        {!running && <p className="mt-2 text-xs text-muted-foreground">Start the machine and these tick themselves as you work.</p>}
-      </Section>
+        {result?.mistake && !result.passed && (explained || done) && (
+          <div className="mt-3 flex items-start gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm leading-relaxed text-foreground">
+            <Lightbulb size={16} className="mt-0.5 shrink-0 text-amber-600" />
+            <span>
+              <span className="font-semibold">It looks like this: </span>
+              <Inline text={result.mistake} />
+            </span>
+          </div>
+        )}
+            {!running && <p className="mt-2 text-xs text-muted-foreground">Start the machine and these tick themselves as you work.</p>}
+          </div>
+        </div>
+      </section>
+
+      <Fold icon={<BookOpen size={13} />} title="Learn first" hint="The idea behind this step" open={index === 0 && !done}>
+        <div className="space-y-3 text-[15px] leading-relaxed text-foreground/90">
+          {step.learn.map((paragraph, n) => (
+            <p key={n}>
+              <Inline text={paragraph} />
+            </p>
+          ))}
+        </div>
+      </Fold>
+      {step.commands.length > 0 && (
+        <Fold icon={<Keyboard size={13} />} title="Commands you will use" hint="General forms. Words in CAPITALS are placeholders." open={index === 0 && !done}>
+          <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border">
+            {step.commands.map((note) => (
+              <li key={note.command} className="flex items-start gap-3 bg-card px-4 py-3">
+                <div className="min-w-0 flex-1">
+                  <code className="block break-words font-mono text-sm font-semibold text-foreground">{note.command}</code>
+                  <p className="mt-0.5 text-sm text-muted-foreground">
+                    <Inline text={note.meaning} />
+                  </p>
+                  {note.example && (
+                    <details className="mt-1.5 text-sm">
+                      <summary className="cursor-pointer text-xs font-semibold text-primary">See an example</summary>
+                      <pre className="mt-1.5 overflow-x-auto rounded-lg bg-zinc-950 p-3 font-mono text-xs leading-relaxed text-zinc-100">
+                        <span className="text-emerald-400">$ </span>
+                        {note.example}
+                        {note.output ? `\n${note.output}` : ''}
+                      </pre>
+                    </details>
+                  )}
+                </div>
+                {note.key ? (
+                  <span className="shrink-0 rounded-md bg-muted px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground" title="Used inside a program or a file, not typed at the prompt">
+                    Key
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={!running}
+                    onClick={() => onType(note.command)}
+                    title={running ? 'Type this into the terminal. Edit the CAPITAL words, then press Enter.' : 'Start the machine first'}
+                    className="shrink-0 rounded-md border border-border px-2 py-1 text-xs font-medium text-muted-foreground hover:border-primary hover:text-primary disabled:opacity-40"
+                  >
+                    Type it
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-xs text-muted-foreground">Words in CAPITALS are placeholders: replace them with your own values.</p>
+        </Fold>
+      )}
 
       {hintsShown > 0 && (
         <Section icon={<Lightbulb size={13} />} title="Hints">
@@ -609,7 +687,17 @@ function Finished({ view, onBack, onReview }: { view: ShellLabView; onBack: () =
         <Trophy size={30} className="text-amber-500" />
       </div>
       <h2 className="font-heading mt-4 text-2xl font-bold tracking-tight text-foreground">Lab complete</h2>
-      <p className="mt-1 text-sm text-muted-foreground">Every check passes on {view.machine}. Here is what you did:</p>
+      {view.badge && (
+        <p className="mx-auto mt-3 inline-flex items-center gap-1.5 rounded-full bg-amber-400/20 px-3 py-1 text-sm font-semibold text-amber-700 dark:text-amber-300">
+          <Sparkles size={14} /> Badge earned: {view.badge}
+        </p>
+      )}
+      {view.outro && (
+        <p className="mx-auto mt-3 max-w-xl text-[15px] leading-relaxed text-foreground">
+          <Inline text={view.outro} />
+        </p>
+      )}
+      <p className="mt-2 text-sm text-muted-foreground">Every check passes on {view.machine}. Here is what you did:</p>
       <ol className="mx-auto mt-6 max-w-xl space-y-2 text-left">
         {view.stepList.map((step, index) => (
           <li key={step.id} className="flex items-start gap-3 rounded-xl border border-border bg-card p-3 text-sm">

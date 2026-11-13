@@ -38,6 +38,7 @@ import { OfflineStore, type DownloadedCourse, prepareEncryption } from './offlin
 
 import { LabRuntime, localDocker } from './labs/runtime';
 import { ShellLabRuntime } from './shell-labs/runtime';
+import { defaultDownloadsDir, dockerReadiness, setUpDocker, startDockerDesktop } from './shell-labs/docker-setup';
 import { SHELL_LABS, getShellLab } from './shell-labs/catalog';
 import { shellLabSummary, shellLabView } from './domain/shell-labs';
 
@@ -676,6 +677,37 @@ else {
         return handler(await labRuntime(blockId), ...args);
       });
     }
+    // Docker setup. Everything here is the learner pressing a button; nothing installs by itself.
+    let dockerSetupRunning: Promise<unknown> | null = null;
+    ipcMain.handle('shell-labs:docker-state', (event) => {
+      requireRenderer(event);
+      return dockerReadiness(localDocker());
+    });
+    ipcMain.handle('shell-labs:docker-start', (event) => {
+      requireRenderer(event);
+      return startDockerDesktop();
+    });
+    ipcMain.handle('shell-labs:docker-setup', async (event) => {
+      requireRenderer(event);
+      if (dockerSetupRunning) throw new Error('Docker setup is already running.');
+      const send = (progress: unknown) => {
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('shell-labs:docker-progress', progress);
+      };
+      const run = setUpDocker(send, {
+        platform: process.platform,
+        arch: process.arch,
+        downloadsDir: defaultDownloadsDir(app.getPath('downloads')),
+        openPath: (file) => shell.openPath(file),
+        openExternal: (url) => shell.openExternal(url),
+        showInFolder: (file) => shell.showItemInFolder(file),
+      });
+      dockerSetupRunning = run;
+      try {
+        return await run;
+      } finally {
+        dockerSetupRunning = null;
+      }
+    });
     ipcMain.handle('shell-labs:list', (event) => {
       requireRenderer(event);
       return SHELL_LABS.map(shellLabSummary);

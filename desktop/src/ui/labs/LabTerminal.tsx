@@ -39,6 +39,12 @@ export function LabTerminal({
   const handled = useRef<number | null>(null);
   const commandRef = useRef(runCommand);
   commandRef.current = runCommand;
+  // The callbacks come from a parent that re-renders often (live checking). Keep them in refs, so a
+  // new function each render does not reopen the terminal, which would start a new shell every time.
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
+  const onSentRef = useRef(onSent);
+  onSentRef.current = onSent;
   const send = useCallback(() => {
     const command = commandRef.current;
     const active = session.current;
@@ -58,9 +64,9 @@ export function LabTerminal({
     for (let offset = 0; offset < submit.length; offset += 2048)
       void api
         .terminalInput(blockId, active.id, submit.slice(offset, offset + 2048))
-        .catch((error: unknown) => onError(String(error)));
-    onSent?.();
-  }, [blockId, onError, onSent, apiOverride]);
+        .catch((error: unknown) => onErrorRef.current(String(error)));
+    onSentRef.current?.();
+  }, [blockId, apiOverride]);
   useEffect(() => {
     if (!host.current) return;
     const api = apiOverride ?? window.buildment.labs;
@@ -80,7 +86,7 @@ export function LabTerminal({
     terminal.open(host.current);
     terminalRef.current = terminal;
     const report = (error: unknown) => {
-      if (active) onError(String(error));
+      if (active) onErrorRef.current(String(error));
     };
     const resize = () => {
       if (!host.current?.clientWidth || !host.current?.clientHeight) return;
@@ -135,7 +141,7 @@ export function LabTerminal({
       terminal.dispose();
       void api.closeTerminal(blockId, id).catch(() => {});
     };
-  }, [blockId, revision, onError, dark, send, apiOverride]);
+  }, [blockId, revision, dark, send, apiOverride]);
   useEffect(() => {
     send();
   }, [send, runCommand]);
