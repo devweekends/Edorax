@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect, useState, useCallback, type CSSProperties } from "react";
+import { useRef, useEffect, useState, useCallback } from "react";
 import { useBrowserStorage, useHydrated } from "@/lib/use-browser-storage";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -422,8 +422,6 @@ export function ChapterReaderShell({
                 "flex-1 overflow-y-auto",
                 focusMode ? "px-4 pt-10 pb-24 sm:px-8 lg:px-16" : "px-4 pt-8 pb-24 sm:px-6 lg:px-10"
               )}
-              // The Listen player cancels this top padding so it can sit flush with the top edge while pinned.
-              style={{ "--reader-pt": focusMode ? "2.5rem" : "2rem" } as CSSProperties}
             >
               {/* ~70 characters per line at 18px: long chapters stay comfortable to read. */}
               <div className="mx-auto max-w-[40rem]">
@@ -433,10 +431,10 @@ export function ChapterReaderShell({
                     {chapterTitle}
                   </h1>
                   {projectGoal && readerMode !== "QUIZ" ? (
-                    <p className="mt-4 border border-border bg-card px-4 py-3 text-base leading-6 text-muted-foreground">
-                      <span className="font-medium text-foreground">The project: </span>
-                      {projectGoal.trim().replace(/\.+$/, "")}.
-                    </p>
+                    <details className="mt-4 border border-border bg-card px-4 py-3 text-base leading-6 text-muted-foreground">
+                      <summary className="cursor-pointer font-medium text-foreground">Project overview</summary>
+                      <p className="mt-2">{projectGoal.trim().replace(/\.+$/, "")}.</p>
+                    </details>
                   ) : null}
                   {variant && readerMode !== "QUIZ" ? (
                     <p className="mt-2 bg-secondary px-4 py-3 text-base leading-6 text-muted-foreground">

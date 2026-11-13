@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Download, Pause, Play } from "lucide-react";
-import { NARRATION_SPEEDS, formatClock, formatListenMinutes, formatMegabytes, formatSpeed, resumePosition, shouldPinPlayer } from "@/lib/narration-format";
+import { NARRATION_SPEEDS, formatClock, formatListenMinutes, formatMegabytes, formatSpeed, resumePosition } from "@/lib/narration-format";
 import { cn } from "@/lib/utils";
 
 type Status = "idle" | "loading" | "playing" | "paused" | "error";
@@ -75,16 +75,13 @@ export function ChapterAudio({ src, minutes, bytes, title, className }: { src: s
     setTime(value);
   }
 
-  // The reader pads its top, so the pinned offset cancels that padding to sit flush with the top edge.
-  const pinned = shouldPinPlayer(status, time, duration);
   const label = status === "playing" ? "Pause" : status === "loading" ? "Loading" : "Play";
 
   return (
     <section
       id="listen"
       aria-label="Listen to this chapter"
-      className={cn("scroll-mt-24 rounded-lg border border-border bg-card p-4 text-card-foreground sm:p-5", pinned && "sticky z-30", className)}
-      style={pinned ? { top: "calc(var(--reader-pt, 0px) * -1)" } : undefined}
+      className={cn("scroll-mt-24 rounded-lg border border-border bg-card p-4 text-card-foreground sm:p-5", className)}
     >
       <audio
         ref={audio}
