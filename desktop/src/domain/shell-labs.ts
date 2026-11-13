@@ -12,12 +12,30 @@ export interface ShellCheck {
   fail: string;
 }
 
+/** One command the learner meets in a step, in its general form, with what it does. */
+export interface ShellCommandNote {
+  /** The general form, with UPPERCASE placeholders: `chmod MODE FILE`. Never the step's answer. */
+  command: string;
+  /** What it does, in one plain sentence. */
+  meaning: string;
+  /** A key or line used inside a program (vi, a config file), not a shell command: nothing to type for you. */
+  key?: boolean;
+}
+
 export interface ShellStep {
   id: string;
   /** One line: what the learner must make true. */
   goal: string;
-  /** A short paragraph of context. Plain text; `code` spans are rendered as code. */
+  /** A short paragraph of context: the task in this lab's story. `code` spans are rendered as code. */
   body: string;
+  /**
+   * The lesson before the task: what the idea is, how it works and why it matters, in a few short
+   * paragraphs. Written in the lesson files (src/shell-labs/lessons) and joined in by the catalog;
+   * validation requires it on every step.
+   */
+  learn?: string[];
+  /** The commands this step teaches, in general form. Required on every step, like learn. */
+  commands?: ShellCommandNote[];
   /** The hint ladder: a nudge, then a hint, then a worked example. */
   hints: [string, string, string];
   checks: ShellCheck[];
@@ -31,10 +49,17 @@ export interface ShellMachine {
   /** A pinned image. The lab never reaches the network after the pull. */
   image: string;
   /**
-   * apt packages baked into a local image on first start, for tools the base image lacks
-   * (sshd, dig). Installing is the only time the network is used; the lab machine has none.
+   * Packages baked into a local image on first start, for tools the base image lacks (sshd, dig).
+   * Installed with apt or dnf, whichever the image has. Building the image is the only time the
+   * network is used; the lab machine has none.
    */
   packages?: string[];
+  /**
+   * A bash script run as root while the image is built, after the packages, with network access.
+   * Like a Dockerfile RUN line: use it to fetch what the lab needs offline, such as a local package
+   * repository. It runs once per image, not per learner, and is part of the image's identity.
+   */
+  build?: string;
   /** Linux capabilities beyond the default set, from SHELL_LAB_EXTRA_CAPABILITIES only. */
   capabilities?: string[];
 }
@@ -47,13 +72,20 @@ export const SHELL_LAB_EXTRA_CAPABILITIES: readonly string[] = [
   'NET_BIND_SERVICE',
   // Login services write audit records through PAM.
   'AUDIT_WRITE',
+  // Interfaces, routes and firewall rules. The machine has its own network namespace with no
+  // outside network, so changes stay inside the lab.
+  'NET_ADMIN',
 ];
 
 export type ShellTopic = 'linux' | 'docker' | 'ansible' | 'kubernetes';
+export type ShellLevel = 'beginner' | 'intermediate';
 
 export interface ShellLab {
   slug: string;
   topic: ShellTopic;
+  level: ShellLevel;
+  /** Short subject tags for the card, without the #: "DNS", "Networking". */
+  tags: string[];
   title: string;
   /** One sentence for the lab card. */
   summary: string;
@@ -80,6 +112,8 @@ export interface ShellLab {
 export interface ShellLabSummary {
   slug: string;
   topic: ShellTopic;
+  level: ShellLevel;
+  tags: string[];
   title: string;
   summary: string;
   minutes: number;
@@ -90,7 +124,15 @@ export interface ShellLabView extends ShellLabSummary {
   scenario: string;
   machine: string;
   steps: number;
-  stepList: { id: string; goal: string; body: string; hints: [string, string, string]; checks: { id: string; label: string }[] }[];
+  stepList: {
+    id: string;
+    goal: string;
+    body: string;
+    learn: string[];
+    commands: ShellCommandNote[];
+    hints: [string, string, string];
+    checks: { id: string; label: string }[];
+  }[];
 }
 
 export interface ShellCheckResult {
@@ -123,6 +165,8 @@ export interface ShellLabsAPI {
   stop(slug: string): Promise<void>;
   reset(slug: string): Promise<void>;
   check(slug: string, stepId: string): Promise<ShellStepResult>;
+  /** Every step checked against the machine now; null when the machine is not running. */
+  checkAll(slug: string): Promise<ShellStepResult[] | null>;
   openTerminal(slug: string, id: string): Promise<void>;
   closeTerminal(slug: string, id: string): Promise<void>;
   terminalInput(slug: string, id: string, data: string): Promise<void>;
@@ -140,6 +184,8 @@ export function validateShellLab(lab: ShellLab): string[] {
   if (!SLUG.test(lab.slug)) problems.push(`slug "${lab.slug}" must be lowercase words joined by dashes`);
   if (!lab.title.trim()) problems.push('a lab needs a title');
   if (!lab.summary.trim()) problems.push('a lab needs a summary');
+  if (!['beginner', 'intermediate'].includes(lab.level)) problems.push('a lab needs a level: beginner or intermediate');
+  if (!lab.tags.length || lab.tags.some((tag) => !tag.trim() || tag.startsWith('#'))) problems.push('a lab needs tags, written without #');
   if (!/^[a-z0-9-]{1,40}$/.test(lab.machine.name)) problems.push('the machine name must be a short hostname');
   if (!PINNED.test(lab.machine.image) || lab.machine.image.endsWith(':latest'))
     problems.push('the machine image must have a fixed tag or digest, not latest');
@@ -158,6 +204,10 @@ export function validateShellLab(lab: ShellLab): string[] {
       problems.push(`step "${step.id}" needs three hints: a nudge, a hint and a worked example`);
     if (!step.checks.length) problems.push(`step "${step.id}" needs at least one check`);
     if (!step.solution.trim()) problems.push(`step "${step.id}" needs a solution`);
+    if (!step.learn?.length || step.learn.some((paragraph) => !paragraph.trim()))
+      problems.push(`step "${step.id}" needs a lesson: add it to the lab's lesson file`);
+    if (!step.commands?.length || step.commands.some((note) => !note.command.trim() || !note.meaning.trim()))
+      problems.push(`step "${step.id}" needs the commands it teaches, each with its meaning`);
     const checkIds = new Set<string>();
     for (const check of step.checks) {
       if (!ID.test(check.id)) problems.push(`check id "${check.id}" in step "${step.id}" is not valid`);
@@ -171,7 +221,7 @@ export function validateShellLab(lab: ShellLab): string[] {
 }
 
 export function shellLabSummary(lab: ShellLab): ShellLabSummary {
-  return { slug: lab.slug, topic: lab.topic, title: lab.title, summary: lab.summary, minutes: lab.minutes, steps: lab.steps.length };
+  return { slug: lab.slug, topic: lab.topic, level: lab.level, tags: lab.tags, title: lab.title, summary: lab.summary, minutes: lab.minutes, steps: lab.steps.length };
 }
 
 /** The learner view: no setup script, no check scripts, no solutions. */
@@ -184,6 +234,8 @@ export function shellLabView(lab: ShellLab): ShellLabView {
       id: step.id,
       goal: step.goal,
       body: step.body,
+      learn: step.learn ?? [],
+      commands: step.commands ?? [],
       hints: step.hints,
       checks: step.checks.map((check) => ({ id: check.id, label: check.label })),
     })),

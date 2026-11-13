@@ -695,6 +695,7 @@ else {
       stop: (lab) => lab.stop(),
       reset: (lab) => lab.reset(),
       check: (lab, stepId) => lab.check(stepId),
+      'check-all': (lab) => lab.checkAll(),
       'terminal-open': (lab, id) => lab.openTerminal(id),
       'terminal-close': (lab, id) => lab.closeTerminal(id),
       'terminal-input': (lab, id, data) => lab.terminalInput(id, data),

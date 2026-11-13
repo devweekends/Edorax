@@ -1,7 +1,27 @@
-import { Fragment, useCallback, useEffect, useState } from 'react';
-import { ArrowLeft, CheckCircle2, Circle, Lightbulb, Loader2, Play, RotateCcw, Square, XCircle } from 'lucide-react';
+import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  AlertTriangle,
+  ArrowLeft,
+  ArrowRight,
+  BookOpen,
+  Check,
+  CheckCircle2,
+  Circle,
+  Keyboard,
+  Lightbulb,
+  ListChecks,
+  Loader2,
+  Lock,
+  Play,
+  RotateCcw,
+  Square,
+  Target,
+  Trophy,
+  XCircle,
+} from 'lucide-react';
 import type { ShellLabStatus, ShellLabView, ShellStepResult } from '../../domain/shell-labs';
-import { LabTerminal } from '../labs/LabTerminal';
+import { LabTerminal, type TerminalCommand } from '../labs/LabTerminal';
+import { LabWorkspace, useLabLayout } from './LabWorkspace';
 import { errorText, passedSteps, savePassedSteps } from './progress';
 
 /** Plain text with `code` spans. */
@@ -22,6 +42,11 @@ function Inline({ text }: { text: string }) {
 }
 
 const HINT_LABELS = ['Nudge', 'Hint', 'Worked example'];
+/** How often the machine is checked while the lab is open and running. */
+const LIVE_INTERVAL_MS = 3000;
+const DONE = '__done';
+
+type Step = ShellLabView['stepList'][number];
 
 export function ShellLabPage({ slug, onBack }: { slug: string; onBack: () => void }) {
   const [api] = useState(() => window.buildment.shellLabs);
@@ -31,8 +56,16 @@ export function ShellLabPage({ slug, onBack }: { slug: string; onBack: () => voi
   const [error, setError] = useState('');
   const [passed, setPassed] = useState<string[]>(() => passedSteps(slug));
   const [results, setResults] = useState<Record<string, ShellStepResult>>({});
+  /** Steps whose failure reasons are shown: the learner pressed Check on them. */
+  const [explained, setExplained] = useState<Record<string, boolean>>({});
+  const [announcement, setAnnouncement] = useState('');
   const [hints, setHints] = useState<Record<string, number>>({});
   const [terminal, setTerminal] = useState(0);
+  const [viewing, setViewing] = useState<string | null>(null);
+  const [typed, setTyped] = useState<TerminalCommand | null>(null);
+  const [layout, setLayout] = useLabLayout();
+  const polling = useRef(false);
+  const stepTop = useRef<HTMLDivElement>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -45,7 +78,12 @@ export function ShellLabPage({ slug, onBack }: { slug: string; onBack: () => voi
   useEffect(() => {
     api
       .view(slug)
-      .then(setView)
+      .then((loaded) => {
+        setView(loaded);
+        // Open on the first step not done yet, or the finish screen.
+        const saved = passedSteps(slug);
+        setViewing(loaded.stepList.find((step) => !saved.includes(step.id))?.id ?? DONE);
+      })
       .catch((reason: unknown) => setError(errorText(reason)));
     void refresh();
   }, [api, slug, refresh]);
@@ -69,19 +107,56 @@ export function ShellLabPage({ slug, onBack }: { slug: string; onBack: () => voi
     }
   }
 
-  function markPassed(stepId: string, ok: boolean) {
-    setPassed((current) => {
-      const next = ok ? [...new Set([...current, stepId])] : current.filter((id) => id !== stepId);
-      savePassedSteps(slug, next);
-      return next;
-    });
-  }
+  // A step stays done once it has passed. If the machine later breaks it, the step shows a warning.
+  const markPassed = useCallback(
+    (stepIds: string[]) => {
+      setPassed((current) => {
+        const fresh = stepIds.filter((id) => !current.includes(id));
+        if (!fresh.length) return current;
+        const next = [...current, ...fresh];
+        savePassedSteps(slug, next);
+        const numbers = fresh.map((id) => (view?.stepList.findIndex((step) => step.id === id) ?? -1) + 1).filter((n) => n > 0);
+        if (numbers.length) setAnnouncement(`Step ${numbers.join(' and ')} done.`);
+        return next;
+      });
+    },
+    [slug, view],
+  );
+
+  const running = Boolean(status?.running);
+
+  // Live checking: while the machine runs and the window is visible, check every step against it.
+  useEffect(() => {
+    if (!running || busy || !view) return;
+    let stopped = false;
+    async function poll() {
+      if (polling.current || document.visibilityState !== 'visible') return;
+      polling.current = true;
+      try {
+        const all = await api.checkAll(slug);
+        if (stopped || !all) return;
+        setResults(Object.fromEntries(all.map((result) => [result.stepId, result])));
+        markPassed(all.filter((result) => result.passed).map((result) => result.stepId));
+      } catch {
+        /* A missed round is fine; the next one tries again. */
+      } finally {
+        polling.current = false;
+      }
+    }
+    void poll();
+    const timer = setInterval(() => void poll(), LIVE_INTERVAL_MS);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+    };
+  }, [api, slug, running, busy, view, markPassed]);
 
   async function check(stepId: string) {
     await act(`check:${stepId}`, async () => {
       const result = await api.check(slug, stepId);
       setResults((current) => ({ ...current, [stepId]: result }));
-      markPassed(stepId, result.passed);
+      setExplained((current) => ({ ...current, [stepId]: true }));
+      if (result.passed) markPassed([stepId]);
     });
   }
 
@@ -90,12 +165,19 @@ export function ShellLabPage({ slug, onBack }: { slug: string; onBack: () => voi
     await act('reset', async () => {
       await api.reset(slug);
       setResults({});
+      setExplained({});
       setHints({});
       setPassed([]);
       savePassedSteps(slug, []);
+      setViewing(view?.stepList[0]?.id ?? null);
       await api.start(slug);
       setTerminal((n) => n + 1);
     });
+  }
+
+  function go(stepId: string) {
+    setViewing(stepId);
+    stepTop.current?.scrollIntoView({ block: 'start' });
   }
 
   const onTerminalError = useCallback((message: string) => setError(errorText(message)), []);
@@ -113,50 +195,127 @@ export function ShellLabPage({ slug, onBack }: { slug: string; onBack: () => voi
       </section>
     );
 
-  const running = Boolean(status?.running);
-  const current = view.stepList.find((step) => !passed.includes(step.id))?.id;
-  const complete = view.stepList.every((step) => passed.includes(step.id));
+  const steps = view.stepList;
+  const complete = steps.every((step) => passed.includes(step.id));
+  // A step opens once every step before it is done.
+  const unlocked = (index: number) => steps.slice(0, index).every((step) => passed.includes(step.id));
+  const shownIndex = steps.findIndex((step) => step.id === viewing);
+  const shown = viewing === DONE && complete ? null : steps[shownIndex >= 0 && unlocked(shownIndex) ? shownIndex : Math.max(0, steps.findIndex((step) => !passed.includes(step.id)))];
+  const progress = Math.round((passed.filter((id) => steps.some((step) => step.id === id)).length / steps.length) * 100);
+
+  const stepPanel = (
+    <div className="mx-auto w-full max-w-3xl px-6 pb-16 pt-5">
+      <div ref={stepTop} />
+      <Stepper steps={steps} passed={passed} current={shown?.id ?? DONE} complete={complete} unlocked={unlocked} onSelect={go} />
+
+      {shown ? (
+        <StepView
+          key={shown.id}
+          step={shown}
+          index={steps.indexOf(shown)}
+          total={steps.length}
+          scenario={view.scenario}
+          done={passed.includes(shown.id)}
+          result={results[shown.id]}
+          explained={Boolean(explained[shown.id])}
+          hintsShown={hints[shown.id] ?? 0}
+          running={running}
+          busy={busy}
+          onCheck={() => void check(shown.id)}
+          onHint={() => setHints((all) => ({ ...all, [shown.id]: (all[shown.id] ?? 0) + 1 }))}
+          onType={(text) => setTyped({ text, nonce: Date.now(), submit: false })}
+          onPrevious={steps.indexOf(shown) > 0 ? () => go(steps[steps.indexOf(shown) - 1].id) : undefined}
+          onNext={() => go(steps[steps.indexOf(shown) + 1]?.id ?? DONE)}
+        />
+      ) : (
+        <Finished view={view} onBack={onBack} onReview={() => go(steps[0].id)} />
+      )}
+    </div>
+  );
+
+  const terminalPane = running ? (
+    <LabTerminal key={terminal} api={api} blockId={slug} onError={onTerminalError} runCommand={typed} onSent={() => setTyped(null)} />
+  ) : (
+    <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center text-white/80">
+      <p className="font-semibold text-white">{status?.available === false ? 'Docker is needed for shell labs' : `${view.machine} is not running`}</p>
+      <p className="max-w-sm text-sm text-white/60">
+        {status?.available === false
+          ? status.message
+          : status?.created
+            ? 'Resume to continue where you left off. Your changes on the machine are kept.'
+            : 'Start creates the machine. The first start downloads and prepares it, which can take a minute or two.'}
+      </p>
+      {status?.available !== false && (
+        <button
+          disabled={Boolean(busy)}
+          onClick={() => void act('start', () => api.start(slug))}
+          className="mt-2 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+        >
+          {busy === 'start' ? <Loader2 size={15} className="animate-spin" /> : <Play size={15} />} {status?.created ? 'Resume machine' : 'Start machine'}
+        </button>
+      )}
+    </div>
+  );
 
   return (
     <section className="flex h-full min-h-0 flex-col">
-      <header className="flex flex-wrap items-center gap-3 border-b border-border px-6 py-3">
-        <button onClick={onBack} className="inline-flex items-center gap-2 text-sm font-medium text-primary underline-offset-4 hover:underline">
-          <ArrowLeft size={16} /> Shell labs
-        </button>
-        <h1 className="font-heading text-lg font-bold tracking-tight text-foreground">{view.title}</h1>
-        <span
-          className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${running ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-muted text-muted-foreground'}`}
-        >
-          {status?.message ?? 'Checking Docker…'}
-        </span>
-        <span className="text-xs text-muted-foreground">
-          {passed.length} of {view.steps} steps done
-        </span>
-        <div className="ml-auto flex gap-2">
-          {running ? (
-            <button
-              disabled={Boolean(busy)}
-              onClick={() => void act('stop', () => api.stop(slug))}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:border-primary disabled:opacity-50"
-            >
-              <Square size={13} /> Stop
-            </button>
-          ) : (
+      <header className="border-b border-border px-6 py-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <button onClick={onBack} className="inline-flex items-center gap-1.5 text-sm font-medium text-primary underline-offset-4 hover:underline">
+            <ArrowLeft size={16} /> Shell labs
+          </button>
+          <h1 className="font-heading text-lg font-bold tracking-tight text-foreground">{view.title}</h1>
+          <span
+            className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${running ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-muted text-muted-foreground'}`}
+          >
+            {status?.message ?? 'Checking Docker…'}
+          </span>
+          {running && (
+            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground" title="Every step is checked against the machine every few seconds">
+              <span className="relative flex size-2">
+                <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-500 opacity-60 motion-reduce:animate-none" />
+                <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
+              </span>
+              Live checking
+            </span>
+          )}
+          <span className="sr-only" role="status" aria-live="polite">
+            {announcement}
+          </span>
+          <div className="ml-auto flex gap-2">
+            {running ? (
+              <button
+                disabled={Boolean(busy)}
+                onClick={() => void act('stop', () => api.stop(slug))}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:border-primary disabled:opacity-50"
+              >
+                {busy === 'stop' ? <Loader2 size={13} className="animate-spin" /> : <Square size={13} />} Stop
+              </button>
+            ) : (
+              <button
+                disabled={Boolean(busy) || status?.available === false}
+                onClick={() => void act('start', () => api.start(slug))}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-50"
+              >
+                {busy === 'start' ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />} {status?.created ? 'Resume' : 'Start'}
+              </button>
+            )}
             <button
               disabled={Boolean(busy) || status?.available === false}
-              onClick={() => void act('start', () => api.start(slug))}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-50"
+              onClick={() => void reset()}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:border-primary disabled:opacity-50"
             >
-              {busy === 'start' ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />} {status?.created ? 'Resume' : 'Start'}
+              {busy === 'reset' ? <Loader2 size={13} className="animate-spin" /> : <RotateCcw size={13} />} Reset
             </button>
-          )}
-          <button
-            disabled={Boolean(busy) || status?.available === false}
-            onClick={() => void reset()}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:border-primary disabled:opacity-50"
-          >
-            {busy === 'reset' ? <Loader2 size={13} className="animate-spin" /> : <RotateCcw size={13} />} Reset
-          </button>
+          </div>
+        </div>
+        <div className="mt-2.5 flex items-center gap-3" aria-label={`${progress}% of the lab done`}>
+          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+            <div className="h-full rounded-full bg-emerald-500 transition-[width] duration-500" style={{ width: `${progress}%` }} />
+          </div>
+          <span className="text-xs tabular-nums text-muted-foreground">
+            {passed.filter((id) => steps.some((step) => step.id === id)).length} of {steps.length} steps
+          </span>
         </div>
       </header>
 
@@ -166,112 +325,324 @@ export function ShellLabPage({ slug, onBack }: { slug: string; onBack: () => voi
         </p>
       )}
 
-      <div className="flex min-h-0 flex-1">
-        <aside className="w-[400px] shrink-0 overflow-y-auto border-r border-border p-5">
-          <p className="text-sm leading-relaxed text-muted-foreground">{view.scenario}</p>
-          {complete && (
-            <p className="mt-4 rounded-xl bg-emerald-500/10 p-3 text-sm font-medium text-emerald-700 dark:text-emerald-300">
-              Lab complete. Every check passes on {view.machine}.
-            </p>
-          )}
-          <ol className="mt-5 space-y-4">
-            {view.stepList.map((step, index) => {
-              const done = passed.includes(step.id);
-              const result = results[step.id];
-              const shown = hints[step.id] ?? 0;
-              return (
-                <li
-                  key={step.id}
-                  className={`rounded-2xl border p-4 ${step.id === current ? 'border-primary bg-primary/5' : 'border-border bg-card'}`}
-                >
-                  <div className="flex items-start gap-2">
-                    {done ? (
-                      <CheckCircle2 size={18} className="mt-0.5 shrink-0 text-emerald-500" />
-                    ) : (
-                      <Circle size={18} className="mt-0.5 shrink-0 text-muted-foreground" />
-                    )}
-                    <div className="min-w-0">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Step {index + 1}</p>
-                      <p className="mt-0.5 text-sm font-semibold leading-snug text-foreground">
-                        <Inline text={step.goal} />
-                      </p>
-                    </div>
-                  </div>
-                  <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                    <Inline text={step.body} />
-                  </p>
+      <LabWorkspace
+        steps={stepPanel}
+        terminal={terminalPane}
+        terminalTitle={`root@${view.machine}`}
+        onReconnect={running ? () => setTerminal((n) => n + 1) : undefined}
+        layout={layout}
+        setLayout={setLayout}
+      />
+    </section>
+  );
+}
 
-                  {shown > 0 && (
-                    <ul className="mt-3 space-y-2">
-                      {step.hints.slice(0, shown).map((hint, level) => (
-                        <li key={level} className="rounded-lg bg-muted/60 p-2.5 text-xs leading-relaxed text-foreground">
-                          <span className="font-semibold">{HINT_LABELS[level]}: </span>
-                          <Inline text={hint} />
-                        </li>
-                      ))}
-                    </ul>
-                  )}
+function Stepper({
+  steps,
+  passed,
+  current,
+  complete,
+  unlocked,
+  onSelect,
+}: {
+  steps: Step[];
+  passed: string[];
+  current: string;
+  complete: boolean;
+  unlocked: (index: number) => boolean;
+  onSelect: (id: string) => void;
+}) {
+  return (
+    <nav aria-label="Lab steps" className="mb-6">
+      <ol className="flex items-center">
+        {steps.map((step, index) => {
+          const done = passed.includes(step.id);
+          const open = unlocked(index);
+          const here = step.id === current;
+          return (
+            <li key={step.id} className="flex flex-1 items-center last:flex-none">
+              <button
+                type="button"
+                disabled={!open}
+                onClick={() => onSelect(step.id)}
+                aria-current={here ? 'step' : undefined}
+                aria-label={`Step ${index + 1}${done ? ', done' : open ? '' : ', locked'}: ${step.goal}`}
+                title={open ? step.goal : 'Finish the steps before this one first'}
+                className={`flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-all ${
+                  here
+                    ? 'bg-primary text-primary-foreground ring-4 ring-primary/20'
+                    : done
+                      ? 'bg-emerald-500 text-white hover:ring-4 hover:ring-emerald-500/20'
+                      : open
+                        ? 'border-2 border-primary text-primary'
+                        : 'border border-border text-muted-foreground'
+                }`}
+              >
+                {done && !here ? <Check size={15} strokeWidth={3} /> : open ? index + 1 : <Lock size={12} />}
+              </button>
+              {index < steps.length - 1 && <span className={`mx-1.5 h-0.5 flex-1 rounded-full ${done ? 'bg-emerald-500' : 'bg-border'}`} />}
+            </li>
+          );
+        })}
+        <li className="ml-1.5 flex items-center">
+          <span className={`mr-1.5 h-0.5 w-6 rounded-full ${complete ? 'bg-emerald-500' : 'bg-border'}`} />
+          <button
+            type="button"
+            disabled={!complete}
+            onClick={() => onSelect(DONE)}
+            aria-label={complete ? 'Lab summary' : 'Lab summary, locked until every step is done'}
+            className={`flex size-8 items-center justify-center rounded-full ${current === DONE ? 'bg-primary text-primary-foreground ring-4 ring-primary/20' : complete ? 'bg-amber-400 text-amber-950' : 'border border-border text-muted-foreground'}`}
+          >
+            <Trophy size={14} />
+          </button>
+        </li>
+      </ol>
+    </nav>
+  );
+}
 
-                  {result && (
-                    <ul className="mt-3 space-y-1.5">
-                      {result.checks.map((item) => (
-                        <li key={item.id} className="flex items-start gap-2 text-xs">
-                          {item.passed ? (
-                            <CheckCircle2 size={14} className="mt-0.5 shrink-0 text-emerald-500" />
-                          ) : (
-                            <XCircle size={14} className="mt-0.5 shrink-0 text-destructive" />
-                          )}
-                          <span>
-                            <span className="font-medium text-foreground">{item.label}</span>
-                            {!item.passed && <span className="block text-muted-foreground">{item.message}</span>}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
+function Section({ icon, title, children }: { icon: ReactNode; title: string; children: ReactNode }) {
+  return (
+    <section className="mt-6">
+      <h3 className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+        {icon} {title}
+      </h3>
+      <div className="mt-2.5">{children}</div>
+    </section>
+  );
+}
 
-                  <div className="mt-3 flex gap-2">
-                    <button
-                      disabled={!running || Boolean(busy)}
-                      onClick={() => void check(step.id)}
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-50"
-                    >
-                      {busy === `check:${step.id}` && <Loader2 size={13} className="animate-spin" />} Check
-                    </button>
-                    {shown < step.hints.length && (
-                      <button
-                        onClick={() => setHints((all) => ({ ...all, [step.id]: shown + 1 }))}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:border-primary"
-                      >
-                        <Lightbulb size={13} /> {shown ? 'More help' : 'Hint'}
-                      </button>
-                    )}
-                  </div>
-                </li>
-              );
-            })}
-          </ol>
-        </aside>
+function StepView({
+  step,
+  index,
+  total,
+  scenario,
+  done,
+  result,
+  explained,
+  hintsShown,
+  running,
+  busy,
+  onCheck,
+  onHint,
+  onType,
+  onPrevious,
+  onNext,
+}: {
+  step: Step;
+  index: number;
+  total: number;
+  scenario: string;
+  done: boolean;
+  result?: ShellStepResult;
+  explained: boolean;
+  hintsShown: number;
+  running: boolean;
+  busy: string | null;
+  onCheck: () => void;
+  onHint: () => void;
+  onType: (text: string) => void;
+  onPrevious?: () => void;
+  onNext: () => void;
+}) {
+  const last = index === total - 1;
+  return (
+    <article aria-labelledby={`goal-${step.id}`}>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">
+        Step {index + 1} of {total}
+      </p>
+      <h2 id={`goal-${step.id}`} className="font-heading mt-1.5 text-xl font-bold leading-snug tracking-tight text-foreground">
+        <Inline text={step.goal} />
+      </h2>
 
-        <div className="flex min-w-0 flex-1 flex-col">
-          {running ? (
-            <div className="min-h-0 flex-1">
-              <LabTerminal key={terminal} api={api} blockId={slug} label={`root@${view.machine}`} onError={onTerminalError} />
-            </div>
-          ) : (
-            <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
-              <p className="font-semibold text-foreground">{status?.available === false ? 'Docker is needed for shell labs' : `${view.machine} is not running`}</p>
-              <p className="max-w-md text-sm text-muted-foreground">
-                {status?.available === false
-                  ? status.message
-                  : status?.created
-                    ? 'Resume to continue where you left off. Your changes on the machine are kept.'
-                    : 'Start creates the machine. The first start downloads a small Linux image, which can take a minute.'}
+      {index === 0 && (
+        <details open className="mt-4 rounded-xl border border-border bg-muted/30 p-4 text-sm">
+          <summary className="cursor-pointer font-semibold text-foreground">The situation</summary>
+          <p className="mt-2 leading-relaxed text-muted-foreground">
+            <Inline text={scenario} />
+          </p>
+        </details>
+      )}
+
+      {done && (
+        <div className="mt-4 flex items-start gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4">
+          <CheckCircle2 size={20} className="mt-0.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold text-emerald-800 dark:text-emerald-200">Step done. The machine does what this step asked.</p>
+            {result && !result.passed && (
+              <p className="mt-1 flex items-start gap-1.5 text-sm text-amber-800 dark:text-amber-300">
+                <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+                It passed earlier, but something you changed since then undid part of it. See the checks below.
               </p>
-            </div>
+            )}
+          </div>
+          <button onClick={onNext} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-emerald-600 px-3.5 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
+            {last ? 'Finish lab' : 'Next step'} <ArrowRight size={15} />
+          </button>
+        </div>
+      )}
+
+      <Section icon={<BookOpen size={13} />} title="Learn">
+        <div className="space-y-3 text-[15px] leading-relaxed text-foreground/90">
+          {step.learn.map((paragraph, n) => (
+            <p key={n}>
+              <Inline text={paragraph} />
+            </p>
+          ))}
+        </div>
+      </Section>
+
+      {step.commands.length > 0 && (
+        <Section icon={<Keyboard size={13} />} title="Commands you will use">
+          <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border">
+            {step.commands.map((note) => (
+              <li key={note.command} className="flex items-start gap-3 bg-card px-4 py-3">
+                <div className="min-w-0 flex-1">
+                  <code className="block break-words font-mono text-sm font-semibold text-foreground">{note.command}</code>
+                  <p className="mt-0.5 text-sm text-muted-foreground">
+                    <Inline text={note.meaning} />
+                  </p>
+                </div>
+                {note.key ? (
+                  <span className="shrink-0 rounded-md bg-muted px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground" title="Used inside a program or a file, not typed at the prompt">
+                    Key
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={!running}
+                    onClick={() => onType(note.command)}
+                    title={running ? 'Type this into the terminal. Edit the CAPITAL words, then press Enter.' : 'Start the machine first'}
+                    className="shrink-0 rounded-md border border-border px-2 py-1 text-xs font-medium text-muted-foreground hover:border-primary hover:text-primary disabled:opacity-40"
+                  >
+                    Type it
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-xs text-muted-foreground">Words in CAPITALS are placeholders: replace them with your own values.</p>
+        </Section>
+      )}
+
+      <Section icon={<Target size={13} />} title="Your task">
+        <div className="rounded-xl border-l-4 border-primary bg-primary/5 p-4 text-[15px] leading-relaxed text-foreground">
+          <Inline text={step.body} />
+        </div>
+      </Section>
+
+      <Section icon={<ListChecks size={13} />} title="What we check">
+        <ul className="space-y-2" aria-label="Checks">
+          {step.checks.map((item) => {
+            const live = result?.checks.find((check) => check.id === item.id);
+            const passing = Boolean(live?.passed);
+            // Not passing yet is neutral while you work; reasons show once you ask, or when a done step breaks.
+            const reason = live && !passing && (explained || done);
+            return (
+              <li key={item.id} className="flex items-start gap-2.5 text-sm">
+                {passing ? (
+                  <CheckCircle2 size={17} className="mt-0.5 shrink-0 text-emerald-500" aria-label="Passing" />
+                ) : reason ? (
+                  <XCircle size={17} className="mt-0.5 shrink-0 text-destructive" aria-label="Failing" />
+                ) : (
+                  <Circle size={17} className="mt-0.5 shrink-0 text-muted-foreground/60" aria-label="Not yet" />
+                )}
+                <span>
+                  <span className={passing || reason ? 'font-medium text-foreground' : 'text-muted-foreground'}>{item.label}</span>
+                  {reason && <span className="block text-muted-foreground">{live?.message}</span>}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+        {!running && <p className="mt-2 text-xs text-muted-foreground">Start the machine and these tick themselves as you work.</p>}
+      </Section>
+
+      {hintsShown > 0 && (
+        <Section icon={<Lightbulb size={13} />} title="Hints">
+          <ul className="space-y-2">
+            {step.hints.slice(0, hintsShown).map((hint, level) => (
+              <li key={level} className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-sm leading-relaxed text-foreground">
+                <span className="font-semibold">{HINT_LABELS[level]}: </span>
+                <Inline text={hint} />
+              </li>
+            ))}
+          </ul>
+        </Section>
+      )}
+
+      <div className="mt-8 flex flex-wrap items-center gap-2 border-t border-border pt-5">
+        {onPrevious && (
+          <button onClick={onPrevious} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground">
+            <ArrowLeft size={15} /> Previous
+          </button>
+        )}
+        <div className="ml-auto flex flex-wrap gap-2">
+          {hintsShown < step.hints.length && (
+            <button onClick={onHint} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:border-primary">
+              <Lightbulb size={15} /> {hintsShown ? 'More help' : 'Show a hint'}
+            </button>
+          )}
+          {done ? (
+            <button onClick={onNext} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">
+              {last ? 'Finish lab' : 'Next step'} <ArrowRight size={15} />
+            </button>
+          ) : (
+            <button
+              disabled={!running || Boolean(busy)}
+              onClick={onCheck}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+            >
+              {busy === `check:${step.id}` && <Loader2 size={15} className="animate-spin" />} Why not yet?
+            </button>
           )}
         </div>
       </div>
-    </section>
+    </article>
+  );
+}
+
+function Finished({ view, onBack, onReview }: { view: ShellLabView; onBack: () => void; onReview: () => void }) {
+  return (
+    <article className="text-center">
+      <div className="mx-auto flex size-16 items-center justify-center rounded-full bg-amber-400/20">
+        <Trophy size={30} className="text-amber-500" />
+      </div>
+      <h2 className="font-heading mt-4 text-2xl font-bold tracking-tight text-foreground">Lab complete</h2>
+      <p className="mt-1 text-sm text-muted-foreground">Every check passes on {view.machine}. Here is what you did:</p>
+      <ol className="mx-auto mt-6 max-w-xl space-y-2 text-left">
+        {view.stepList.map((step, index) => (
+          <li key={step.id} className="flex items-start gap-3 rounded-xl border border-border bg-card p-3 text-sm">
+            <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white">
+              <Check size={13} strokeWidth={3} />
+            </span>
+            <span>
+              <span className="text-xs font-semibold text-muted-foreground">Step {index + 1}</span>
+              <span className="block text-foreground">
+                <Inline text={step.goal} />
+              </span>
+            </span>
+          </li>
+        ))}
+      </ol>
+      <div className="mx-auto mt-6 max-w-xl text-left">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Commands you can use now</p>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {[...new Set(view.stepList.flatMap((step) => step.commands.map((note) => note.command.split(' ')[0])))].map((name) => (
+            <code key={name} className="rounded-md bg-muted px-2 py-1 font-mono text-xs text-foreground">
+              {name}
+            </code>
+          ))}
+        </div>
+      </div>
+      <div className="mt-8 flex justify-center gap-2">
+        <button onClick={onReview} className="rounded-lg border border-border px-4 py-2 text-sm font-medium hover:border-primary">
+          Review the steps
+        </button>
+        <button onClick={onBack} className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">
+          Choose another lab
+        </button>
+      </div>
+    </article>
   );
 }

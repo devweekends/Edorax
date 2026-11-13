@@ -3,6 +3,8 @@ import type { ShellLab } from '../domain/shell-labs';
 export const linuxDns: ShellLab = {
   slug: 'linux-dns',
   topic: 'linux',
+  level: 'intermediate',
+  tags: ['DNS', 'Networking'],
   title: 'Name resolution and a local DNS server',
   summary: 'Pin a name in the hosts file, fix a stale entry, run a small DNS server and point the machine at it.',
   scenario:

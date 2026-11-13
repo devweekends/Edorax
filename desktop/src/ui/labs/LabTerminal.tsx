@@ -5,7 +5,8 @@ import '@xterm/xterm/css/xterm.css';
 
 import type { LabsAPI } from '../../domain/labs';
 
-export type TerminalCommand = { text: string; nonce: number };
+/** Text to send to the terminal. `submit: false` only types it, so the learner edits it and presses Enter. */
+export type TerminalCommand = { text: string; nonce: number; submit?: boolean };
 /** The terminal calls a lab runtime makes. Course workspaces and shell labs both provide them. */
 export type TerminalAPI = Pick<
   LabsAPI,
@@ -34,6 +35,7 @@ export function LabTerminal({
     () => window.matchMedia('(prefers-color-scheme: dark)').matches,
   );
   const session = useRef<{ id: string; ready: boolean } | null>(null);
+  const terminalRef = useRef<Terminal | null>(null);
   const handled = useRef<number | null>(null);
   const commandRef = useRef(runCommand);
   commandRef.current = runCommand;
@@ -48,9 +50,10 @@ export function LabTerminal({
     )
       return;
     handled.current = command.nonce;
-    // Execute every snippet line: newlines become shell submits.
-    const payload = command.text.replace(/\r?\n/g, '\r');
-    const submit = payload.endsWith('\r') ? payload : payload + '\r';
+    // Execute every snippet line: newlines become shell submits. Typing only sends one line, no Enter.
+    const payload = command.text.replace(/\r?\n/g, command.submit === false ? ' ' : '\r');
+    const submit = command.submit === false || payload.endsWith('\r') ? payload : payload + '\r';
+    terminalRef.current?.focus();
     const api = apiOverride ?? window.buildment.labs;
     for (let offset = 0; offset < submit.length; offset += 2048)
       void api
@@ -75,6 +78,7 @@ export function LabTerminal({
     const fit = new FitAddon();
     terminal.loadAddon(fit);
     terminal.open(host.current);
+    terminalRef.current = terminal;
     const report = (error: unknown) => {
       if (active) onError(String(error));
     };
@@ -123,6 +127,7 @@ export function LabTerminal({
     return () => {
       active = false;
       session.current = null;
+      terminalRef.current = null;
       cancelAnimationFrame(frame);
       observer.disconnect();
       off();

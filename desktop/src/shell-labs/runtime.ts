@@ -11,6 +11,9 @@ import { SHELL_LAB_EXTRA_CAPABILITIES, type ShellLab, type ShellLabStatus, type 
 
 const LABEL = 'com.edorax.shell-lab';
 const OUTPUT_LIMIT = 64 * 1024;
+/** Longest one check may take. A check that hangs (a server that never answers) counts as failed. */
+const CHECK_SECONDS = 12;
+const RESULT_MARK = '@@edorax-check';
 const missing = (error: unknown) => (error as { statusCode?: number })?.statusCode === 404;
 
 export function shellLabName(scope: string) {
@@ -21,13 +24,15 @@ export function shellLabName(scope: string) {
 export const SHELL_LAB_CAPABILITIES = ['CHOWN', 'DAC_OVERRIDE', 'FOWNER', 'FSETID', 'SETUID', 'SETGID', 'KILL'];
 
 /**
- * The image a lab machine runs: the pinned base image, or for a lab with packages, a local
- * image built from it once. The tag is a hash of base and packages, so a changed list builds anew.
+ * The image a lab machine runs: the pinned base image, or for a lab with packages or a build
+ * script, a local image built from it once. The tag is a hash of all three, so any change builds anew.
  */
 export function shellLabImage(lab: ShellLab) {
   const packages = [...new Set(lab.machine.packages ?? [])].sort();
-  if (!packages.length) return lab.machine.image;
-  const hash = createHash('sha256').update(`${lab.machine.image}\n${packages.join('\n')}`).digest('hex').slice(0, 20);
+  const build = lab.machine.build?.trim() ?? '';
+  if (!packages.length && !build) return lab.machine.image;
+  const identity = `${lab.machine.image}\n${packages.join('\n')}${build ? `\n--build--\n${build}` : ''}`;
+  const hash = createHash('sha256').update(identity).digest('hex').slice(0, 20);
   return `edorax-shell-lab:${hash}`;
 }
 
@@ -153,11 +158,31 @@ export class ShellLabRuntime {
     });
     try {
       await builder.start();
+      const list = packages.join(' ');
+      // apt: policy-rc.d stops packages starting their services during install; a daemon left
+      // running would hold this command's output open and the build would never finish.
+      // dnf images (Rocky, Alma) have no service manager running, so nothing starts there.
+      const install = !packages.length
+        ? 'true'
+        : `if command -v apt-get >/dev/null; then
+  export DEBIAN_FRONTEND=noninteractive
+  printf '#!/bin/sh\\nexit 101\\n' > /usr/sbin/policy-rc.d; chmod +x /usr/sbin/policy-rc.d
+  { apt-get update -qq && apt-get install -y -qq --no-install-recommends ${list}; } </dev/null >/tmp/install.log 2>&1 || { tail -20 /tmp/install.log; exit 1; }
+  rm -f /usr/sbin/policy-rc.d; rm -rf /var/lib/apt/lists/*
+elif command -v dnf >/dev/null; then
+  dnf install -y -q --setopt=install_weak_deps=False ${list} </dev/null >/tmp/install.log 2>&1 || { tail -20 /tmp/install.log; exit 1; }
+  dnf clean all -q >/dev/null 2>&1 || true
+else
+  echo "The image has neither apt-get nor dnf."; exit 1
+fi`;
+      const build = this.lab.machine.build?.trim();
+      const encoded = build ? Buffer.from(build).toString('base64') : '';
       const result = await this.run(
         builder,
-        // policy-rc.d stops packages starting their services during install: a daemon left running
-        // would hold this command's output open and the build would never finish.
-        `set -e; export DEBIAN_FRONTEND=noninteractive; printf '#!/bin/sh\\nexit 101\\n' > /usr/sbin/policy-rc.d; chmod +x /usr/sbin/policy-rc.d; apt-get update -qq; apt-get install -y -qq --no-install-recommends ${packages.join(' ')} </dev/null >/tmp/apt.log 2>&1 || { tail -20 /tmp/apt.log; exit 1; }; rm -f /usr/sbin/policy-rc.d /tmp/apt.log; rm -rf /var/lib/apt/lists/*`,
+        `set -e
+${install}
+rm -f /tmp/install.log
+${build ? `printf %s '${encoded}' | base64 -d > /tmp/edorax-build.sh; bash -e /tmp/edorax-build.sh </dev/null 2>&1 | tail -20; status=\${PIPESTATUS[0]}; rm -f /tmp/edorax-build.sh; exit $status` : ''}`,
         600_000,
       );
       if (result.code)
@@ -256,14 +281,45 @@ export class ShellLabRuntime {
   check(stepId: unknown): Promise<ShellStepResult> {
     const step = this.lab.steps.find((item) => item.id === stepId);
     if (!step) return Promise.reject(new Error('Unknown lab step.'));
+    return this.serial(async () => (await this.evaluate(await this.running(), [step]))[0]);
+  }
+
+  /**
+   * Every step's checks against the machine as it is now. The lab page polls this while the
+   * machine runs, so steps tick off the moment the machine really does what the step asks.
+   * Resolves to null when the machine is not running, so polling a stopped lab is not an error.
+   */
+  checkAll(): Promise<ShellStepResult[] | null> {
     return this.serial(async () => {
-      const container = await this.running();
-      const checks = [];
-      for (const check of step.checks) {
-        const result = await this.run(container, check.run).catch(() => ({ code: 1, output: '' }));
-        const passed = result.code === 0;
-        checks.push({ id: check.id, label: check.label, passed, message: passed ? '' : check.fail });
-      }
+      const resource = await this.owned();
+      if (!resource?.info.State.Running) return null;
+      return this.evaluate(resource.container, this.lab.steps);
+    });
+  }
+
+  /**
+   * Run checks in one exec, so live checking stays cheap. Each check runs in its own bash with
+   * its own time limit, so one that exits early or hangs cannot affect the others.
+   */
+  private async evaluate(container: Docker.Container, steps: ShellLab['steps']): Promise<ShellStepResult[]> {
+    const all = steps.flatMap((step) => step.checks.map((check) => ({ step, check })));
+    const script = all
+      .map(({ check }, index) => {
+        const encoded = Buffer.from(check.run).toString('base64');
+        return `timeout ${CHECK_SECONDS} bash -c "$(printf %s '${encoded}' | base64 -d)" </dev/null >/dev/null 2>&1; echo "${RESULT_MARK} ${index} $?"`;
+      })
+      .join('\n');
+    const { output } = await this.run(container, script, (CHECK_SECONDS * all.length + 10) * 1000).catch(() => ({ code: 1, output: '' }));
+    const codes = new Map<number, number>();
+    for (const line of output.split('\n')) {
+      const match = new RegExp(`^${RESULT_MARK} (\\d+) (\\d+)$`).exec(line.trim());
+      if (match) codes.set(Number(match[1]), Number(match[2]));
+    }
+    return steps.map((step) => {
+      const checks = step.checks.map((check) => {
+        const passed = codes.get(all.findIndex((item) => item.check === check)) === 0;
+        return { id: check.id, label: check.label, passed, message: passed ? '' : check.fail };
+      });
       return { stepId: step.id, passed: checks.every((check) => check.passed), checks };
     });
   }

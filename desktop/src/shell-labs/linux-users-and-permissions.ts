@@ -3,6 +3,8 @@ import type { ShellLab } from '../domain/shell-labs';
 export const linuxUsersAndPermissions: ShellLab = {
   slug: 'linux-users-and-permissions',
   topic: 'linux',
+  level: 'beginner',
+  tags: ['Users', 'Groups', 'Permissions'],
   title: 'Users, groups and permissions',
   summary: 'Add a new developer, lock down a shared folder, fix a deploy script and free a full log, on a real Linux server.',
   scenario:

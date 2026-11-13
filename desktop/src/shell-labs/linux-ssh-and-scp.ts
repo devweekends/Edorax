@@ -3,6 +3,8 @@ import type { ShellLab } from '../domain/shell-labs';
 export const linuxSshAndScp: ShellLab = {
   slug: 'linux-ssh-and-scp',
   topic: 'linux',
+  level: 'beginner',
+  tags: ['SSH', 'SCP', 'Remote access'],
   title: 'SSH keys, a hardened server and scp',
   summary: 'Start an SSH server on a custom port, log in with a key, turn off passwords and root login, then copy files both ways with scp.',
   scenario:
@@ -59,7 +61,7 @@ chmod 600 /root/.edorax-release-sum
       ],
       checks: [
         { id: 'folder', label: "deploy's .ssh is private", run: '[ "$(stat -c %a:%U /home/deploy/.ssh)" = 700:deploy ]', fail: '/home/deploy/.ssh should be mode 700 and owned by deploy.' },
-        { id: 'key-works', label: 'root logs in as deploy with a key', run: 'timeout 10 ssh -p 2222 -o BatchMode=yes -o PasswordAuthentication=no -o StrictHostKeyChecking=accept-new -o ConnectTimeout=5 deploy@localhost true', fail: 'A key login as deploy@localhost on port 2222 does not work yet. Check the key is in authorized_keys and the permissions.' },
+        { id: 'key-works', label: 'root logs in as deploy with a key', run: 'timeout 10 ssh -p 2222 -o BatchMode=yes -o PasswordAuthentication=no -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=5 deploy@localhost true', fail: 'A key login as deploy@localhost on port 2222 does not work yet. Check the key is in authorized_keys and the permissions.' },
       ],
       solution:
         'install -d -m 700 /root/.ssh && ssh-keygen -q -t ed25519 -N "" -f /root/.ssh/id_ed25519 && chmod 700 /home/deploy/.ssh && install -m 600 -o deploy -g deploy /root/.ssh/id_ed25519.pub /home/deploy/.ssh/authorized_keys',
@@ -75,8 +77,8 @@ chmod 600 /root/.edorax-release-sum
       ],
       checks: [
         { id: 'config', label: 'The config refuses passwords and root', run: 'sshd -T 2>/dev/null | grep -qx "passwordauthentication no" && sshd -T 2>/dev/null | grep -qx "permitrootlogin no"', fail: 'sshd -T still shows password logins or root login allowed.' },
-        { id: 'live', label: 'The running server refuses passwords', run: "out=$(timeout 10 ssh -p 2222 -o BatchMode=yes -o PubkeyAuthentication=no -o StrictHostKeyChecking=accept-new -o ConnectTimeout=5 deploy@localhost true 2>&1); echo \"$out\" | grep -q 'Permission denied (publickey)'", fail: 'The running sshd still offers password logins. Reload it: kill -HUP $(cat /run/sshd.pid).' },
-        { id: 'key-still', label: 'Key login still works', run: 'timeout 10 ssh -p 2222 -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=5 deploy@localhost true', fail: 'Key login stopped working. Do not lock yourself out: keep PubkeyAuthentication on.' },
+        { id: 'live', label: 'The running server refuses passwords', run: "out=$(timeout 10 ssh -p 2222 -o BatchMode=yes -o PubkeyAuthentication=no -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=5 deploy@localhost true 2>&1); echo \"$out\" | grep -q 'Permission denied (publickey)'", fail: 'The running sshd still offers password logins. Reload it: kill -HUP $(cat /run/sshd.pid).' },
+        { id: 'key-still', label: 'Key login still works', run: 'timeout 10 ssh -p 2222 -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=5 deploy@localhost true', fail: 'Key login stopped working. Do not lock yourself out: keep PubkeyAuthentication on.' },
       ],
       solution:
         'printf "PasswordAuthentication no\\nPermitRootLogin no\\n" > /etc/ssh/sshd_config.d/20-hardening.conf && kill -HUP "$(cat /run/sshd.pid)" && sleep 1',
@@ -95,7 +97,7 @@ chmod 600 /root/.edorax-release-sum
         { id: 'downloaded', label: 'deploy.log is in /root', run: 'grep -q "migration timeout" /root/deploy.log 2>/dev/null', fail: '/root/deploy.log is missing. Download it with scp from deploy@localhost.' },
       ],
       solution:
-        'scp -q -P 2222 -o BatchMode=yes /root/release/app-2.0.tar.gz deploy@localhost:/home/deploy/releases/ && scp -q -P 2222 -o BatchMode=yes deploy@localhost:/home/deploy/logs/deploy.log /root/',
+        'scp -q -P 2222 -o BatchMode=yes -o StrictHostKeyChecking=accept-new /root/release/app-2.0.tar.gz deploy@localhost:/home/deploy/releases/ && scp -q -P 2222 -o BatchMode=yes deploy@localhost:/home/deploy/logs/deploy.log /root/',
     },
   ],
 };

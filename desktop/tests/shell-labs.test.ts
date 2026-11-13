@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { SHELL_LABS, getShellLab } from '../src/shell-labs/catalog';
 import { shellLabView, validateShellLab, type ShellLab } from '../src/domain/shell-labs';
 import { SHELL_LAB_CAPABILITIES, ShellLabRuntime, shellContainerOptions, shellLabName } from '../src/shell-labs/runtime';
+import { LESSONS } from '../src/shell-labs/lessons';
 
 test('every shell lab is valid and has a unique slug', () => {
   const slugs = new Set<string>();
@@ -33,6 +34,23 @@ test('the learner view carries no setup, check scripts or solutions', () => {
       for (const check of step.checks) assert.equal(text.includes(check.run), false);
     }
   }
+});
+
+test('every lesson belongs to a real lab step, so renaming a step cannot drop its lesson silently', () => {
+  for (const [slug, steps] of Object.entries(LESSONS)) {
+    const lab = SHELL_LABS.find((item) => item.slug === slug);
+    assert.ok(lab, `lessons for unknown lab ${slug}`);
+    for (const stepId of Object.keys(steps))
+      assert.ok(lab.steps.some((step) => step.id === stepId), `lesson for unknown step ${slug} ${stepId}`);
+  }
+});
+
+test('the learner view carries each step\'s lesson and commands', () => {
+  for (const lab of SHELL_LABS)
+    for (const step of shellLabView(lab).stepList) {
+      assert.ok(step.learn.length >= 2, `${lab.slug} ${step.id} teaches too little`);
+      assert.ok(step.commands.length >= 2, `${lab.slug} ${step.id} lists too few commands`);
+    }
 });
 
 test('lookup only returns registered labs', () => {

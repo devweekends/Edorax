@@ -3,6 +3,8 @@ import type { ShellLab } from '../domain/shell-labs';
 export const linuxOwnershipAndAccess: ShellLab = {
   slug: 'linux-ownership-and-access',
   topic: 'linux',
+  level: 'beginner',
+  tags: ['Permissions', 'Ownership', 'ACL'],
   title: 'Ownership, sticky bits and access lists',
   summary: 'Hand a web app to its service account, protect a shared upload folder, grant one reader with an ACL and remove a dangerous setuid program.',
   scenario:
