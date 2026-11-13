@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import type { CatalogCourseSummary } from "@/shared/api/catalog";
 import { serverApiFetch } from "@/lib/api-server";
+import { withoutGuidedTracks } from "@/lib/guided-labs";
 import { Logo } from "@/components/brand/logo";
 import { CourseCatalog } from "@/components/marketing/course-catalog";
 import { FeaturedProject } from "@/components/marketing/featured-project";
@@ -15,9 +16,11 @@ import { cn } from "@/lib/utils";
 import styles from "./landing.module.css";
 
 export default async function MarketingHomePage() {
-  const { courses } = await serverApiFetch<{ courses: CatalogCourseSummary[] }>(
+  const catalog = await serverApiFetch<{ courses: CatalogCourseSummary[] }>(
     "/api/v1/catalog", { token: null },
   );
+  // The Dev Weekends tracks are listed under Guided labs, not with the courses.
+  const courses = withoutGuidedTracks(catalog.courses);
   const featured = courses.find(course => course.slug === "multi-vendor-marketplace");
   const otherCourses = courses.filter(course => course.id !== featured?.id);
   const communication = courses.find(course => course.slug === "communication");

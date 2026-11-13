@@ -48,6 +48,13 @@ export const GUIDED_TRACKS: readonly GuidedTrack[] = [
   },
 ];
 
+const GUIDED_SLUGS: ReadonlySet<string> = new Set(GUIDED_TRACKS.map((track) => track.slug));
+
+/** The guided tracks live under Labs, so course lists leave them out. Their course pages still open by link. */
+export function withoutGuidedTracks<T extends { slug: string }>(courses: readonly T[]): T[] {
+  return courses.filter((course) => !GUIDED_SLUGS.has(course.slug));
+}
+
 export interface GuidedTrackView {
   track: GuidedTrack;
   /** True when the course exists in the catalog, so the card can link to it. */

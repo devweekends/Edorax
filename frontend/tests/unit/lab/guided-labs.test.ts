@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { GUIDED_TRACKS, guidedTrackViews } from "@/lib/guided-labs";
+import { GUIDED_TRACKS, guidedTrackViews, withoutGuidedTracks } from "@/lib/guided-labs";
 import type { CatalogCourseSummary } from "@/shared/api/catalog";
 
 function course(slug: string, over: Partial<CatalogCourseSummary> = {}): CatalogCourseSummary {
@@ -61,6 +61,11 @@ describe("guided labs", () => {
   it("calls a free course free", () => {
     const one = guidedTrackViews([course("dw-level-1", { pricingType: "FREE", priceCents: 0 })], price)[0];
     expect(one.price).toBe("Free");
+  });
+
+  it("leaves the three tracks out of course lists and keeps every other course", () => {
+    const list = [course("dw-level-1"), course("aws-in-practice"), course("site-and-outreach"), course("dw-level-3"), course("communication")];
+    expect(withoutGuidedTracks(list).map((c) => c.slug)).toEqual(["aws-in-practice", "communication"]);
   });
 
   it("uses no em or en dashes in learner copy", () => {
