@@ -17,6 +17,7 @@ export type EnrollmentResult = { lifecycle: 'ACTIVE' | 'PAYMENT_REQUIRED' };
 export interface DesktopAPI {
   ide?: IDEAPI;
   labs: import('./labs').LabsAPI;
+  shellLabs: import('./shell-labs').ShellLabsAPI;
   readonly platform?: string;
   offline: {
     status(slug: string): Promise<{ available: boolean; downloadedAt: string | null; chapters: number; pending: number }>;

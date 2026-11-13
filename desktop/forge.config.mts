@@ -29,6 +29,7 @@ const config: ForgeConfig = {
       './assets/edorax.png',
       './assets/edorax-dock.png',
       './ide',
+      './labs',
     ],
   },
   // TEMPORARY: node-pty's Electron rebuild needs a working Visual Studio install, which this machine

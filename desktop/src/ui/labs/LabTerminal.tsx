@@ -3,7 +3,15 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 
-export type TerminalCommand = { text: string; nonce: number };
+import type { LabsAPI } from '../../domain/labs';
+
+/** Text to send to the terminal. `submit: false` only types it, so the learner edits it and presses Enter. */
+export type TerminalCommand = { text: string; nonce: number; submit?: boolean };
+/** The terminal calls a lab runtime makes. Course workspaces and shell labs both provide them. */
+export type TerminalAPI = Pick<
+  LabsAPI,
+  'openTerminal' | 'closeTerminal' | 'terminalInput' | 'resizeTerminal' | 'onTerminalData'
+>;
 
 export function LabTerminal({
   blockId,
@@ -11,8 +19,11 @@ export function LabTerminal({
   label,
   runCommand,
   onSent,
+  api: apiOverride,
 }: {
   label?: string;
+  /** Defaults to the course workspace API. */
+  api?: TerminalAPI;
   blockId: string;
   onError: (message: string) => void;
   runCommand?: TerminalCommand | null;
@@ -24,9 +35,16 @@ export function LabTerminal({
     () => window.matchMedia('(prefers-color-scheme: dark)').matches,
   );
   const session = useRef<{ id: string; ready: boolean } | null>(null);
+  const terminalRef = useRef<Terminal | null>(null);
   const handled = useRef<number | null>(null);
   const commandRef = useRef(runCommand);
   commandRef.current = runCommand;
+  // The callbacks come from a parent that re-renders often (live checking). Keep them in refs, so a
+  // new function each render does not reopen the terminal, which would start a new shell every time.
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
+  const onSentRef = useRef(onSent);
+  onSentRef.current = onSent;
   const send = useCallback(() => {
     const command = commandRef.current;
     const active = session.current;
@@ -38,19 +56,20 @@ export function LabTerminal({
     )
       return;
     handled.current = command.nonce;
-    // Execute every snippet line: newlines become shell submits.
-    const payload = command.text.replace(/\r?\n/g, '\r');
-    const submit = payload.endsWith('\r') ? payload : payload + '\r';
-    const api = window.buildment.labs;
+    // Execute every snippet line: newlines become shell submits. Typing only sends one line, no Enter.
+    const payload = command.text.replace(/\r?\n/g, command.submit === false ? ' ' : '\r');
+    const submit = command.submit === false || payload.endsWith('\r') ? payload : payload + '\r';
+    terminalRef.current?.focus();
+    const api = apiOverride ?? window.buildment.labs;
     for (let offset = 0; offset < submit.length; offset += 2048)
       void api
         .terminalInput(blockId, active.id, submit.slice(offset, offset + 2048))
-        .catch((error: unknown) => onError(String(error)));
-    onSent?.();
-  }, [blockId, onError, onSent]);
+        .catch((error: unknown) => onErrorRef.current(String(error)));
+    onSentRef.current?.();
+  }, [blockId, apiOverride]);
   useEffect(() => {
     if (!host.current) return;
-    const api = window.buildment.labs;
+    const api = apiOverride ?? window.buildment.labs;
     const id = crypto.randomUUID();
     let active = true;
     let ready = false;
@@ -65,8 +84,9 @@ export function LabTerminal({
     const fit = new FitAddon();
     terminal.loadAddon(fit);
     terminal.open(host.current);
+    terminalRef.current = terminal;
     const report = (error: unknown) => {
-      if (active) onError(String(error));
+      if (active) onErrorRef.current(String(error));
     };
     const resize = () => {
       if (!host.current?.clientWidth || !host.current?.clientHeight) return;
@@ -113,6 +133,7 @@ export function LabTerminal({
     return () => {
       active = false;
       session.current = null;
+      terminalRef.current = null;
       cancelAnimationFrame(frame);
       observer.disconnect();
       off();
@@ -120,7 +141,7 @@ export function LabTerminal({
       terminal.dispose();
       void api.closeTerminal(blockId, id).catch(() => {});
     };
-  }, [blockId, revision, onError, dark, send]);
+  }, [blockId, revision, dark, send, apiOverride]);
   useEffect(() => {
     send();
   }, [send, runCommand]);
