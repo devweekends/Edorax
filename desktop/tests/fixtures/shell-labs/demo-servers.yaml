@@ -1,0 +1,61 @@
+slug: demo-servers
+topic: ansible
+level: intermediate
+tags: [Demo, Servers]
+title: 'Demo Servers: one control node and two pretend web servers'
+summary: A made-up lab for tests with a control node and two extra machines on a private network.
+scenario: You run the pretend control node. Two pretend web servers wait to be set up.
+minutes: 15
+machine:
+  name: control
+  image: ubuntu:24.04
+  memoryMb: 256
+machines:
+  - name: web1
+    image: ubuntu:24.04
+    capabilities: [SYS_CHROOT]
+    sudo: true
+    memoryMb: 512
+    pids: 256
+    setup: |
+      useradd -m demo
+  - name: web2
+    image: ubuntu:24.04
+setup: |
+  echo "control node ready" > /root/notes.txt
+steps:
+  - id: mark-web1
+    goal: Leave a marker file on the first web server
+    body: |-
+      1. Open a session on the machine `web1`.
+      2. Create the file `/tmp/marker` there.
+    about: The pretend team wants a marker on the first server only.
+    expected: The file `/tmp/marker` exists on web1.
+    learn:
+      - A fleet is a group of machines you treat as one.
+      - A check can look at any machine in the lab, not only the one you type on.
+    commands:
+      - command: touch FILE
+        meaning: Makes an empty file.
+        example: touch /tmp/sample
+      - command: hostname
+        meaning: Prints the name of the machine you are on.
+        example: hostname
+        output: control
+    hints:
+      - Reach the other machine by its name.
+      - Use the name web1 as a host, then run touch there.
+      - Make an empty file at the marker path on the first server.
+    checks:
+      - id: marker-on-web1
+        on: web1
+        label: The marker exists on web1
+        run: test -f /tmp/marker
+        fail: web1 has no marker file yet.
+    solution: |
+      touch /tmp/marker   # run on web1
+    mistakes:
+      - on: web1
+        when: test -f /root/marker
+        say: The marker is in the wrong folder. It belongs in /tmp.
+        repro: touch /root/marker

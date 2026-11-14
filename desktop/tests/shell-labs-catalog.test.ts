@@ -5,12 +5,13 @@ import os from 'node:os';
 import path from 'node:path';
 import { configureShellLabs, getShellLab, getShellLabs, refreshShellLabs, shellLabErrors, shellLabsVersion, type ShellLabsFetcher } from '../src/shell-labs/catalog';
 import { loadShellLabs } from '../src/shell-labs/loader';
+import { LABS_DIR } from './helpers/labs-dir';
 import type { ShellLab } from '../src/domain/shell-labs';
 import type { Result } from '../src/domain/catalog';
 
-// Real labs from the development folder (run "pnpm sync:labs" first) are the fixtures.
-const LABS = loadShellLabs().labs;
-assert.ok(LABS.length >= 3, 'run "pnpm sync:labs" if the labs folder is empty');
+// The labs come from tests/helpers/labs-dir.ts: the real ones when synced, else the made-up fixtures.
+const LABS = loadShellLabs(LABS_DIR).labs;
+assert.ok(LABS.length >= 3, `need at least 3 labs in ${LABS_DIR}`);
 const [a, b, c] = LABS;
 
 function folder() {
@@ -41,7 +42,7 @@ test('with no cache and no folder the catalog is empty', () => {
 test('with no cache the development folder is used, with no version', () => {
   const { dir, cache, done } = folder();
   try {
-    configureShellLabs({ cacheFile: cache, devDir: process.env.EDORAX_LABS_DIR ?? path.resolve(__dirname, '..', 'labs', 'shell') });
+    configureShellLabs({ cacheFile: cache, devDir: LABS_DIR });
     assert.equal(getShellLabs().length, LABS.length);
     assert.equal(shellLabsVersion(), '');
     assert.ok(dir);
@@ -63,7 +64,7 @@ test('a download replaces the catalog and is written to the cache, which the nex
     assert.deepEqual(fs.readdirSync(path.dirname(cache)), ['shell-labs.json'], 'no temporary file is left behind');
 
     // A new start: the cache wins over the development folder.
-    configureShellLabs({ cacheFile: cache, devDir: path.resolve(__dirname, '..', 'labs', 'shell') });
+    configureShellLabs({ cacheFile: cache, devDir: LABS_DIR });
     assert.equal(shellLabsVersion(), 'v1');
     assert.equal(getShellLabs().length, 2);
     assert.equal(getShellLab(a.slug)?.title, a.title);

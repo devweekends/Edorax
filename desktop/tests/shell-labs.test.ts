@@ -7,10 +7,11 @@ import assert from 'node:assert/strict';
 import { configureShellLabs, getShellLab, getShellLabs } from '../src/shell-labs/catalog';
 import { shellLabView, validateShellLab, type ShellLab } from '../src/domain/shell-labs';
 import { SHELL_LAB_CAPABILITIES, ShellLabRuntime, shellContainerOptions, shellLabName, shellNetworkName } from '../src/shell-labs/runtime';
-import { devShellLabsDir, loadShellLabs } from '../src/shell-labs/loader';
+import { loadShellLabs } from '../src/shell-labs/loader';
+import { FIXTURE_LABS_DIR, LABS_DIR, realLabsPresent } from './helpers/labs-dir';
 
-// The labs for these tests come from the development folder (run "pnpm sync:labs" first).
-const SHELL_LABS = loadShellLabs().labs;
+// The labs come from tests/helpers/labs-dir.ts: the real ones when synced, else the made-up fixtures.
+const SHELL_LABS = loadShellLabs(LABS_DIR).labs;
 
 test('every shell lab is valid and has a unique slug', () => {
   const slugs = new Set<string>();
@@ -49,10 +50,23 @@ test('the learner view carries no setup, check scripts or solutions', () => {
 });
 
 test('all labs load from the Core files with no errors', () => {
-  const { labs, errors } = loadShellLabs();
+  const { labs, errors } = loadShellLabs(LABS_DIR);
   assert.deepEqual(errors, []);
   assert.equal(labs.length, SHELL_LABS.length);
-  assert.ok(labs.length >= 19, 'run "pnpm sync:labs" if the labs folder is empty');
+  assert.ok(labs.length >= 5, `no labs found in ${LABS_DIR}`);
+});
+
+test('the real labs are all there', { skip: !realLabsPresent && 'real labs are not synced (pnpm sync:labs)' }, () => {
+  assert.ok(SHELL_LABS.length >= 19);
+});
+
+test('the made-up fixture labs cover what these tests need', () => {
+  const labs = loadShellLabs(FIXTURE_LABS_DIR);
+  assert.deepEqual(labs.errors, []);
+  assert.ok(labs.labs.some((lab) => lab.steps.some((step) => step.quiz)), 'a quiz step');
+  assert.ok(labs.labs.some((lab) => lab.machines?.length && lab.steps.some((step) => step.checks.some((check) => check.on))), 'a multi-machine lab with a check on a machine');
+  assert.ok(labs.labs.some((lab) => lab.machine.vm && lab.machine.image === 'edorax-labvm:1' && lab.machine.memoryMb === 2800), 'a virtual machine lab');
+  assert.ok(labs.labs.length >= 3);
 });
 
 test('a broken lab file is skipped and named, and the other labs still load', () => {
@@ -85,7 +99,7 @@ test('lookup only returns registered labs', () => {
   assert.equal(getShellLab('nope'), null);
   assert.equal(getShellLab('__proto__'), null);
   assert.equal(getShellLab(42), null);
-  configureShellLabs({ cacheFile: null, devDir: devShellLabsDir() });
+  configureShellLabs({ cacheFile: null, devDir: LABS_DIR });
   assert.equal(getShellLab(SHELL_LABS[0].slug), getShellLabs()[0]);
   assert.deepEqual(getShellLab(SHELL_LABS[0].slug), SHELL_LABS[0]);
 });

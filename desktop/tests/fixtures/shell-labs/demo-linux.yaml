@@ -1,0 +1,142 @@
+slug: demo-linux
+topic: linux
+level: beginner
+tags: [Demo, Files]
+title: 'Demo Linux: first steps with a pretend machine'
+summary: A made-up lab for tests, about folders, files and permissions on a pretend demo machine.
+scenario: You have a pretend demo machine. Tidy its reports folder before the pretend team arrives.
+minutes: 10
+character:
+  name: Dana Demo
+  role: Pretend team lead
+outro: You made a folder, wrote a note and locked it down on the demo machine.
+badge: Demo Explorer
+machine:
+  name: demobox
+  image: ubuntu:24.04
+  packages: [nano, tree]
+setup: |
+  mkdir -p /srv/demo
+  echo "demo machine ready" > /srv/demo/readme.txt
+steps:
+  - id: make-folder
+    goal: Create the reports folder
+    body: |-
+      1. Go to the pretend demo area at `/srv/demo`.
+      2. Create a folder called `reports` there.
+    about: The demo team keeps notes in one folder. It does not exist yet.
+    expected: The folder `/srv/demo/reports` exists.
+    learn:
+      - A folder groups files. You make one with a single command.
+      - Paths that start with a slash are absolute, so they work from anywhere.
+    commands:
+      - command: mkdir FOLDER
+        meaning: Makes a new folder.
+        example: mkdir /tmp/sample
+      - command: ls FOLDER
+        meaning: Lists what is inside a folder.
+        example: ls /srv/demo
+        output: readme.txt
+    hints:
+      - Think about the command that makes a folder.
+      - The command is mkdir, followed by the full path.
+      - Make the folder reports inside the demo area.
+    checks:
+      - id: folder-exists
+        label: The reports folder exists
+        run: test -d /srv/demo/reports
+        fail: There is no reports folder in the demo area yet.
+    solution: |
+      mkdir -p /srv/demo/reports
+    win: The folder is there.
+    after: The machine now has a new entry in the demo area. Nothing else changed.
+    mistakes:
+      - when: test -d /srv/reports
+        say: You made the folder in the wrong place. It must be inside the demo area.
+        repro: mkdir /srv/reports
+  - id: write-note
+    goal: Write the word ready into a note
+    body: |-
+      1. Make a file called `today.txt` in the reports folder.
+      2. Put the word `ready` on its only line.
+    about: The team reads one note to know if the machine is ready.
+    expected: The file holds one line with the word ready.
+    learn:
+      - A redirect sends what a command prints into a file instead of the screen.
+      - The file is made if it is missing.
+    commands:
+      - command: echo TEXT
+        meaning: Prints the text it is given.
+        example: echo hello
+        output: hello
+      - command: cat FILE
+        meaning: Shows the content of a file.
+    hints:
+      - You can send printed text into a file.
+      - Use echo with the greater-than sign and a file path.
+      - Print the word, and redirect it into the note file.
+    checks:
+      - id: note-says-ready
+        label: The note says ready
+        run: grep -qx ready /srv/demo/reports/today.txt
+        fail: The note is missing or does not say ready.
+    solution: |
+      echo ready > /srv/demo/reports/today.txt
+    win: The note is written.
+    after: A new file now exists with one line in it.
+    mistakes:
+      - when: grep -q ready /srv/demo/today.txt
+        say: The note is in the demo area, not in the reports folder.
+        repro: echo ready > /srv/demo/today.txt
+  - id: lock-note
+    goal: Make the note private to its owner
+    body: |-
+      1. Change the note so that only its owner can write it.
+      2. Others may not read it at all.
+    about: The note must not be changed or read by other pretend users.
+    expected: The note has the mode 600.
+    learn:
+      - Every file has a mode that says who may read and write it.
+      - A mode of three digits covers owner, group and others in that order.
+    commands:
+      - command: chmod MODE FILE
+        meaning: Changes who may read, write or run a file.
+        example: chmod 644 /tmp/sample.txt
+      - command: stat -c %a FILE
+        meaning: Prints the mode of a file as numbers.
+    hints:
+      - Look at the command that changes a mode.
+      - The mode for owner only is two digits of zero after the first digit.
+      - Use chmod with six, zero, zero on the note.
+    checks:
+      - id: mode-600
+        label: The note has mode 600
+        run: '[ "$(stat -c %a /srv/demo/reports/today.txt)" = 600 ]'
+        fail: The note can still be read by others.
+    solution: |
+      chmod 600 /srv/demo/reports/today.txt
+    win: The note is locked.
+    after: The mode changed, and only the owner can open the file now.
+  - id: read-mode
+    goal: Read a listing and say who may write the file
+    body: |-
+      1. Read the listing in the box.
+      2. Pick the best answer.
+    about: A listing line shows the mode in letters. Reading it is a daily skill.
+    learn:
+      - The first letters in a listing show the kind of entry and its mode.
+      - r means read, w means write and x means run.
+    hints:
+      - Look at the first column.
+      - Split the letters into three groups after the first one.
+      - The first group belongs to the owner.
+    quiz:
+      question: Who may write the file?
+      show: |-
+        -rw-r----- 1 demo staff 5 note.txt
+      options:
+        - Only the owner
+        - Everyone
+        - Nobody
+      answer: 0
+      why: Only the owner part has w. The others have r or nothing.
