@@ -124,6 +124,18 @@ const api: DesktopAPI = {
       };
     },
   },
+  update: {
+    status: () => ipcRenderer.invoke('app:update-status'),
+    check: () => ipcRenderer.invoke('app:update-check'),
+    openDownload: () => ipcRenderer.invoke('app:open-download'),
+    onChange: (listener) => {
+      const receive = (_event: Electron.IpcRendererEvent, state: Parameters<typeof listener>[0]) => listener(state);
+      ipcRenderer.on('app:update-status-changed', receive);
+      return () => {
+        ipcRenderer.removeListener('app:update-status-changed', receive);
+      };
+    },
+  },
   webOrigin: () => ipcRenderer.invoke('app:web-origin'),
   integrityRequest: (path, method, body) =>
     ipcRenderer.invoke('learning:integrity', path, method, body),

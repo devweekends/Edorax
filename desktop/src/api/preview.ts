@@ -1,4 +1,5 @@
 import { createLearningClient } from './learning';
+import { updateRequiredFrom, withDesktopHeaders, type UpdateRequiredInfo } from './client-info';
 import { backendBase, isCourse } from './catalog';
 import { isRecord as record, isCourseDetail as isDetail } from './validation';
 import type {
@@ -21,6 +22,7 @@ import {
 export function createPreviewClient(
   base: string,
   request: typeof fetch = fetch,
+  hooks: { onUpdateRequired?: (info: UpdateRequiredInfo) => void } = {},
 ) {
   let token: string | null = null;
   let authVersion = 0;
@@ -33,7 +35,7 @@ export function createPreviewClient(
     session = token,
   ): Promise<Result<unknown>> {
     try {
-      const headers: Record<string, string> = { Accept: 'application/json' };
+      const headers = withDesktopHeaders<Record<string, string>>({ Accept: 'application/json' });
       if (session) headers.Authorization = 'Bearer ' + session;
       const snapshot = body instanceof Uint8Array;
       if (body !== undefined)
@@ -56,6 +58,15 @@ export function createPreviewClient(
       }
       if (response.status === 204) return { ok: true, data: null };
       const payload: unknown = await response.json();
+      const mustUpdate = updateRequiredFrom(response.status, payload);
+      if (mustUpdate) {
+        hooks.onUpdateRequired?.(mustUpdate);
+        return {
+          ok: false,
+          code: 'DESKTOP_UPDATE_REQUIRED',
+          message: mustUpdate.message || 'Update Edorax to continue.',
+        };
+      }
       if (!response.ok || !record(payload) || payload.success !== true) {
         let code = 'REQUEST_FAILED';
         let message = 'The request could not be completed. Please try again.';
