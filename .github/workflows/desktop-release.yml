@@ -5,7 +5,9 @@ name: Desktop release
 #
 #   publish = false (default)  build only; the installers are kept as workflow artifacts.
 #   publish = true             also tag the commit as desktop-v<version in desktop/package.json>
+#                              (or reuse that tag if it was pushed for this commit)
 #                              and attach the installers to a GitHub pre-release.
+# Pushing a tag on its own does not start this workflow.
 #
 # The app carries no labs. It downloads them from the server after sign-in, so this workflow needs no secrets.
 # The installers are not code signed yet: Windows SmartScreen and macOS Gatekeeper will warn on first open.
@@ -75,8 +77,10 @@ jobs:
         run: |
           version=$(node -p "require('./desktop/package.json').version")
           tag="desktop-v${version}"
-          if git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null; then
-            echo "::error::Tag ${tag} already exists. Bump the version in desktop/package.json first."
+          # A tag pushed by hand for this same commit is fine; a tag on another commit means the version was not bumped.
+          existing=$(git ls-remote --tags origin "refs/tags/${tag}^{}" "refs/tags/${tag}" | awk '{print $1}' | head -n1)
+          if [ -n "$existing" ] && [ "$existing" != "$GITHUB_SHA" ]; then
+            echo "::error::Tag ${tag} already exists on another commit. Bump the version in desktop/package.json first."
             exit 1
           fi
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
