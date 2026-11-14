@@ -5,6 +5,7 @@ import { prisma } from "../../src/db/prisma.js";
 import { createCourseFixture } from "../helpers/fixtures.js";
 import { ensureBaselineRelease, upgradeEnrollmentToRelease, type ReleaseContent } from "../../src/services/courses/releases.js";
 import { getCourseOverview } from "../../src/services/courses/overview.js";
+import { loadChapterReader } from "../../src/services/chapters/reader.js";
 import { publishDashboardNewChapterRelease } from "../../src/services/teach/publish-course-release.js";
 import { recomputeEnrollmentRollup } from "../../src/services/progress/compute.js";
 
@@ -70,6 +71,33 @@ describe("course release auto-upgrade and alumni notification", () => {
       where: { id: fx.enrollment.id },
     });
     expect(refreshedEnrollment.releaseId).toBe(updatedCourse.activeReleaseId);
+  });
+
+  it("upgrades in-progress learners when they open a chapter that is also in their old release", async () => {
+    const course = await prisma.course.findUniqueOrThrow({ where: { id: fx.course.id } });
+    expect(course.activeReleaseId).not.toBe(baselineReleaseId);
+    await prisma.enrollment.update({
+      where: { id: fx.enrollment.id },
+      data: { releaseId: baselineReleaseId, status: "IN_PROGRESS" },
+    });
+
+    // chapterA exists in both releases, so only the release check can trigger the upgrade.
+    await loadChapterReader(fx.course.slug, fx.chapterA.slug, fx.learner);
+
+    const refreshed = await prisma.enrollment.findUniqueOrThrow({ where: { id: fx.enrollment.id } });
+    expect(refreshed.releaseId).toBe(course.activeReleaseId);
+  });
+
+  it("keeps completed learners on their release when they open a chapter", async () => {
+    await prisma.enrollment.update({
+      where: { id: fx.enrollment.id },
+      data: { releaseId: baselineReleaseId, status: "COMPLETED", percentComplete: 100 },
+    });
+
+    await loadChapterReader(fx.course.slug, fx.chapterA.slug, fx.learner);
+
+    const refreshed = await prisma.enrollment.findUniqueOrThrow({ where: { id: fx.enrollment.id } });
+    expect(refreshed.releaseId).toBe(baselineReleaseId);
   });
 
   it("protects completed learners from auto-downgrade and shows upgrade banner", async () => {

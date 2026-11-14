@@ -73,12 +73,10 @@ export async function loadChapterReader(courseSlug: string, chapterSlug: string,
 
   const enrollment = await requireBlockSubmissionAccess(course.id, user);
 
-  // If the requested chapter is from a newer release, upgrade in-progress learners seamlessly.
-  const currentRelease = await releaseForEnrollment(course.id, enrollment, course.familySlug);
-  const inCurrentRelease = !currentRelease
-    || findChapterIndex(currentRelease.modules.flatMap((m) => m.chapters), chapterSlug) !== -1;
-
-  if (!forDownload && !inCurrentRelease && course.activeReleaseId && enrollment.releaseId !== course.activeReleaseId && enrollment.status !== "COMPLETED") {
+  // Move in-progress learners to the newest release on any chapter open, the same as the course
+  // page does. Without this, a learner who opens a chapter link directly keeps reading the old
+  // text of a chapter that a later release corrected.
+  if (!forDownload && course.activeReleaseId && enrollment.releaseId !== course.activeReleaseId && enrollment.status !== "COMPLETED") {
     try {
       const upgraded = await prisma.$transaction((tx) =>
         upgradeEnrollmentToRelease(tx, enrollment.id, course.activeReleaseId!), { timeout: 60_000 });
