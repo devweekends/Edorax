@@ -3,6 +3,7 @@ import { prisma } from "../../db/prisma.js";
 import { NotFoundError } from "../../utils/errors.js";
 import { resolveCourseFamily } from "../../shared/lib/course-tracks.js";
 import { enrollmentGrantsContentAccess } from "../enrollment/lifecycle.js";
+import { isCourseInstructor } from "../enrollment/own-course.js";
 import { readReleaseContent, variantForRelease, type ReleaseModule } from "../courses/releases.js";
 
 const summarySelect = {
@@ -20,6 +21,7 @@ const summarySelect = {
   pricingType: true,
   priceCents: true,
   currency: true,
+  mentorId: true,
   mentor: { select: { name: true } },
   ratingAverage: true,
   ratingCount: true,
@@ -71,7 +73,7 @@ export async function listCatalog(userId: string | undefined): Promise<CatalogCo
 
   const releaseModules = await activeReleaseModules(courses);
 
-  return courses.map(({ mentor, _count, familySlug: _family, variantFamily: _variants, activeReleaseId: _release, ...course }) => {
+  return courses.map(({ mentor, mentorId: _mentorId, _count, familySlug: _family, variantFamily: _variants, activeReleaseId: _release, ...course }) => {
     const modules = releaseModules.get(course.id);
     return {
       ...course,
@@ -113,7 +115,7 @@ export async function getCatalogCourse(courseSlug: string, userId: string | unde
         select: { lifecycle: true },
       })
     : null;
-  const { mentor, _count, status: _status, familySlug: _family, variantFamily: _variants, activeReleaseId: _release, ...rest } = course;
+  const { mentor, mentorId, _count, status: _status, familySlug: _family, variantFamily: _variants, activeReleaseId: _release, ...rest } = course;
   const releaseModules = (await activeReleaseModules([course])).get(course.id);
   const modules = releaseModules
     ? releaseModules.map((module) => ({
@@ -133,7 +135,10 @@ export async function getCatalogCourse(courseSlug: string, userId: string | unde
     moduleCount: modules.length,
     chapterCount: modules.reduce((sum, module) => sum + module.chapters.length, 0),
     enrollmentLifecycle: enrollment?.lifecycle ?? null,
-    access: !enrollment
+    // The course's instructor opens it free (see own-course.ts), so the catalog never asks them to pay.
+    access: isCourseInstructor(userId, { mentorId })
+      ? "active"
+      : !enrollment
       ? "none"
       : enrollmentGrantsContentAccess(enrollment.lifecycle)
         ? "active"

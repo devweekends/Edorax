@@ -1,5 +1,6 @@
 import Link from "next/link";
-import type { AdminCoursesView, AdminUserDetail } from "@/shared/api/admin";
+import type { AdminCoursesView, AdminRefundBreakdown, AdminUserDetail } from "@/shared/api/admin";
+import { formatPriceCents } from "@/lib/format-price";
 import { serverApiFetch, serverApiFetchOrNotFound } from "@/lib/api-server";
 import { Badge } from "@/components/ui/badge";
 import { AdminActionForm } from "@/components/admin/admin-action-form";
@@ -7,6 +8,7 @@ import { AdminEnrollUserDialog } from "@/components/admin/admin-enroll-user-dial
 import { requireRole } from "@/server/auth/guards";
 import {
   forceVerifyEmailAction,
+  refundEnrollmentAction,
   reinstateUserAction,
   removeUserEnrollmentAction,
   revokeUserSessionsAction,
@@ -27,6 +29,16 @@ import {
   AdminTableRow,
   adminSelectClassName,
 } from "@/components/admin/admin-ui";
+
+/** The confirm text for a refund: every amount, and what happens to access. */
+function refundDescription(refund: AdminRefundBreakdown, email: string, courseTitle: string) {
+  const money = (cents: number) => formatPriceCents(cents, refund.currency);
+  return (
+    `${email} paid ${money(refund.paidCents)}. Polar sends back ${money(refund.refundCents)}, keeping Polar’s fees: ` +
+    `${money(refund.fixedFeeCents)} transaction fee, ${money(refund.internationalFeeCents)} international fee (1.5%) and ` +
+    `${money(refund.platformFeeCents)} Polar fee (5%), all charged by Polar. Their access to ${courseTitle} ends straight away. A refund cannot be undone.`
+  );
+}
 
 function StatTile({ label, value }: { label: string; value: string | number }) {
   return (
@@ -310,6 +322,24 @@ export default async function AdminUserDetailPage({
                     {row.lastActiveAt ? new Date(row.lastActiveAt).toLocaleDateString() : "—"}
                   </AdminTableCell>
                   <AdminTableCell align="right">
+                    <div className="flex flex-wrap items-start justify-end gap-2">
+                    {row.refund ? (
+                      <AdminActionForm
+                        action={refundEnrollmentAction}
+                        submitLabel={`Refund ${formatPriceCents(row.refund.refundCents, row.refund.currency)}`}
+                        pendingLabel="Refunding…"
+                        variant="outline"
+                        size="sm"
+                        confirm={{
+                          question: `Refund ${formatPriceCents(row.refund.refundCents, row.refund.currency)} for ${row.courseTitle}?`,
+                          description: refundDescription(row.refund, user.email ?? "the learner", row.courseTitle),
+                          confirmLabel: "Send refund",
+                        }}
+                      >
+                        <input type="hidden" name="userId" value={user.id} />
+                        <input type="hidden" name="enrollmentId" value={row.id} />
+                      </AdminActionForm>
+                    ) : null}
                     <AdminActionForm
                       action={removeUserEnrollmentAction}
                       submitLabel="Remove"
@@ -325,6 +355,7 @@ export default async function AdminUserDetailPage({
                       <input type="hidden" name="userId" value={user.id} />
                       <input type="hidden" name="enrollmentId" value={row.id} />
                     </AdminActionForm>
+                    </div>
                   </AdminTableCell>
                 </AdminTableRow>
               ))}

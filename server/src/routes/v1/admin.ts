@@ -2,7 +2,9 @@ import { instructorWithdrawalsEnabled, requireInstructorWithdrawals } from "../.
 import { prisma } from "../../db/prisma.js";
 import { approveManualAccess, listManualInstructorPayouts, markManualInstructorPayoutPaid, rejectManualAccess } from "../../services/enrollment/manual-access.js";
 import { created, noContent, ok } from "../../utils/responses.js";
-import { enrollmentParams } from "../../validations/enrollments.js";
+import { adminEnrollmentUpdateBody, enrollmentParams, refundBody } from "../../validations/enrollments.js";
+import { previewCourseRefund, refundCoursePayment } from "../../services/payments/refund-course-payment.js";
+import { getEnrollmentDetail, listEnrollments, updateEnrollment } from "../../services/admin/enrollments.js";
 import { Router } from "express";
 import { userRateLimit } from "../../middlewares/rate-limit.js";
 import * as admin from "../../controllers/admin.js";
@@ -50,6 +52,8 @@ import {
   rejectWithdrawalBody,
   withdrawalIdParams,
   enrollUserBody,
+  listEnrollmentsQuery,
+  type ListEnrollmentsQuery,
 } from "../../validations/admin.js";
 
 // Platform administration: organisations and their integration access,
@@ -96,6 +100,23 @@ router.post("/manual-access/:enrollmentId/approve", validateParams(enrollmentPar
 router.post("/manual-access/:enrollmentId/reject", validateParams(enrollmentParams), async (req, res) => {
   await rejectManualAccess(req.params.enrollmentId as string, req.user!);
   ok(res, { rejected: true });
+});
+// Every enrollment with what was charged for it, for the admin enrollments page.
+router.get("/enrollments", validateQuery(listEnrollmentsQuery), async (req, res) => {
+  ok(res, await listEnrollments(req.query as ListEnrollmentsQuery));
+});
+router.get("/enrollments/:enrollmentId", validateParams(enrollmentParams), async (req, res) => {
+  ok(res, await getEnrollmentDetail(req.params.enrollmentId as string));
+});
+router.patch("/enrollments/:enrollmentId", validate({ params: enrollmentParams, body: adminEnrollmentUpdateBody }), async (req, res) => {
+  ok(res, await updateEnrollment(req.user!, req.params.enrollmentId as string, req.body));
+});
+// Refunds return the payment less the card fees kept back (refund-policy.ts) and end course access.
+router.get("/enrollments/:enrollmentId/refund", validateParams(enrollmentParams), async (req, res) => {
+  ok(res, await previewCourseRefund(req.params.enrollmentId as string));
+});
+router.post("/enrollments/:enrollmentId/refund", validateParams(enrollmentParams), validateBody(refundBody), async (req, res) => {
+  ok(res, await refundCoursePayment(req.params.enrollmentId as string, req.user!, req.body));
 });
 router.get("/manual-payouts", async (_req, res) => ok(res, await listManualInstructorPayouts()));
 router.post("/manual-payouts/:enrollmentId/paid", validateParams(enrollmentParams), async (req, res) => {

@@ -234,8 +234,20 @@ export type AdminUserDetail = {
     lifecycle: EnrollmentLifecycle;
     percentComplete: number;
     lastActiveAt: string | null;
+    /** What a refund would return, for a course paid through Polar and not refunded yet; otherwise null. */
+    refund: AdminRefundBreakdown | null;
   }>;
   coursesOwned: Array<{ id: string; title: string; slug: string; status: CourseStatus }>;
+};
+
+/** A refund less Polar’s fees on the payment: $0.50 transaction fee, 1.5% international fee, 5% Polar fee. */
+export type AdminRefundBreakdown = {
+  currency: string;
+  paidCents: number;
+  fixedFeeCents: number;
+  internationalFeeCents: number;
+  platformFeeCents: number;
+  refundCents: number;
 };
 
 export const ADMIN_ERROR_CODES = {
@@ -304,3 +316,78 @@ export type AdminRevenueReport = {
   byFundingSource: Record<string, FundingSourceRevenueBreakdown>;
 };
 
+
+export type AdminPaymentStatus = "PENDING" | "SUCCEEDED" | "FAILED" | "REFUNDED";
+
+/** The money recorded for one enrollment. Every amount is in minor units of `currency`. */
+export type AdminEnrollmentPayment = {
+  status: AdminPaymentStatus;
+  currency: string;
+  /** What the learner is charged; for Polar this is the fixed price sent to checkout. */
+  amountCents: number;
+  originalAmountCents: number;
+  discountAmountCents: number;
+  organizationContributionCents: number;
+  learnerAmountCents: number;
+  platformRevenueCents: number;
+  instructorShareCents: number;
+  instructorPayoutPercent: number;
+  instructorPayoutStatus: "NOT_DUE" | "PENDING" | "PAID";
+  fundingSource: string | null;
+  provider: string | null;
+  providerRef: string | null;
+  paidAt: string | null;
+};
+
+/** A coupon or campaign applied to an enrollment's price. */
+export type AdminEnrollmentDiscount = {
+  /**
+   * campaign: a platform discount campaign; instructor_coupon: a course coupon; organization_coupon:
+   * from an organization's pool; admin_enrollment: an admin enrolled the learner without charge.
+   */
+  kind: "campaign" | "instructor_coupon" | "organization_coupon" | "admin_enrollment";
+  id: string;
+  label: string;
+  code: string | null;
+  percentOff: number;
+  autoApplied: boolean;
+  /** Organization coupons only: ISSUED, REDEEMED or CANCELLED. */
+  status: string | null;
+  appliedAt: string | null;
+  organizationName: string | null;
+};
+
+export type AdminEnrollmentRow = {
+  id: string;
+  createdAt: string;
+  lifecycle: EnrollmentLifecycle;
+  source: "DIRECT" | "INVITE" | "SELF" | "PATHMENT";
+  /** userId is null for an organization learner who has not created an account yet. */
+  learner: { userId: string | null; name: string | null; email: string | null };
+  course: { id: string; title: string; slug: string };
+  payment: AdminEnrollmentPayment | null;
+  discounts: AdminEnrollmentDiscount[];
+};
+
+export type AdminEnrollmentsView = {
+  enrollments: AdminEnrollmentRow[];
+  page: AdminPageInfo;
+};
+
+export type AdminEnrollmentDetail = AdminEnrollmentRow & {
+  status: "ASSIGNED" | "IN_PROGRESS" | "COMPLETED" | "DROPPED";
+  startedAt: string | null;
+  completedAt: string | null;
+  percentComplete: number;
+  instructor: { id: string; name: string | null; email: string };
+  organization: { id: string; name: string } | null;
+  payment:
+    | (AdminEnrollmentPayment & {
+        createdAt: string;
+        updatedAt: string;
+        instructorPayoutPaidAt: string | null;
+        /** For a refunded payment, the refund less Polar's fees that our refund policy sends back. */
+        refund: AdminRefundBreakdown | null;
+      })
+    | null;
+};

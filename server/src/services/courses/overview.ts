@@ -5,6 +5,7 @@ import { BadRequestError, NotFoundError } from "../../utils/errors.js";
 import type { SessionUser } from "../../types/auth.js";
 import { shouldBypassProgressGating } from "../auth/seed-access.js";
 import { enrollmentGrantsContentAccess } from "../enrollment/lifecycle.js";
+import { ensureOwnCourseEnrollment, isCourseInstructor } from "../enrollment/own-course.js";
 import { redeemCouponOnCourseOpen } from "../coupons/redeem.js";
 import { pickDefaultOpenModule, resolveContinueChapterPath, syllabusForEnrollment } from "../progress/enrollment-syllabus.js";
 import { releaseForEnrollment, releaseModulesWithBlocks, upgradeEnrollmentToRelease } from "./releases.js";
@@ -29,6 +30,7 @@ export async function getCourseOverview(courseSlug: string, user: SessionUser): 
       availableVariantSlugs: true,
       status: true,
       activeReleaseId: true,
+      mentorId: true,
       mentor: { select: { name: true } },
       modules: {
         where: { archivedAt: null },
@@ -54,12 +56,15 @@ export async function getCourseOverview(courseSlug: string, user: SessionUser): 
   });
   if (!course) throw new NotFoundError("Course not found");
 
-  const { mentor, modules: courseModules, sequential, familySlug, variantFamily, availableVariantSlugs, activeReleaseId, ...courseFields } = course;
+  const { mentor, mentorId: _mentorId, modules: courseModules, sequential, familySlug, variantFamily, availableVariantSlugs, activeReleaseId, ...courseFields } = course;
   const base = { course: { ...courseFields, instructorName: mentor.name } };
 
-  const enrollment = await prisma.enrollment.findUnique({
-    where: { courseId_userId: { courseId: course.id, userId: user.id } },
-  });
+  // The course's instructor opens it free, so they are never shown a payment step (see own-course.ts).
+  const enrollment = isCourseInstructor(user.id, course)
+    ? await ensureOwnCourseEnrollment(prisma, { courseId: course.id, userId: user.id })
+    : await prisma.enrollment.findUnique({
+        where: { courseId_userId: { courseId: course.id, userId: user.id } },
+      });
   const myRatingRow = await prisma.courseRating.findUnique({
     where: { courseId_userId: { courseId: course.id, userId: user.id } },
     select: { rating: true, review: true, updatedAt: true },

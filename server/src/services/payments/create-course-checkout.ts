@@ -24,12 +24,15 @@ export async function createCourseCheckout(
     where: { id: enrollmentId, userId },
     include: {
       user: { select: { id: true, email: true, name: true } },
-      course: { select: { id: true, slug: true, title: true, description: true, status: true, pricingType: true, priceCents: true, currency: true } },
+      course: { select: { id: true, slug: true, title: true, description: true, status: true, pricingType: true, priceCents: true, currency: true, mentorId: true } },
       payment: true,
     },
   });
   if (!enrollment || !enrollment.user) throw new NotFoundError("Enrollment not found");
   if (enrollment.userId !== userId) throw new ForbiddenError("You do not own this enrollment.");
+  if (enrollment.course.mentorId === userId) {
+    throw new ConflictError("Instructors do not pay for their own course.", "PAYMENT_NOT_REQUIRED");
+  }
   if (enrollment.lifecycle !== "PAYMENT_REQUIRED") {
     throw new ConflictError("This enrollment is not awaiting payment.", "PAYMENT_NOT_REQUIRED");
   }

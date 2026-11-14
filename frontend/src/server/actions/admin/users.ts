@@ -191,6 +191,27 @@ export async function reinstateUserAction(
   });
 }
 
+/**
+ * Refunds a course paid through Polar, less the fees kept back, and ends the learner's access.
+ * The server works out the amount; this only asks for it.
+ */
+export async function refundEnrollmentAction(_prev: AdminActionState, formData: FormData): Promise<AdminActionState> {
+  const userId = String(formData.get("userId") ?? "");
+  const enrollmentId = String(formData.get("enrollmentId") ?? "");
+  if (!enrollmentId) return { ok: false, message: "Missing enrollment." };
+  return runAdminAction(async () => {
+    await adminCall<void>(`/api/v1/admin/enrollments/${encodeURIComponent(enrollmentId)}/refund`, {
+      method: "POST",
+      json: { reason: "customer_request" },
+    });
+    if (userId) revalidatePath(`/admin/users/${userId}`);
+    revalidatePath("/admin/users");
+    revalidatePath("/admin/course-access");
+    revalidatePath("/admin/audit");
+    return "Refund sent through Polar and course access removed.";
+  });
+}
+
 /** Removes an enrollment from a user account. */
 export async function removeUserEnrollmentAction(
   _prev: AdminActionState,

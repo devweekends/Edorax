@@ -4,6 +4,7 @@ import request from "supertest";
 
 const validateEvent = vi.hoisted(() => vi.fn());
 const fulfillPolarOrderPaid = vi.hoisted(() => vi.fn());
+const revokePolarOrderRefund = vi.hoisted(() => vi.fn());
 
 vi.mock("@polar-sh/sdk/2026-10", () => {
   class PolarWebhookVerificationError extends Error {}
@@ -22,6 +23,7 @@ vi.mock("../../../../src/config/env.js", () => ({
 }));
 
 vi.mock("../../../../src/services/payments/fulfill-polar-order.js", () => ({ fulfillPolarOrderPaid }));
+vi.mock("../../../../src/services/payments/refund-polar-order.js", () => ({ revokePolarOrderRefund }));
 vi.mock("../../../../src/utils/logger.js", () => ({ logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn() } }));
 
 import polarWebhookRoutes from "../../../../src/routes/webhook/polar.js";
@@ -80,10 +82,17 @@ describe("POST /webhooks/polar", () => {
     expect(fulfillPolarOrderPaid).not.toHaveBeenCalled();
   });
 
-  it("acknowledges refund events without fulfilling", async () => {
+  it("passes a refund to the revoke handler, not to fulfilment", async () => {
     validateEvent.mockResolvedValue({
       type: "order.refunded",
-      data: { id: "ord_refund" },
+      data: {
+        id: "ord_refund",
+        checkout_id: "chk_1",
+        metadata: { enrollmentId: "enr_1" },
+        status: "refunded",
+        refunded_amount: 1000,
+        total_amount: 1000,
+      },
     });
 
     const res = await request(app())
@@ -93,5 +102,28 @@ describe("POST /webhooks/polar", () => {
 
     expect(res.status).toBe(200);
     expect(fulfillPolarOrderPaid).not.toHaveBeenCalled();
+    expect(revokePolarOrderRefund).toHaveBeenCalledWith({
+      orderId: "ord_refund",
+      checkoutId: "chk_1",
+      metadata: { enrollmentId: "enr_1" },
+      status: "refunded",
+      refundedAmount: 1000,
+      totalAmount: 1000,
+    });
+  });
+
+  it("answers 500 when the refund cannot be applied, so Polar retries", async () => {
+    validateEvent.mockResolvedValue({
+      type: "order.refunded",
+      data: { id: "ord_refund", checkout_id: null, metadata: {}, status: "refunded", refunded_amount: 1000, total_amount: 1000 },
+    });
+    revokePolarOrderRefund.mockRejectedValueOnce(new Error("database down"));
+
+    const res = await request(app())
+      .post("/webhooks/polar")
+      .set("Content-Type", "application/json")
+      .send(Buffer.from("{}"));
+
+    expect(res.status).toBe(500);
   });
 });
