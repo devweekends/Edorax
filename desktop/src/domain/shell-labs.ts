@@ -40,6 +40,18 @@ export interface ShellMistake {
   repro?: string;
 }
 
+export interface ShellQuiz {
+  question: string;
+  /** Text to read before answering, such as the output of a command. Shown as a code block, up to 12 lines. */
+  show?: string;
+  /** 2 to 4 short answers. */
+  options: string[];
+  /** Index in `options` of the right answer. */
+  answer: number;
+  /** Why that answer is right, shown once the learner answers correctly. */
+  why: string;
+}
+
 export interface ShellStep {
   id: string;
   /** One line: what the learner must make true. */
@@ -56,8 +68,15 @@ export interface ShellStep {
   /** The hint ladder: a nudge, then a hint, then a worked example. */
   hints: [string, string, string];
   checks: ShellCheck[];
-  /** A short message from the lab's character that opens the step, so the task has a person and a reason. */
-  story?: string;
+  /** What the task is about, in one or two plain sentences: the situation and why it matters. Shown above the steps. */
+  about?: string;
+  /** What the learner should see or have when the step is done, in plain words. Shown under the steps. */
+  expected?: string;
+  /**
+   * A look-and-answer question instead of commands: the learner reads and picks an answer, with no machine needed.
+   * Such a step has no checks and no solution. The right answer never leaves the app's main process.
+   */
+  quiz?: ShellQuiz;
   /** One short, friendly line shown when the step passes. */
   win?: string;
   /** "What just happened": why it worked and what changed on the machine, in 2 or 3 sentences. Shown when the step passes. */
@@ -213,7 +232,10 @@ export interface ShellLabView extends ShellLabSummary {
     commands: ShellCommandNote[];
     hints: [string, string, string];
     checks: { id: string; label: string }[];
-    story?: string;
+    about?: string;
+    expected?: string;
+    /** The question and answers only: the right answer stays in the main process. */
+    quiz?: { question: string; show?: string; options: string[] };
     win?: string;
     after?: string;
   }[];
@@ -287,6 +309,8 @@ export interface ShellLabsAPI {
   check(slug: string, stepId: string): Promise<ShellStepResult>;
   /** Every step checked against the machine now; null when the machine is not running. */
   checkAll(slug: string): Promise<ShellStepResult[] | null>;
+  /** Checks a quiz answer. Needs no machine. The right answer is only ever known here, never sent to the page. */
+  answer(slug: string, stepId: string, option: number): Promise<{ correct: boolean; why: string }>;
   openTerminal(slug: string, id: string): Promise<void>;
   closeTerminal(slug: string, id: string): Promise<void>;
   terminalInput(slug: string, id: string, data: string): Promise<void>;
@@ -350,13 +374,23 @@ export function validateShellLab(lab: ShellLab): string[] {
     if (!step.goal.trim()) problems.push(`step "${step.id}" needs a goal`);
     if (step.hints.length !== 3 || step.hints.some((hint) => !hint.trim()))
       problems.push(`step "${step.id}" needs three hints: a nudge, a hint and a worked example`);
-    if (!step.checks.length) problems.push(`step "${step.id}" needs at least one check`);
-    if (!step.solution.trim()) problems.push(`step "${step.id}" needs a solution`);
+    if (step.quiz) {
+      const quiz = step.quiz;
+      if (step.checks.length || step.solution?.trim()) problems.push(`step "${step.id}" is a quiz, so it has no checks and no solution`);
+      if (!quiz.question?.trim() || !quiz.why?.trim()) problems.push(`step "${step.id}": a quiz needs a question and a "why"`);
+      if (!Array.isArray(quiz.options) || quiz.options.length < 2 || quiz.options.length > 4 || quiz.options.some((option) => !String(option).trim()))
+        problems.push(`step "${step.id}": a quiz needs 2 to 4 options`);
+      else if (!Number.isInteger(quiz.answer) || quiz.answer < 0 || quiz.answer >= quiz.options.length)
+        problems.push(`step "${step.id}": the quiz answer must be the number of one option, counting from 0`);
+    } else {
+      if (!step.checks.length) problems.push(`step "${step.id}" needs at least one check`);
+      if (!step.solution.trim()) problems.push(`step "${step.id}" needs a solution`);
+    }
     if (!step.learn?.length || step.learn.some((paragraph) => !paragraph.trim()))
       problems.push(`step "${step.id}" needs a lesson: add "learn" to the step in the lab's YAML file`);
-    if (!step.commands?.length || step.commands.some((note) => !note.command.trim() || !note.meaning.trim()))
+    if (!step.quiz && (!step.commands?.length || step.commands.some((note) => !note.command.trim() || !note.meaning.trim())))
       problems.push(`step "${step.id}" needs the commands it teaches, each with its meaning`);
-    for (const key of ['story', 'win', 'after'] as const) if (step[key] !== undefined && !String(step[key]).trim()) problems.push(`step "${step.id}": ${key} cannot be empty`);
+    for (const key of ['about', 'expected', 'win', 'after'] as const) if (step[key] !== undefined && !String(step[key]).trim()) problems.push(`step "${step.id}": ${key} cannot be empty`);
     for (const mistake of step.mistakes ?? [])
       if (!mistake.when?.trim() || !mistake.say?.trim()) problems.push(`step "${step.id}": every mistake needs "when" (a bash check) and "say" (the message)`);
       else if (mistake.on !== undefined && !machineNames.has(mistake.on)) problems.push(`step "${step.id}": a mistake runs on "${mistake.on}", which is not a machine in this lab`);
@@ -397,7 +431,9 @@ export function shellLabView(lab: ShellLab): ShellLabView {
       commands: step.commands ?? [],
       hints: step.hints,
       checks: step.checks.map((check) => ({ id: check.id, label: check.label })),
-      ...(step.story ? { story: step.story } : {}),
+      ...(step.about ? { about: step.about } : {}),
+      ...(step.expected && !step.quiz ? { expected: step.expected } : {}),
+      ...(step.quiz ? { quiz: { question: step.quiz.question, ...(step.quiz.show ? { show: step.quiz.show } : {}), options: step.quiz.options } } : {}),
       ...(step.win ? { win: step.win } : {}),
       ...(step.after ? { after: step.after } : {}),
     })),
