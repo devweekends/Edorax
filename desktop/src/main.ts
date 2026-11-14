@@ -764,6 +764,21 @@ else {
       requireRenderer(event);
       return refreshLabsFromServer();
     });
+    // Progress lives on the learner's account. Both calls swallow failures: progress is also kept on
+    // this computer, so the labs work offline and the next sync catches the account up.
+    ipcMain.handle('shell-labs:progress', async (event) => {
+      requireRenderer(event);
+      if (!previewClient.sessionSnapshot()) return null;
+      const result = await previewClient.request('/api/v1/shell-labs/progress', 'GET');
+      const data = result.ok ? (result.data as { progress?: unknown } | null)?.progress : null;
+      return data && typeof data === 'object' && !Array.isArray(data) ? data : null;
+    });
+    ipcMain.handle('shell-labs:save-progress', async (event, slug, steps) => {
+      requireRenderer(event);
+      if (typeof slug !== 'string' || !Array.isArray(steps) || !previewClient.sessionSnapshot()) return false;
+      const result = await previewClient.request(`/api/v1/shell-labs/progress/${encodeURIComponent(slug)}`, 'PUT', { steps });
+      return result.ok;
+    });
     ipcMain.handle('shell-labs:view', (event, slug) => {
       requireRenderer(event);
       const lab = getShellLab(slug);

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { prisma } from "../db/prisma.js";
 import type { Prisma } from "../generated/prisma/index.js";
+import { BadRequestError } from "../utils/errors.js";
 
 // Shell labs live in the private content repository and reach the database through
 // `pnpm labs:publish`. The desktop app reads them from the API and runs the checks
@@ -138,4 +139,38 @@ export async function shellLabsWithVersion(): Promise<{ version: string; labs: R
     select: { slug: true, contentHash: true, data: true },
   });
   return { version: versionOf(rows), labs: rows.map((row) => row.data as Record<string, unknown>) };
+}
+
+// ---- Progress: the steps a learner has passed, per lab ----
+
+const MAX_STEPS_PER_LAB = 100;
+const MAX_STEP_ID_LENGTH = 80;
+
+/** Every lab the learner has progress in: { slug: [step ids] }. */
+export async function shellLabProgress(userId: string): Promise<Record<string, string[]>> {
+  const rows = await prisma.shellLabProgress.findMany({ where: { userId }, select: { labSlug: true, steps: true } });
+  return Object.fromEntries(rows.map((row) => [row.labSlug, row.steps]));
+}
+
+/** Replaces the passed steps of one lab. An empty list clears them (the lab was reset). */
+export async function saveShellLabProgress(userId: string, slug: string, steps: unknown): Promise<string[]> {
+  if (!Array.isArray(steps) || steps.length > MAX_STEPS_PER_LAB) throw new BadRequestError("steps must be a short list of step ids");
+  const clean = [...new Set(steps)];
+  if (clean.some((step) => typeof step !== "string" || !step || step.length > MAX_STEP_ID_LENGTH)) {
+    throw new BadRequestError("every step id must be a short text");
+  }
+  if (!(await prisma.shellLab.findUnique({ where: { slug }, select: { slug: true } }))) {
+    throw new BadRequestError("unknown lab");
+  }
+  if (!clean.length) {
+    await prisma.shellLabProgress.deleteMany({ where: { userId, labSlug: slug } });
+    return [];
+  }
+  const done = clean as string[];
+  await prisma.shellLabProgress.upsert({
+    where: { userId_labSlug: { userId, labSlug: slug } },
+    create: { userId, labSlug: slug, steps: done },
+    update: { steps: done },
+  });
+  return done;
 }

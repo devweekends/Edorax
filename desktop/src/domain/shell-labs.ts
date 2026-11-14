@@ -314,6 +314,10 @@ export interface ShellLabsAPI {
   list(): Promise<ShellLabSummary[]>;
   /** Asks the server for newer labs and saves them on this computer. Never rejects: a failure comes back as a plain message. */
   refresh(): Promise<ShellLabsRefresh>;
+  /** Passed steps per lab, kept on the learner's account. Null when signed out or offline. Never rejects. */
+  progress(): Promise<Record<string, string[]> | null>;
+  /** Saves the passed steps of one lab on the account. False when it could not. Never rejects. */
+  saveProgress(slug: string, steps: string[]): Promise<boolean>;
   view(slug: string): Promise<ShellLabView>;
   status(slug: string): Promise<ShellLabStatus>;
   start(slug: string): Promise<void>;

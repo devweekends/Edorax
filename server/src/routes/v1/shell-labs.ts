@@ -10,6 +10,8 @@ const router = Router();
 router.use(authenticate, requireVerified);
 
 router.get("/version", shellLabs.version);
+router.get("/progress", shellLabs.progress);
+router.put("/progress/:slug", shellLabs.saveProgress);
 router.get("/", shellLabs.list);
 
 export default router;

@@ -17,7 +17,7 @@ export function passedSteps(slug: string): string[] {
   return Array.isArray(steps) ? steps.filter((step) => typeof step === 'string') : [];
 }
 
-export function savePassedSteps(slug: string, steps: string[]) {
+function writeLocal(slug: string, steps: string[]) {
   try {
     const all = read();
     if (steps.length) all[slug] = steps;
@@ -25,6 +25,39 @@ export function savePassedSteps(slug: string, steps: string[]) {
     localStorage.setItem(KEY, JSON.stringify(all));
   } catch {
     /* Progress is best effort; the lab still works without it. */
+  }
+}
+
+/** Saves on this computer and, in the background, on the learner's account. */
+export function savePassedSteps(slug: string, steps: string[]) {
+  writeLocal(slug, steps);
+  void window.buildment?.shellLabs?.saveProgress?.(slug, steps).catch(() => {});
+}
+
+/**
+ * Joins this computer's progress with the account's, so a reinstall or a second computer still shows
+ * what was done. A step done on either side stays done. Steps found only on this computer are sent
+ * to the account. Returns true when something changed here. Never rejects.
+ */
+export async function syncPassedSteps(): Promise<boolean> {
+  try {
+    const remote = await window.buildment?.shellLabs?.progress?.();
+    if (!remote) return false;
+    let changed = false;
+    const local = read();
+    for (const slug of new Set([...Object.keys(local), ...Object.keys(remote)])) {
+      const mine = Array.isArray(local[slug]) ? local[slug] : [];
+      const theirs = Array.isArray(remote[slug]) ? remote[slug].filter((step) => typeof step === 'string') : [];
+      const joined = [...new Set([...theirs, ...mine])];
+      if (joined.length > mine.length) {
+        writeLocal(slug, joined);
+        changed = true;
+      }
+      if (joined.length > theirs.length) void window.buildment.shellLabs.saveProgress(slug, joined).catch(() => {});
+    }
+    return changed;
+  } catch {
+    return false;
   }
 }
 

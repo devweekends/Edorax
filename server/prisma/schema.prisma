@@ -328,6 +328,7 @@ model User {
   aiInterviewSessions           AiInterviewSession[]
   learnerQuestions              LearnerQuestion[]
   capstoneChecks                CapstoneCheck[]
+  shellLabProgress              ShellLabProgress[]
   certificates                  Certificate[]
   appActivity                   UserAppActivity?
   appActivityDays               AppActivityDay[]
@@ -1703,6 +1704,19 @@ model ShellLab {
 
   @@index([active, position])
   @@map("shell_labs")
+}
+
+/// The steps a learner has passed in one shell lab. Kept on the account so progress follows the
+/// learner to a new computer or a reinstall. Step ids come from the lab's own YAML.
+model ShellLabProgress {
+  userId    String
+  labSlug   String
+  steps     String[]
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, labSlug])
+  @@map("shell_lab_progress")
 }
 
 enum DesktopPlatform {
