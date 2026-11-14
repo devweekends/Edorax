@@ -70,6 +70,27 @@ Set `R2_ENDPOINT`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, and `R2_SECRET_ACCESS_KEY` i
 
 Course creators can upload cover images in course settings and insert images from the chapter editor. JPEG, PNG, WebP, GIF, and AVIF files up to 8 MB are accepted. Uploads go through the authenticated API; the bucket can remain private, and browser CORS or an R2 public development URL are not required. Covers are served publicly through `/api/v1/media`, while chapter images are served only to course instructors, administrators, and learners with content access.
 
+## Shell labs
+
+Shell labs are YAML files in the private content repository (`labs/shell`: `index.yaml` lists the slugs in order, one `<slug>.yaml` per lab). The `shell_labs` table holds each lab as JSON (`data`, with checks and solutions, because the desktop app runs the checks), plus `position`, `active` and a `contentHash`. A lab removed from `index.yaml` is set to `active = false`, never deleted.
+
+```bash
+# Set BUILDMENT_CONTENT_ROOT to the content checkout (the same one the courses use), or pass --root <path>
+pnpm labs:check      # validate only, no database
+pnpm labs:publish    # validate everything, then import; prints added, updated, unchanged, deactivated and the version
+```
+
+A validation problem names the lab and step, exits non-zero and changes nothing.
+
+Both endpoints need a signed-in, verified user:
+
+- `GET /api/v1/shell-labs/version` returns `{ success, data: { version, count } }`
+- `GET /api/v1/shell-labs` returns `{ success, data: { version, labs } }` (active labs in `index.yaml` order)
+
+With no labs imported, `version` is `""` and `labs` is `[]`.
+
+Deploy order: migrate first (`pnpm exec prisma migrate deploy`), then publish (`pnpm labs:publish`).
+
 ## Commands
 
 | Command | |
@@ -80,6 +101,7 @@ Course creators can upload cover images in course settings and insert images fro
 | `pnpm typecheck` / `pnpm lint` | |
 | `pnpm db:migrate` / `db:ready` / `db:seed` / `db:studio` | Prisma |
 | `pnpm content:import` / `content:validate` / `content:validate:source` / `content:audit` | content pipeline with a private checkout through `BUILDMENT_CONTENT_ROOT` |
+| `pnpm labs:check` / `labs:publish` | validate / publish shell labs from `BUILDMENT_CONTENT_ROOT` |
 | `pnpm db:seed:showcase` / `db:seed:integration` / `stats:backfill` | demo data and maintenance |
 | `pnpm db:pull-production` | replace the local database with a copy of production (reads Heroku only; needs the Heroku CLI and Docker) |
 | `pnpm sync-shared` / `sync-shared:check` | copy `src/shared` into the web app / verify the copy is current |
