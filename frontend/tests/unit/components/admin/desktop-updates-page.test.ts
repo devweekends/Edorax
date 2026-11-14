@@ -47,35 +47,37 @@ const policies: DesktopUpdatePolicy[] = [
 ];
 
 describe("admin desktop updates page", () => {
-  it("shows the three platforms, who changed them and the defaults note", async () => {
+  it("shows one simple card per platform with who changed it and the defaults note", async () => {
     serverApiFetch.mockResolvedValue({ policies });
     const html = renderToStaticMarkup(createElement("div", null, await AdminDesktopUpdatesPage()));
 
     expect(serverApiFetch).toHaveBeenCalledWith("/api/v1/admin/desktop-updates");
     for (const label of ["macOS", "Windows", "Linux"]) expect(html).toContain(label);
-    expect(html).toContain("0.1.4, 0.1.5");
     expect(html).toContain("Changed by Ada Admin on");
     expect(html).toContain("14 Nov 2026, 10:32 UTC");
-    expect(html).toContain("Not set: using defaults");
-    expect(html).toContain("Change the update rules");
-    expect(html).toContain("Select all");
-    expect(html).toContain("Force everyone to the latest version");
-    expect(html).toContain("Choose at least one platform.");
+    expect(html).toContain("Not set yet: using the server defaults.");
+    expect(html).toContain("Make everyone update");
+    expect(html).toContain("Force all platforms to the latest");
+    // The saved values are in the fields.
+    expect(html).toContain('value="0.3.0"');
+    expect(html).toContain('value="0.2.0"');
+    expect(html).toContain('value="0.1.4, 0.1.5"');
   });
 
-  it("labels every input and starts with nothing selected and the buttons off", async () => {
+  it("labels every input and keeps the extra options in a closed section", async () => {
     serverApiFetch.mockResolvedValue({ policies });
     const html = renderToStaticMarkup(createElement("div", null, await AdminDesktopUpdatesPage()));
-    for (const text of [
-      "Minimum version",
-      "Latest version",
-      "Download link",
-      "Message shown to users (optional)",
-      "Force these exact versions to update",
-    ]) {
+    for (const text of ["Latest version", "Must update below", "Download link", "Message for users (optional)", "Block exact versions (optional)"]) {
       expect(html).toContain(text);
     }
-    expect(html).not.toContain("checked");
-    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Save changes<\/button>/);
+    expect(html).toContain("More options");
+    expect(html).not.toMatch(/<details[^>]*open/);
+  });
+
+  it("turns the force buttons off when a platform already requires its latest version", async () => {
+    serverApiFetch.mockResolvedValue({ policies: policies.map((policy) => ({ ...policy, minimumVersion: policy.latestVersion })) });
+    const html = renderToStaticMarkup(createElement("div", null, await AdminDesktopUpdatesPage()));
+    expect(html).toContain("Every platform already requires its latest version.");
+    expect(html.match(/<button[^>]*disabled=""[^>]*>Force/g)?.length).toBe(4);
   });
 });

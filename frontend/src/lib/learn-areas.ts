@@ -143,10 +143,10 @@ export const LAB_KINDS: readonly LabKind[] = [
     id: "shell",
     name: "Shell labs",
     href: "/labs/shell",
-    status: "coming-soon",
+    status: "live",
     tagline: "Real machines and a real terminal.",
     summary:
-      "Real shell work on real Linux machines, containers and networks. Shell labs run in the Edorax desktop app, which is being built now.",
+      "46 hands-on labs on real Linux machines, containers and networks. Each lab gives you a task and checks the machine itself. Shell labs run in the free Edorax desktop app.",
   },
 ];
 
