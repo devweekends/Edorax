@@ -43,6 +43,7 @@ export const ADMIN_AUDIT_ACTIONS = {
   USER_REINSTATE: "user.reinstate",
   USER_ENROLL: "user.enroll",
   USER_REMOVE_ENROLLMENT: "user.remove-enrollment",
+  DESKTOP_UPDATE_POLICY_CHANGED: "desktop-update-policy.changed",
   MFA_ENABLE: "mfa.enable",
   MFA_DISABLE: "mfa.disable",
   MFA_RESET: "mfa.reset",
@@ -54,7 +55,7 @@ export type AdminAuditActionKey = (typeof ADMIN_AUDIT_ACTIONS)[keyof typeof ADMI
 export type AdminAuditEntry = {
   actor: AdminActor;
   action: AdminAuditActionKey;
-  targetType: "Organization" | "User" | "CourseRequest" | "InstructorAccessRequest" | "Course" | "CourseDiscountCampaign" | "Enrollment" | "Payment" | "InstructorWithdrawal";
+  targetType: "Organization" | "User" | "CourseRequest" | "InstructorAccessRequest" | "Course" | "CourseDiscountCampaign" | "Enrollment" | "Payment" | "InstructorWithdrawal" | "DesktopUpdatePolicy";
   targetId?: string | null;
   summary: string;
   metadata?: Prisma.InputJsonValue;

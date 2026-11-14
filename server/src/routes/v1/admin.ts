@@ -24,6 +24,7 @@ import {
   courseOrgAccessBulkBody,
   courseOrgAccessParams,
   courseStatusBody,
+  desktopUpdatesBody,
   createDiscountCampaignBody,
   discountCampaignParams,
   discountCampaignActiveBody,
@@ -223,6 +224,8 @@ router.post("/admins", validateBody(grantAdminBody), admin.grantAdmin);
 router.post("/instructor-access-requests/:requestId/approve", validateParams(requestIdParams), admin.approveInstructorRequest);
 router.post("/instructor-access-requests/:requestId/reject", validateParams(requestIdParams), admin.rejectInstructorRequest);
 
+router.get("/desktop-updates", admin.listDesktopUpdates);
+router.put("/desktop-updates", validateBody(desktopUpdatesBody), admin.saveDesktopUpdates);
 router.get("/audit", validateQuery(listAuditQuery), admin.listAudit);
 router.get("/audit/export", admin.exportAuditCsv);
 

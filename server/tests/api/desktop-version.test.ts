@@ -3,8 +3,9 @@ import request from "supertest";
 import { createApp } from "../../src/app.js";
 import { env } from "../../src/config/env.js";
 
-// The version endpoint and the 426 gate need no database. `env` is read on every request, so the
-// tests change its fields and put them back.
+// The default policy (DESKTOP_* environment variables): used when a request carries no platform, or an
+// unknown one, so these tests need no database. `env` is read on every request, so the tests change
+// its fields and put them back. Per-platform policies are in desktop-updates-admin.test.ts.
 const app = createApp();
 const HEADER = "X-Edorax-Desktop-Version";
 const DEFAULT_URL = "https://github.com/devweekends/Edorax/releases/latest";
@@ -38,7 +39,7 @@ describe("GET /api/v1/desktop/version", () => {
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
       success: true,
-      data: { minimumVersion: "0.0.0", latestVersion: "0.0.0", downloadUrl: DEFAULT_URL, message: "" },
+      data: { minimumVersion: "0.0.0", latestVersion: "0.0.0", downloadUrl: DEFAULT_URL, message: "", blockedVersions: [] },
     });
     expect(res.headers["cache-control"]).toContain("max-age=60");
   });
@@ -52,7 +53,16 @@ describe("GET /api/v1/desktop/version", () => {
       latestVersion: "0.4.1",
       downloadUrl: "https://example.com/dl",
       message: "Please update.",
+      blockedVersions: [],
     });
+  });
+
+  it("returns the default policy for an unknown platform", async () => {
+    configure({ min: "0.3.0" });
+    const res = await request(app).get("/api/v1/desktop/version?platform=amiga");
+    expect(res.status).toBe(200);
+    expect(res.body.data.minimumVersion).toBe("0.3.0");
+    expect(res.body.data.blockedVersions).toEqual([]);
   });
 
   it("latest defaults to the minimum", async () => {
@@ -74,7 +84,7 @@ describe("desktop minimum version gate on /api/v1", () => {
       success: false,
       code: "DESKTOP_UPDATE_REQUIRED",
       message: DEFAULT_MESSAGE,
-      data: { minimumVersion: "0.3.0", downloadUrl: "https://example.com/dl" },
+      data: { minimumVersion: "0.3.0", latestVersion: "0.3.0", downloadUrl: "https://example.com/dl", blockedVersions: [] },
     });
   });
 

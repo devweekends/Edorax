@@ -163,9 +163,10 @@ const schema = z.object({
     .transform((value) => value !== "false"),
 
   /**
-   * Forced desktop updates. The desktop app sends its version in X-Edorax-Desktop-Version and gets
-   * 426 DESKTOP_UPDATE_REQUIRED while it is lower than DESKTOP_MIN_VERSION. The default 0.0.0 blocks
-   * nothing. Change them with an environment change and a restart; no code deploy is needed.
+   * DEFAULT policy for forced desktop updates. Admins override it per platform (darwin, win32, linux)
+   * in the admin dashboard; a platform without a saved policy uses these values. The app sends its
+   * version in X-Edorax-Desktop-Version and gets 426 DESKTOP_UPDATE_REQUIRED while it is lower than
+   * the minimum. The default 0.0.0 blocks nothing. Changing them needs an environment change and a restart.
    */
   DESKTOP_MIN_VERSION: optionalSemver("DESKTOP_MIN_VERSION"),
   /** Newest released desktop version, for a soft "update available" prompt. Defaults to DESKTOP_MIN_VERSION. */
