@@ -1,10 +1,16 @@
 import { test, expect } from '@playwright/test';
 import { loadShellLabs } from '../../src/shell-labs/loader';
+import { LABS_DIR } from '../helpers/labs-dir';
 import { shellLabSummary, shellLabView } from '../../src/domain/shell-labs';
 
-const SHELL_LABS = loadShellLabs().labs;
+// The real labs when synced, else the made-up fixtures (tests/helpers/labs-dir.ts).
+const SHELL_LABS = loadShellLabs(LABS_DIR).labs;
 
-const lab = SHELL_LABS.find((item) => item.slug === 'linux-101')!;
+// A Linux lab with at least two steps and a quiz step; linux-101 when the real labs are there.
+const lab =
+  SHELL_LABS.find((item) => item.slug === 'linux-101') ??
+  SHELL_LABS.find((item) => item.topic === 'linux' && !item.machine.vm && item.steps.length >= 2 && item.steps.some((step) => step.quiz) && !item.steps[0].quiz)!;
+const labButton = new RegExp(lab.title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
 const data = { summaries: SHELL_LABS.map(shellLabSummary), view: shellLabView(lab) };
 
 test('a shell lab teaches one step at a time, ticks live and lets the terminal move', async ({ page }) => {
@@ -53,7 +59,7 @@ test('a shell lab teaches one step at a time, ticks live and lets the terminal m
   await page.screenshot({ path: 'test-results/shell-hub.png' });
   await page.getByRole('button', { name: /^Linux/ }).click();
   await expect(page.getByRole('heading', { name: 'Linux labs' })).toBeVisible();
-  await page.getByRole('button', { name: /Linux 101: first steps in the terminal/ }).click();
+  await page.getByRole('button', { name: labButton }).click();
 
   // One step at a time: step 1 is open, its lesson and commands are there, later steps are locked.
   await expect(page.getByText(`Mission 1 of ${lab.steps.length}`)).toBeVisible();
@@ -69,7 +75,7 @@ test('a shell lab teaches one step at a time, ticks live and lets the terminal m
   await page.screenshot({ path: 'test-results/shell-lab-step.png' });
 
   // Live checking: when the machine passes the step, it ticks off and Next step appears.
-  await page.evaluate(() => ((window as unknown as { passed: string[] }).passed = ['make-folder']));
+  await page.evaluate((id) => ((window as unknown as { passed: string[] }).passed = [id]), lab.steps[0].id);
   await expect(page.getByText(lab.steps[0].win!)).toBeVisible({ timeout: 8000 });
   await expect(page.getByText('What just happened')).toBeVisible();
   await page.screenshot({ path: 'test-results/shell-lab-win.png' });
@@ -100,7 +106,7 @@ test('the first start shows the steps, a percent for a download and a live line 
       });
     const listeners: ((progress: unknown) => void)[] = [];
     const w = window as unknown as { send: (progress: unknown) => void; finish: () => void };
-    w.send = (progress) => listeners.forEach((listener) => listener({ slug: 'linux-101', ...(progress as object) }));
+    w.send = (progress) => listeners.forEach((listener) => listener({ slug: lab.slug, ...(progress as object) }));
     let release: () => void = () => {};
     w.finish = () => release();
     let running = false;
@@ -134,7 +140,7 @@ test('the first start shows the steps, a percent for a download and a live line 
   await page.getByRole('button', { name: 'Labs', exact: true }).click();
   await page.getByRole('button', { name: 'Shell', exact: true }).click();
   await page.getByRole('button', { name: /^Linux/ }).click();
-  await page.getByRole('button', { name: /Linux 101: first steps in the terminal/ }).click();
+  await page.getByRole('button', { name: labButton }).click();
   await page.getByRole('button', { name: 'Start machine' }).click();
 
   const plan = ['Download the base system', 'Install the tools', 'Start the machine', 'Prepare the lab'];
@@ -161,13 +167,13 @@ test('a quiz step shows the text to read, takes an answer and never sees the rig
   const quizView = data.view.stepList.find((step) => step.id === quizStep.id)!;
   const before = lab.steps.slice(0, lab.steps.indexOf(quizStep)).map((step) => step.id);
   await page.addInitScript(
-    ({ data, before, rightOption }) => {
+    ({ data, before, rightOption, slug }) => {
       const quiet = (): unknown =>
         new Proxy(function () {}, {
           get: (_target, key) => (key === 'then' ? (resolve?: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) => Promise.resolve({ ok: false, message: 'Not in this test', code: 'TEST' }).then(resolve, reject) : quiet()),
           apply: () => quiet(),
         });
-      try { localStorage.setItem('edorax:shell-labs:v1', JSON.stringify({ 'linux-101': before })); } catch { /* ignore */ }
+      try { localStorage.setItem('edorax:shell-labs:v1', JSON.stringify({ [slug]: before })); } catch { /* ignore */ }
       const asked: number[] = [];
       (window as unknown as { asked: number[] }).asked = asked;
       const shellLabs = {
@@ -190,14 +196,14 @@ test('a quiz step shows the text to read, takes an answer and never sees the rig
         { get: (target, key: string) => (key in target ? target[key] : quiet()) },
       ) as unknown as typeof window.buildment;
     },
-    { data, before, rightOption: quizStep.quiz!.answer },
+    { data, before, rightOption: quizStep.quiz!.answer, slug: lab.slug },
   );
 
   await page.goto('/');
   await page.getByRole('button', { name: 'Labs', exact: true }).click();
   await page.getByRole('button', { name: 'Shell', exact: true }).click();
   await page.getByRole('button', { name: /^Linux/ }).click();
-  await page.getByRole('button', { name: /Linux 101: first steps in the terminal/ }).click();
+  await page.getByRole('button', { name: labButton }).click();
 
   await expect(page.getByRole('heading', { name: quizStep.goal })).toBeVisible();
   // The page got the question and the answers, and nothing that says which one is right.

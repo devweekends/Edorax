@@ -1,0 +1,40 @@
+slug: demo-docker
+topic: docker
+level: beginner
+tags: [Demo, Containers]
+title: 'Demo Containers: a pretend image'
+summary: A tiny made-up lab for tests, about a pretend container image.
+scenario: A pretend image needs a small build file.
+minutes: 5
+machine:
+  name: demo-host
+  image: ubuntu:24.04
+setup: |
+  mkdir -p /root/app
+steps:
+  - id: build-file
+    goal: Write the first line of a build file
+    body: |-
+      1. Make the file `/root/app/Buildfile`.
+      2. Its first line must be `BASE demo`.
+    about: A build file tells a tool how to make an image.
+    expected: The build file starts with the line BASE demo.
+    learn:
+      - A build file is a list of instructions, one per line.
+      - The first instruction names the starting point.
+    commands:
+      - command: echo TEXT
+        meaning: Prints text.
+      - command: head -n 1 FILE
+        meaning: Shows the first line of a file.
+    hints:
+      - Print the line into a file.
+      - Use echo and a redirect.
+      - Send the base line into the build file.
+    checks:
+      - id: first-line
+        label: The first line is right
+        run: '[ "$(head -n 1 /root/app/Buildfile)" = "BASE demo" ]'
+        fail: The build file is missing or its first line is wrong.
+    solution: |
+      echo "BASE demo" > /root/app/Buildfile

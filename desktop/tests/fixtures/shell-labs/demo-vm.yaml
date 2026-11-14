@@ -1,0 +1,45 @@
+slug: demo-vm
+topic: linux
+level: intermediate
+tags: [Demo, Virtual machine]
+title: 'Demo VM: a pretend guest system'
+summary: A made-up lab for tests that runs a small virtual machine with its own kernel.
+scenario: The pretend demo guest has its own kernel. Look at it from the inside.
+minutes: 10
+machine:
+  name: demovm
+  image: edorax-labvm:1
+  vm: true
+  memoryMb: 2800
+  cpus: 2
+setup: |
+  echo "guest ready" > /root/guest.txt
+steps:
+  - id: show-kernel
+    goal: Save the kernel name to a file
+    body: |-
+      1. Ask the guest for its kernel name.
+      2. Save the answer in `/root/kernel.txt`.
+    about: The pretend team wants a record of the guest kernel.
+    expected: The file `/root/kernel.txt` holds the kernel name.
+    learn:
+      - A virtual machine has its own kernel, apart from the host.
+      - You can ask for its name with one command.
+    commands:
+      - command: uname -s
+        meaning: Prints the kernel name.
+        example: uname -s
+        output: Linux
+      - command: uname -r
+        meaning: Prints the kernel release.
+    hints:
+      - There is a command that prints the kernel name.
+      - Redirect that command into a file.
+      - Run uname with the s flag and send it to the file.
+    checks:
+      - id: kernel-file
+        label: The kernel file says Linux
+        run: grep -qx Linux /root/kernel.txt
+        fail: The kernel file is missing or wrong.
+    solution: |
+      uname -s > /root/kernel.txt

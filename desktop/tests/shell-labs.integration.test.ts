@@ -5,9 +5,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { localDocker } from '../src/labs/runtime';
 import { loadShellLabs } from '../src/shell-labs/loader';
+import { LABS_DIR, realLabsPresent } from './helpers/labs-dir';
 import { ShellLabRuntime, shellLabName } from '../src/shell-labs/runtime';
 
-const SHELL_LABS = loadShellLabs().labs;
+// The made-up fixture labs are not meant to run in Docker, so without the real labs nothing runs here.
+const SHELL_LABS = realLabsPresent ? loadShellLabs(LABS_DIR).labs : [];
 
 async function sh(docker: ReturnType<typeof localDocker>, name: string, script: string) {
   const execution = await docker.getContainer(name).exec({ Cmd: ['bash', '-c', script], AttachStdout: true, AttachStderr: true });
