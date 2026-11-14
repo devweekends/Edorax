@@ -22,12 +22,16 @@ import { StreakPopup } from './streak/StreakPopup';
 import type { LeaderboardSelection } from '../domain/leaderboard';
 import { QuestionsPage } from './questions/QuestionsPage';
 import { SettingsPage } from './settings/SettingsPage';
+import { useAppUpdate } from './update/useAppUpdate';
+import { UpdateRequiredScreen } from './update/UpdateRequiredScreen';
+import { UpdateBanner } from './update/UpdateBanner';
 
 export function App() {
   const [selected, setSelected] = useState<Course | null>(null);
   const [chapter, setChapter] = useState<string | undefined>();
   const [reading, setReading] = useState(false);
   const session = useSession();
+  const update = useAppUpdate();
   const {
     signedIn,
     setSignedIn,
@@ -176,7 +180,16 @@ export function App() {
     navigate('leaderboard');
   }
 
-  if (!authChecked)
+  // A required update replaces the whole app, signed in or not. Nothing behind it can be reached.
+  if (update.state?.status === 'required')
+    return (
+      <UpdateRequiredScreen
+        state={update.state}
+        onCheck={update.check}
+        onDownload={() => void update.openDownload()}
+      />
+    );
+  if (!authChecked || !update.loaded)
     return (
       <div
         className="flex h-screen items-center justify-center text-sm text-muted-foreground"
@@ -212,6 +225,7 @@ export function App() {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
+      {update.state && <UpdateBanner state={update.state} onDownload={() => void update.openDownload()} />}
       {!(reading && signedIn) && (
         <WorkspaceHeader
           selected={Boolean(selected)}

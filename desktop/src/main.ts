@@ -33,6 +33,8 @@ import { downloadBook, registerAudioProtocol, registerAudioScheme, removeBook } 
 
 registerAudioScheme();
 import { createPreviewClient } from './api';
+import { setDesktopVersion } from './api/client-info';
+import { createUpdateService } from './update/update-service';
 import { createBrowserAuth } from './auth/browser-auth';
 import { OfflineStore, type DownloadedCourse, prepareEncryption } from './offline/store';
 
@@ -213,7 +215,21 @@ function guardQuizShortcuts(webContents: Electron.WebContents) {
 const apiBase =
   process.env.BUILDMENT_API_URL ||
   'https://buildment-eca06ffd3e8f.herokuapp.com';
-const previewClient = createPreviewClient(apiBase);
+// Every backend request carries this version; a server that wants a newer app answers 426.
+setDesktopVersion(app.getVersion());
+const appUpdates = createUpdateService({
+  currentVersion: app.getVersion(),
+  base: apiBase,
+  file: path.join(app.getPath('userData'), 'update-policy.json'),
+  openExternal: (url) => shell.openExternal(url),
+  onChange: (state) => {
+    if (mainWindow && !mainWindow.isDestroyed())
+      mainWindow.webContents.send('app:update-status-changed', state);
+  },
+});
+const previewClient = createPreviewClient(apiBase, fetch, {
+  onUpdateRequired: (info) => appUpdates.noteUpdateRequired(info),
+});
 const offline = new OfflineStore();
 const courseFolders = new CourseFolders(
   path.join(app.getPath('userData'), 'course-folders.json'),
@@ -419,6 +435,7 @@ function cancelBrowserAuth() {
   browserAuth.cancel();
 }
 app.on('before-quit', () => {
+  appUpdates.stop();
   cancelBrowserAuth();
   disposeLabs();
 });
@@ -487,6 +504,7 @@ function createWindow() {
     },
   });
   const window = mainWindow;
+  window.on('focus', () => appUpdates.onFocus());
   window.once('ready-to-show', () => {
     if (!window.isDestroyed()) window.show();
   });
@@ -584,6 +602,7 @@ else {
       cacheFile: path.join(app.getPath('userData'), 'shell-labs.json'),
       devDir: devShellLabsDir(),
     });
+    appUpdates.start();
     void refreshLabsFromServer();
     app.setAboutPanelOptions({
       applicationName: 'Edorax',
@@ -780,6 +799,18 @@ else {
         const href = offline.course(slug)?.overview.syllabus?.continueHref;
         return href ? { ok: true as const, data: { href } } : result;
       });
+    });
+    ipcMain.handle('app:update-status', (event) => {
+      requireRenderer(event);
+      return appUpdates.state();
+    });
+    ipcMain.handle('app:update-check', (event) => {
+      requireRenderer(event);
+      return appUpdates.check();
+    });
+    ipcMain.handle('app:open-download', (event) => {
+      requireRenderer(event);
+      return appUpdates.openDownload();
     });
     ipcMain.handle('app:web-origin', (event) => {
       requireRenderer(event);
