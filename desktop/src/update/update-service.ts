@@ -1,9 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { backendBase } from '../api/catalog';
-import { updateRequiredFrom, withDesktopVersion, type UpdateRequiredInfo } from '../api/client-info';
+import { getDesktopPlatform, supportedPlatform, updateRequiredFrom, withDesktopHeaders, type UpdateRequiredInfo } from '../api/client-info';
 import type { AppUpdateState, UpdatePolicy } from '../domain/app-update';
-import { updateStatus } from '../domain/app-version';
+import { isBlockedByList, updateStatus, validVersionList } from '../domain/app-version';
 
 export const POLICY_PATH = '/api/v1/desktop/version';
 export const CHECK_EVERY_MS = 4 * 60 * 60 * 1000;
@@ -38,14 +38,18 @@ export function parsePolicy(body: unknown): UpdatePolicy | null {
     latestVersion: text(data.latestVersion, 64),
     downloadUrl: safeDownloadUrl(data.downloadUrl),
     message: text(data.message, 500),
+    // Missing (older server) or not a list: no blocked versions. Invalid entries are dropped one by one.
+    blockedVersions: validVersionList(data.blockedVersions),
   };
 }
 
 type Saved = { policy: UpdatePolicy | null; forced: boolean };
 
-function readSaved(file: string): Saved {
+/** A saved policy from another platform is ignored. A file saved before platforms existed has no platform and still loads. */
+function readSaved(file: string, platform: string): Saved {
   try {
-    const saved = JSON.parse(fs.readFileSync(file, 'utf8')) as { policy?: unknown; forced?: unknown };
+    const saved = JSON.parse(fs.readFileSync(file, 'utf8')) as { policy?: unknown; forced?: unknown; platform?: unknown };
+    if (saved.platform !== undefined && saved.platform !== platform) return { policy: null, forced: false };
     const policy = saved.policy && typeof saved.policy === 'object' ? parsePolicy({ success: true, data: saved.policy }) : null;
     return { policy, forced: saved.forced === true };
   } catch {
@@ -57,6 +61,8 @@ export interface UpdateServiceOptions {
   currentVersion: string;
   /** The backend origin, for example https://api.example.com. */
   base: string;
+  /** darwin, win32 or linux. Defaults to the platform set for all requests; any other value means "no platform". */
+  platform?: string;
   request?: typeof fetch;
   /** Where the last good policy is kept (inside the user data folder). */
   file: string;
@@ -74,7 +80,8 @@ export interface UpdateServiceOptions {
 export function createUpdateService(options: UpdateServiceOptions) {
   const request = options.request ?? fetch;
   const now = options.now ?? Date.now;
-  const saved = readSaved(options.file);
+  const platform = supportedPlatform(options.platform ?? getDesktopPlatform());
+  const saved = readSaved(options.file, platform);
   let policy = saved.policy;
   let forced = saved.forced;
   let lastAttempt = Number.NEGATIVE_INFINITY;
@@ -92,6 +99,7 @@ export function createUpdateService(options: UpdateServiceOptions) {
       minimumVersion: policy?.minimumVersion ?? '',
       downloadUrl: policy?.downloadUrl ?? '',
       message: policy?.message ?? '',
+      blocked: isBlockedByList(options.currentVersion, policy),
     };
   }
   function announce() {
@@ -113,7 +121,7 @@ export function createUpdateService(options: UpdateServiceOptions) {
     const temporary = `${options.file}.${process.pid}.${++writes}.tmp`;
     try {
       await fs.promises.mkdir(path.dirname(options.file), { recursive: true });
-      await fs.promises.writeFile(temporary, JSON.stringify({ policy, forced }));
+      await fs.promises.writeFile(temporary, JSON.stringify({ policy, forced, platform }));
       await fs.promises.rename(temporary, options.file);
     } catch {
       // The policy still holds in memory; only the offline memory is lost.
@@ -130,14 +138,16 @@ export function createUpdateService(options: UpdateServiceOptions) {
       latestVersion: policy?.latestVersion || minimumVersion,
       downloadUrl,
       message: info.message || policy?.message || '',
+      blockedVersions: info.blockedVersions.length ? info.blockedVersions : (policy?.blockedVersions ?? []),
     };
   }
 
   async function run(): Promise<AppUpdateState> {
     lastAttempt = now();
     try {
-      const response = await request(backendBase(options.base) + POLICY_PATH, {
-        headers: withDesktopVersion({ Accept: 'application/json' }),
+      const query = platform ? `?platform=${platform}` : '';
+      const response = await request(backendBase(options.base) + POLICY_PATH + query, {
+        headers: withDesktopHeaders({ Accept: 'application/json' }),
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         redirect: 'error',
       });

@@ -33,7 +33,7 @@ import { downloadBook, registerAudioProtocol, registerAudioScheme, removeBook } 
 
 registerAudioScheme();
 import { createPreviewClient } from './api';
-import { setDesktopVersion } from './api/client-info';
+import { setDesktopPlatform, setDesktopVersion } from './api/client-info';
 import { createUpdateService } from './update/update-service';
 import { createBrowserAuth } from './auth/browser-auth';
 import { OfflineStore, type DownloadedCourse, prepareEncryption } from './offline/store';
@@ -215,8 +215,9 @@ function guardQuizShortcuts(webContents: Electron.WebContents) {
 const apiBase =
   process.env.BUILDMENT_API_URL ||
   'https://buildment-eca06ffd3e8f.herokuapp.com';
-// Every backend request carries this version; a server that wants a newer app answers 426.
+// Every backend request carries this version and platform; a server that wants a newer app answers 426.
 setDesktopVersion(app.getVersion());
+setDesktopPlatform(process.platform);
 const appUpdates = createUpdateService({
   currentVersion: app.getVersion(),
   base: apiBase,

@@ -1,5 +1,5 @@
 import type { CatalogResult, Course } from '../domain/catalog';
-import { withDesktopVersion } from './client-info';
+import { withDesktopHeaders } from './client-info';
 
 export function backendBase(value = 'http://localhost:4000'): string {
   const url = new URL(value);
@@ -45,7 +45,7 @@ export async function fetchCatalog(
 ): Promise<CatalogResult> {
   try {
     const response = await request(`${backendBase(base)}/api/v1/catalog`, {
-      headers: withDesktopVersion({ Accept: 'application/json' }),
+      headers: withDesktopHeaders({ Accept: 'application/json' }),
       signal: AbortSignal.timeout(15_000),
       redirect: 'error',
     });

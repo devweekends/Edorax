@@ -1,5 +1,5 @@
 import { createLearningClient } from './learning';
-import { updateRequiredFrom, withDesktopVersion, type UpdateRequiredInfo } from './client-info';
+import { updateRequiredFrom, withDesktopHeaders, type UpdateRequiredInfo } from './client-info';
 import { backendBase, isCourse } from './catalog';
 import { isRecord as record, isCourseDetail as isDetail } from './validation';
 import type {
@@ -35,7 +35,7 @@ export function createPreviewClient(
     session = token,
   ): Promise<Result<unknown>> {
     try {
-      const headers = withDesktopVersion<Record<string, string>>({ Accept: 'application/json' });
+      const headers = withDesktopHeaders<Record<string, string>>({ Accept: 'application/json' });
       if (session) headers.Authorization = 'Bearer ' + session;
       const snapshot = body instanceof Uint8Array;
       if (body !== undefined)

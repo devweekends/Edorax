@@ -61,7 +61,8 @@ export function UpdateRequiredScreen({
     const next = await onCheck();
     setBusy(false);
     if (!next) setNote('Could not check for updates. Check your connection and try again.');
-    else if (next.status === 'required') setNote('This version is still out of date.');
+    else if (next.status === 'required')
+      setNote(next.blocked ? 'This version still has a known problem.' : 'This version is still out of date.');
   }
 
   return (
@@ -82,7 +83,9 @@ export function UpdateRequiredScreen({
         </h1>
         <div id="update-required-text">
           <p className="mt-3 text-sm leading-6 text-muted-foreground">
-            {`Your version of Edorax (${state.currentVersion}) is out of date.${target ? ` Install version ${target} to continue.` : ' Install the newest version to continue.'}`}
+            {state.blocked
+              ? `This version (${state.currentVersion}) has a known problem.${target ? ` Install version ${target} to continue.` : ' Install the newest version to continue.'}`
+              : `Your version of Edorax (${state.currentVersion}) is out of date.${target ? ` Install version ${target} to continue.` : ' Install the newest version to continue.'}`}
           </p>
           {state.message && <p className="mt-3 text-sm leading-6">{state.message}</p>}
         </div>

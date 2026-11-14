@@ -8,7 +8,7 @@ export type ParsedVersion = {
   prerelease: (number | string)[];
 };
 export type UpdateStatus = 'required' | 'available' | 'ok';
-export type UpdatePolicyVersions = { minimumVersion: string; latestVersion: string };
+export type UpdatePolicyVersions = { minimumVersion: string; latestVersion: string; blockedVersions?: readonly unknown[] | null };
 
 const CORE = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 
@@ -62,13 +62,38 @@ export function compareVersions(a: unknown, b: unknown): -1 | 0 | 1 | null {
   return left.prerelease.length < right.prerelease.length ? -1 : 1;
 }
 
+const MAX_VERSION_LIST = 200;
+
+/** Reads a list of versions from server data. Anything that is not a valid version is dropped, so one bad entry never spoils the rest. A missing or non-list value gives []. */
+export function validVersionList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((entry): entry is string => typeof entry === 'string' && parseVersion(entry) !== null)
+    .slice(0, MAX_VERSION_LIST);
+}
+
+/** True when the app version is exactly one of the blocked versions (build info ignored). Invalid entries are skipped. */
+export function isBlockedVersion(current: unknown, blockedVersions: readonly unknown[] | null | undefined): boolean {
+  if (!Array.isArray(blockedVersions)) return false;
+  return blockedVersions.some((entry) => compareVersions(current, entry) === 0);
+}
+
 /**
- * required: this app is older than the minimum. available: older than the latest. ok: anything else.
- * Bad data never locks anyone out: an invalid app version or an invalid policy version gives "ok" for that rule.
+ * required: this app is older than the minimum, or is exactly one of the blocked versions (a blocked
+ * version stays blocked even when it is the latest). available: older than the latest. ok: anything else.
+ * Bad data never locks anyone out: an invalid app version, an invalid policy version or an invalid
+ * blocked entry gives "ok" for that rule.
  */
 export function updateStatus(current: unknown, policy: UpdatePolicyVersions | null | undefined): UpdateStatus {
   if (!policy) return 'ok';
   if (compareVersions(current, policy.minimumVersion) === -1) return 'required';
+  if (isBlockedVersion(current, policy.blockedVersions)) return 'required';
   if (compareVersions(current, policy.latestVersion) === -1) return 'available';
   return 'ok';
+}
+
+/** True when the app is blocked only because its exact version is in the blocked list (it is not below the minimum). */
+export function isBlockedByList(current: unknown, policy: UpdatePolicyVersions | null | undefined): boolean {
+  if (!policy) return false;
+  return compareVersions(current, policy.minimumVersion) !== -1 && isBlockedVersion(current, policy.blockedVersions);
 }

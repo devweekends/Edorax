@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 
-type Policy = { status: 'required' | 'available' | 'ok'; latestVersion: string; minimumVersion: string; downloadUrl: string; message: string };
+type Policy = { status: 'required' | 'available' | 'ok'; latestVersion: string; minimumVersion: string; downloadUrl: string; message: string; blocked: boolean };
 
 // The page gets a fake update API. `window.next` is what the "server" answers on the next check.
 async function open(page: Page, first: Policy, next: Policy = first) {
@@ -46,9 +46,9 @@ async function open(page: Page, first: Policy, next: Policy = first) {
   await page.waitForFunction(() => document.documentElement.dataset.appReady === 'true', undefined, { timeout: 45_000 });
 }
 
-const required: Policy = { status: 'required', minimumVersion: '0.2.0', latestVersion: '0.3.0', downloadUrl: 'https://edorax.com/download', message: 'This release fixes a security problem.' };
-const ok: Policy = { status: 'ok', minimumVersion: '0.1.0', latestVersion: '0.1.0', downloadUrl: 'https://edorax.com/download', message: '' };
-const available: Policy = { status: 'available', minimumVersion: '0.1.0', latestVersion: '0.2.0', downloadUrl: 'https://edorax.com/download', message: '' };
+const required: Policy = { status: 'required', minimumVersion: '0.2.0', latestVersion: '0.3.0', downloadUrl: 'https://edorax.com/download', message: 'This release fixes a security problem.', blocked: false };
+const ok: Policy = { status: 'ok', minimumVersion: '0.1.0', latestVersion: '0.1.0', downloadUrl: 'https://edorax.com/download', message: '', blocked: false };
+const available: Policy = { status: 'available', minimumVersion: '0.1.0', latestVersion: '0.2.0', downloadUrl: 'https://edorax.com/download', message: '', blocked: false };
 
 test('a required update covers the whole app and nothing behind it can be used', async ({ page }) => {
   await open(page, required, ok);
@@ -84,6 +84,26 @@ test('a required update covers the whole app and nothing behind it can be used',
   await expect(dialog).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Labs', exact: true })).toBeVisible();
   expect(await page.evaluate(() => (window as unknown as { checks: number }).checks)).toBe(1);
+});
+
+// This app (0.1.0) is above the minimum but its exact version is on the blocked list.
+const blocked: Policy = { status: 'required', minimumVersion: '0.1.0', latestVersion: '0.4.0', downloadUrl: 'https://edorax.com/download', message: '', blocked: true };
+
+test('a blocked version says it has a known problem, not that it is out of date', async ({ page }) => {
+  await open(page, blocked, ok);
+  const dialog = page.getByRole('alertdialog', { name: 'Update required' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByText('This version (0.1.0) has a known problem. Install version 0.4.0 to continue.')).toBeVisible();
+  await expect(dialog.getByText('is out of date')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Labs', exact: true })).toHaveCount(0);
+  await dialog.getByRole('button', { name: 'Check again' }).click();
+  await expect(dialog).toHaveCount(0);
+});
+
+test('Check again on a blocked version says it still has a known problem', async ({ page }) => {
+  await open(page, blocked, blocked);
+  await page.getByRole('button', { name: 'Check again' }).click();
+  await expect(page.getByText('This version still has a known problem.')).toBeVisible();
 });
 
 test('Check again keeps the screen and says so while the version is still too old', async ({ page }) => {

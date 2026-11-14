@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { compareVersions, parseVersion, updateStatus } from '../src/domain/app-version';
+import { compareVersions, isBlockedByList, isBlockedVersion, parseVersion, updateStatus, validVersionList } from '../src/domain/app-version';
 
 test('parseVersion reads releases, prereleases and build info', () => {
   assert.deepEqual(parseVersion('0.1.0'), { major: 0, minor: 1, patch: 0, prerelease: [] });
@@ -71,4 +71,51 @@ test('updateStatus never locks anyone out on bad data', () => {
   assert.equal(updateStatus('0.1.0', policy('', '')), 'ok');
   assert.equal(updateStatus('0.1.0', null), 'ok');
   assert.equal(updateStatus('0.1.0', undefined), 'ok');
+});
+
+const withBlocked = (minimumVersion: string, latestVersion: string, blockedVersions: unknown[]) => ({ minimumVersion, latestVersion, blockedVersions });
+
+test('updateStatus: an exact match with a blocked version is required, others are not', () => {
+  assert.equal(updateStatus('0.2.0', withBlocked('0.1.0', '0.3.0', ['0.2.0'])), 'required');
+  assert.equal(updateStatus('0.2.1', withBlocked('0.1.0', '0.3.0', ['0.2.0'])), 'available');
+  assert.equal(updateStatus('0.3.0', withBlocked('0.1.0', '0.3.0', ['0.2.0'])), 'ok');
+  assert.equal(updateStatus('0.2.0-beta.1', withBlocked('0.1.0', '0.2.0', ['0.2.0'])), 'available', 'a prerelease is not its release');
+  assert.equal(updateStatus('0.2.0', withBlocked('0.1.0', '0.3.0', ['0.1.0', '0.2.0', '0.2.5'])), 'required');
+});
+
+test('updateStatus: build info is ignored when matching a blocked version', () => {
+  assert.equal(updateStatus('0.1.0', withBlocked('0.1.0', '0.1.0', ['0.1.0+build'])), 'required');
+  assert.equal(updateStatus('0.1.0+build.5', withBlocked('0.1.0', '0.1.0', ['0.1.0'])), 'required');
+  assert.equal(updateStatus('v0.1.0', withBlocked('0.1.0', '0.1.0', ['0.1.0'])), 'required');
+});
+
+test('updateStatus: a blocked version that is also the latest or the minimum still blocks', () => {
+  assert.equal(updateStatus('0.3.0', withBlocked('0.1.0', '0.3.0', ['0.3.0'])), 'required');
+  assert.equal(updateStatus('0.3.0', withBlocked('0.3.0', '0.3.0', ['0.3.0'])), 'required');
+});
+
+test('updateStatus: invalid blocked entries are ignored, valid ones still work', () => {
+  assert.equal(updateStatus('0.1.0', withBlocked('0.1.0', '0.1.0', ['garbage', '', null, 5, {}, '0.1'])), 'ok');
+  assert.equal(updateStatus('0.1.0', withBlocked('0.1.0', '0.1.0', ['garbage', null, '0.1.0'])), 'required');
+  assert.equal(updateStatus('0.1.0', withBlocked('0.1.0', '0.1.0', [])), 'ok');
+  assert.equal(updateStatus('0.1.0', { minimumVersion: '0.1.0', latestVersion: '0.1.0', blockedVersions: undefined }), 'ok');
+  assert.equal(updateStatus('0.1.0', { minimumVersion: '0.1.0', latestVersion: '0.1.0' }), 'ok', 'an older server sends none');
+  assert.equal(updateStatus('0.1.0', { minimumVersion: '0.1.0', latestVersion: '0.1.0', blockedVersions: 'nope' as never }), 'ok');
+  assert.equal(updateStatus('bad', withBlocked('0.1.0', '0.1.0', ['bad'])), 'ok', 'a bad app version is never blocked');
+});
+
+test('isBlockedVersion and isBlockedByList tell a blocked version from a too-old one', () => {
+  assert.equal(isBlockedVersion('0.2.0', ['0.2.0']), true);
+  assert.equal(isBlockedVersion('0.2.0', undefined), false);
+  assert.equal(isBlockedByList('0.2.0', withBlocked('0.1.0', '0.3.0', ['0.2.0'])), true);
+  assert.equal(isBlockedByList('0.2.0', withBlocked('0.5.0', '0.5.0', ['0.2.0'])), false, 'below the minimum is the other reason');
+  assert.equal(isBlockedByList('0.2.0', withBlocked('0.1.0', '0.3.0', [])), false);
+  assert.equal(isBlockedByList('0.2.0', null), false);
+});
+
+test('validVersionList keeps valid versions only', () => {
+  assert.deepEqual(validVersionList(['0.1.0', 'x', 3, null, '1.0.0+b']), ['0.1.0', '1.0.0+b']);
+  assert.deepEqual(validVersionList(undefined), []);
+  assert.deepEqual(validVersionList('0.1.0'), []);
+  assert.equal(validVersionList(Array.from({ length: 500 }, (_, i) => `1.0.${i}`)).length, 200);
 });
