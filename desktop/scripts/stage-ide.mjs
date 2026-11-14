@@ -20,7 +20,13 @@ export async function stageIde() {
   });
   await rm(target, { recursive: true, force: true });
   for (const entry of keep) {
-    await cp(path.join(source, entry), path.join(target, entry), {
+    const from = path.join(source, entry);
+    // plugins/ only exists after `pnpm --dir ide run download:plugins`; the app creates it if missing.
+    if (!(await stat(from).catch(() => null))) {
+      console.warn(`stage-ide: skipping missing ide/${entry}`);
+      continue;
+    }
+    await cp(from, path.join(target, entry), {
       recursive: true,
       filter: (file) => !skip(file),
     });
