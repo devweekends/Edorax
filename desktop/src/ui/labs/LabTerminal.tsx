@@ -13,6 +13,10 @@ export type TerminalAPI = Pick<
   'openTerminal' | 'closeTerminal' | 'terminalInput' | 'resizeTerminal' | 'onTerminalData'
 >;
 
+function terminalTheme(dark: boolean) {
+  return dark ? { background: '#15171c', foreground: '#e6e6e6' } : { background: '#ffffff', foreground: '#1f2937', cursor: '#1f2937' };
+}
+
 export function LabTerminal({
   blockId,
   onError,
@@ -31,9 +35,15 @@ export function LabTerminal({
 }) {
   const host = useRef<HTMLDivElement>(null);
   const [revision, setRevision] = useState(0);
-  const [dark] = useState(
-    () => window.matchMedia('(prefers-color-scheme: dark)').matches,
-  );
+  // The app has its own light/dark switch, which can differ from the computer's setting. Follow the app.
+  const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'));
+  const darkRef = useRef(dark);
+  darkRef.current = dark;
+  useEffect(() => {
+    const observer = new MutationObserver(() => setDark(document.documentElement.classList.contains('dark')));
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, []);
   const session = useRef<{ id: string; ready: boolean } | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const handled = useRef<number | null>(null);
@@ -77,9 +87,7 @@ export function LabTerminal({
       fontSize: 13,
       cursorBlink: true,
       convertEol: true,
-      theme: dark
-        ? { background: '#15171c', foreground: '#e6e6e6' }
-        : { background: '#ffffff', foreground: '#1f2937', cursor: '#1f2937' },
+      theme: terminalTheme(darkRef.current),
     });
     const fit = new FitAddon();
     terminal.loadAddon(fit);
@@ -141,7 +149,11 @@ export function LabTerminal({
       terminal.dispose();
       void api.closeTerminal(blockId, id).catch(() => {});
     };
-  }, [blockId, revision, dark, send, apiOverride]);
+  }, [blockId, revision, send, apiOverride]);
+  // Switching the app theme recolors the open terminal. It does not reopen it, so the shell and its history stay.
+  useEffect(() => {
+    if (terminalRef.current) terminalRef.current.options.theme = terminalTheme(dark);
+  }, [dark]);
   useEffect(() => {
     send();
   }, [send, runCommand]);
