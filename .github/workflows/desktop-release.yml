@@ -1,17 +1,22 @@
 name: Desktop release
 
-# Builds the Edorax desktop app for Windows, macOS and Linux and attaches the installers to a GitHub release.
+# Builds the Edorax desktop app for Windows, macOS and Linux.
+# Manual only for now: Actions tab -> "Desktop release" -> "Run workflow", then pick the branch.
 #
-# Make a release:   git tag desktop-v0.1.0 && git push origin desktop-v0.1.0
-# Try the builds:   run this workflow by hand (Actions tab). The installers are kept as workflow artifacts.
+#   publish = false (default)  build only; the installers are kept as workflow artifacts.
+#   publish = true             also tag the commit as desktop-v<version in desktop/package.json>
+#                              and attach the installers to a GitHub pre-release.
 #
 # The app carries no labs. It downloads them from the server after sign-in, so this workflow needs no secrets.
 # The installers are not code signed yet: Windows SmartScreen and macOS Gatekeeper will warn on first open.
 
 on:
-  push:
-    tags: ["desktop-v*"]
   workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish a GitHub pre-release (tag desktop-v<version>) after building"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -61,9 +66,20 @@ jobs:
   release:
     name: Publish release
     needs: make
-    if: startsWith(github.ref, 'refs/tags/desktop-v')
+    if: inputs.publish
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+      - name: Work out the tag from desktop/package.json
+        id: tag
+        run: |
+          version=$(node -p "require('./desktop/package.json').version")
+          tag="desktop-v${version}"
+          if git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null; then
+            echo "::error::Tag ${tag} already exists. Bump the version in desktop/package.json first."
+            exit 1
+          fi
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@v4
         with:
           path: dist
@@ -72,7 +88,9 @@ jobs:
         run: find dist -type f | sort
       - uses: softprops/action-gh-release@v2
         with:
-          name: Edorax desktop ${{ github.ref_name }}
+          tag_name: ${{ steps.tag.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: Edorax desktop ${{ steps.tag.outputs.tag }}
           # A first release stays a pre-release until it has been tried on all three systems.
           prerelease: true
           generate_release_notes: true

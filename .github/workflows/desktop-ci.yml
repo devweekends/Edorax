@@ -5,7 +5,7 @@ name: Desktop checks
 #   server/src/shared/**    code the desktop app imports from the server
 #   this workflow and the release workflow
 # A change to only the server, the web app or the docs does not start this workflow.
-# The release builds (Windows, macOS, Linux) are a separate workflow that runs on a tag or by hand.
+# The release builds (Windows, macOS, Linux) are a separate workflow that runs only by hand.
 
 on:
   pull_request:
