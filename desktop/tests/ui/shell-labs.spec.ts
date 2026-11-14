@@ -38,7 +38,7 @@ test('a shell lab teaches one step at a time, ticks live and lets the terminal m
     window.buildment = new Proxy(
       { authStatus: async () => ({ ok: true, data: { signedIn: true } }), listCourses: async () => ({ ok: true, courses: [] }), shellLabs } as Record<string, unknown>,
       { get: (target, key: string) => (key in target ? target[key] : quiet()) },
-    ) as typeof window.buildment;
+    ) as unknown as typeof window.buildment;
   }, data);
 
   page.on('console', (message) => message.type() === 'error' && console.log('PAGE ERROR:', message.text()));
@@ -46,19 +46,21 @@ test('a shell lab teaches one step at a time, ticks live and lets the terminal m
   await page.goto('/');
   await page.getByRole('button', { name: 'Labs', exact: true }).click();
   await page.getByRole('button', { name: 'Shell', exact: true }).click();
-  await expect(page.getByRole('button', { name: /Docker.*Coming soon/ })).toBeDisabled();
+  await expect(page.getByRole('button', { name: /^Docker/ })).toBeEnabled();
   await page.screenshot({ path: 'test-results/shell-hub.png' });
   await page.getByRole('button', { name: /^Linux/ }).click();
   await expect(page.getByRole('heading', { name: 'Linux labs' })).toBeVisible();
   await page.getByRole('button', { name: /Linux 101: first steps in the terminal/ }).click();
 
   // One step at a time: step 1 is open, its lesson and commands are there, later steps are locked.
-  await expect(page.getByText('Mission 1 of 4')).toBeVisible();
+  await expect(page.getByText(`Mission 1 of ${lab.steps.length}`)).toBeVisible();
   await expect(page.getByRole('heading', { name: lab.steps[0].goal })).toBeVisible();
   await expect(page.getByRole('heading', { name: lab.steps[1].goal })).toHaveCount(0);
   await expect(page.getByText('Learn first')).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Your mission' })).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Your briefing' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'What to do' })).toBeVisible();
+  // No briefing box and no character message box: just the task, what to do and what to get.
+  await expect(page.getByRole('region', { name: 'Message' })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Your briefing' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Type it' }).first()).toBeEnabled();
   await expect(page.getByRole('button', { name: /^Step 2, locked/ })).toBeDisabled();
   await page.screenshot({ path: 'test-results/shell-lab-step.png' });
@@ -69,7 +71,7 @@ test('a shell lab teaches one step at a time, ticks live and lets the terminal m
   await expect(page.getByText('What just happened')).toBeVisible();
   await page.screenshot({ path: 'test-results/shell-lab-win.png' });
   await page.getByRole('button', { name: 'Next step' }).first().click();
-  await expect(page.getByText('Mission 2 of 4')).toBeVisible();
+  await expect(page.getByText(`Mission 2 of ${lab.steps.length}`)).toBeVisible();
   await expect(page.getByRole('heading', { name: lab.steps[1].goal })).toBeVisible();
 
   // The terminal can float as a window, dock at the bottom and fill the area.
@@ -81,9 +83,9 @@ test('a shell lab teaches one step at a time, ticks live and lets the terminal m
   await expect(terminal).toHaveCSS('position', 'static');
   await page.screenshot({ path: 'test-results/shell-lab-bottom.png' });
   await page.getByRole('button', { name: 'Maximize terminal' }).click();
-  await expect(page.getByText('Mission 2 of 4')).toHaveCount(0);
+  await expect(page.getByText(`Mission 2 of ${lab.steps.length}`)).toHaveCount(0);
   await page.getByRole('button', { name: 'Show the steps again' }).click();
-  await expect(page.getByText('Mission 2 of 4')).toBeVisible();
+  await expect(page.getByText(`Mission 2 of ${lab.steps.length}`)).toBeVisible();
 });
 
 test('the first start shows the steps, a percent for a download and a live line for a build', async ({ page }) => {
@@ -121,7 +123,7 @@ test('the first start shows the steps, a percent for a download and a live line 
     window.buildment = new Proxy(
       { authStatus: async () => ({ ok: true, data: { signedIn: true } }), listCourses: async () => ({ ok: true, courses: [] }), shellLabs } as Record<string, unknown>,
       { get: (target, key: string) => (key in target ? target[key] : quiet()) },
-    ) as typeof window.buildment;
+    ) as unknown as typeof window.buildment;
   }, data);
 
   await page.goto('/');
@@ -148,4 +150,67 @@ test('the first start shows the steps, a percent for a download and a live line 
 
   await page.evaluate(() => (window as unknown as { finish: () => void }).finish());
   await expect(page.getByRole('progressbar')).toHaveCount(0);
+});
+
+test('a quiz step shows the text to read, takes an answer and never sees the right one', async ({ page }) => {
+  const quizStep = lab.steps.find((step) => step.quiz)!;
+  const quizView = data.view.stepList.find((step) => step.id === quizStep.id)!;
+  const before = lab.steps.slice(0, lab.steps.indexOf(quizStep)).map((step) => step.id);
+  await page.addInitScript(
+    ({ data, before, rightOption }) => {
+      const quiet = (): unknown =>
+        new Proxy(function () {}, {
+          get: (_target, key) => (key === 'then' ? (resolve?: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) => Promise.resolve({ ok: false, message: 'Not in this test', code: 'TEST' }).then(resolve, reject) : quiet()),
+          apply: () => quiet(),
+        });
+      try { localStorage.setItem('edorax:shell-labs:v1', JSON.stringify({ 'linux-101': before })); } catch { /* ignore */ }
+      const asked: number[] = [];
+      (window as unknown as { asked: number[] }).asked = asked;
+      const shellLabs = {
+        list: async () => data.summaries,
+        view: async () => data.view,
+        status: async () => ({ available: true, created: false, running: false, message: 'box1 is stopped' }),
+        start: async () => {}, stop: async () => {}, reset: async () => {},
+        check: async () => ({}), checkAll: async () => null,
+        openTerminal: async () => {}, closeTerminal: async () => {}, terminalInput: async () => {}, resizeTerminal: async () => {},
+        onTerminalData: () => () => {},
+        onStartProgress: () => () => {},
+        answer: async (_slug: string, _step: string, option: number) => {
+          asked.push(option);
+          return option === rightOption ? { correct: true, why: 'It is right because the main process said so.' } : { correct: false, why: '' };
+        },
+      };
+      window.buildment = new Proxy(
+        { authStatus: async () => ({ ok: true, data: { signedIn: true } }), listCourses: async () => ({ ok: true, courses: [] }), shellLabs } as Record<string, unknown>,
+        { get: (target, key: string) => (key in target ? target[key] : quiet()) },
+      ) as unknown as typeof window.buildment;
+    },
+    { data, before, rightOption: quizStep.quiz!.answer },
+  );
+
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Labs', exact: true }).click();
+  await page.getByRole('button', { name: 'Shell', exact: true }).click();
+  await page.getByRole('button', { name: /^Linux/ }).click();
+  await page.getByRole('button', { name: /Linux 101: first steps in the terminal/ }).click();
+
+  await expect(page.getByRole('heading', { name: quizStep.goal })).toBeVisible();
+  // The page got the question and the answers, and nothing that says which one is right.
+  expect(JSON.stringify(quizView)).not.toContain(quizStep.quiz!.why);
+  await expect(page.getByRole('group', { name: 'Question' })).toBeVisible();
+  if (quizStep.quiz!.show) await expect(page.getByLabel('Read this')).toBeVisible();
+  await expect(page.getByText('What to do')).toBeVisible();
+  await expect(page.getByText('Done when')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Check my answer' })).toBeDisabled();
+
+  const wrong = quizStep.quiz!.answer === 0 ? 1 : 0;
+  await page.getByRole('radio').nth(wrong).check();
+  await page.getByRole('button', { name: 'Check my answer' }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Not quite' })).toBeVisible();
+
+  await page.getByRole('radio').nth(quizStep.quiz!.answer).check();
+  await page.getByRole('button', { name: 'Check my answer' }).click();
+  await expect(page.getByText('It is right because the main process said so.')).toBeVisible();
+  await expect(page.getByRole('button', { name: /Next step|Finish lab/ }).first()).toBeVisible();
+  await page.screenshot({ path: 'test-results/shell-quiz.png' });
 });
