@@ -1,0 +1,80 @@
+name: Desktop release
+
+# Builds the Edorax desktop app for Windows, macOS and Linux and attaches the installers to a GitHub release.
+#
+# Make a release:   git tag desktop-v0.1.0 && git push origin desktop-v0.1.0
+# Try the builds:   run this workflow by hand (Actions tab). The installers are kept as workflow artifacts.
+#
+# The app carries no labs. It downloads them from the server after sign-in, so this workflow needs no secrets.
+# The installers are not code signed yet: Windows SmartScreen and macOS Gatekeeper will warn on first open.
+
+on:
+  push:
+    tags: ["desktop-v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: desktop-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  make:
+    name: Build ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: Linux, os: ubuntu-latest }
+          - { name: Windows, os: windows-latest }
+          - { name: macOS, os: macos-latest }
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: desktop/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      # The desktop build imports shared code from server/src/shared, which needs the server's packages.
+      - run: pnpm --dir ../server install --frozen-lockfile
+      - run: pnpm ide:setup
+      - run: pnpm make
+      - uses: actions/upload-artifact@v4
+        with:
+          name: edorax-desktop-${{ matrix.name }}
+          path: desktop/out/make/**
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    needs: make
+    if: startsWith(github.ref, 'refs/tags/desktop-v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: List what will be attached
+        run: find dist -type f | sort
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: Edorax desktop ${{ github.ref_name }}
+          # A first release stays a pre-release until it has been tried on all three systems.
+          prerelease: true
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            dist/**/*.exe
+            dist/**/*.nupkg
+            dist/**/RELEASES
+            dist/**/*.zip
