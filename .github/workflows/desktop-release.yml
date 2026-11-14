@@ -43,6 +43,10 @@ jobs:
           node-version: 22
           cache: pnpm
           cache-dependency-path: desktop/pnpm-lock.yaml
+      # The .deb and .rpm makers need these tools on the Linux runner.
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq fakeroot rpm
+        working-directory: .
       - run: pnpm install --frozen-lockfile
       # The desktop build imports shared code from server/src/shared, which needs the server's packages.
       - run: pnpm --dir ../server install --frozen-lockfile
@@ -78,3 +82,5 @@ jobs:
             dist/**/*.nupkg
             dist/**/RELEASES
             dist/**/*.zip
+            dist/**/*.deb
+            dist/**/*.rpm

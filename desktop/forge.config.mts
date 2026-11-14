@@ -2,6 +2,8 @@ import { preparePty } from './scripts/prepare-pty.mjs';
 import type { ForgeConfig } from '@electron-forge/shared-types';
 import { MakerSquirrel } from '@electron-forge/maker-squirrel';
 import { MakerZIP } from '@electron-forge/maker-zip';
+import { MakerDeb } from '@electron-forge/maker-deb';
+import { MakerRpm } from '@electron-forge/maker-rpm';
 import { VitePlugin } from '@electron-forge/plugin-vite';
 import { FusesPlugin } from '@electron-forge/plugin-fuses';
 import { FuseV1Options, FuseVersion } from '@electron/fuses';
@@ -22,6 +24,7 @@ const config: ForgeConfig = {
       !file.startsWith('/node_modules/node-pty') &&
       !file.startsWith('/node_modules/node-addon-api'),
     name: 'Edorax',
+    executableName: 'Edorax',
     icon: './assets/edorax',
     extraResource: [
       './assets/edorax.png',
@@ -35,9 +38,31 @@ const config: ForgeConfig = {
   rebuildConfig: { onlyModules: [] },
   makers: [
     new MakerSquirrel({}),
-    // Zip for every system. Linux uses the zip for now: the .deb and .rpm makers crash in this
-    // dependency layout (an old glob picks up the wrong minimatch), so they are left out until that is fixed.
+    // Zip for every system.
     new MakerZIP({}, ['darwin', 'win32', 'linux']),
+    // Debian and Ubuntu: `sudo apt install ./edorax_<version>_amd64.deb`. The package sets up the
+    // sandbox helper, the menu entry and the `edorax` command by itself. These makers take their
+    // settings directly (no `options` wrapper), and `electron-forge make --targets ...` ignores them.
+    new MakerDeb({
+      name: 'edorax',
+      productName: 'Edorax',
+      genericName: 'Learning app',
+      bin: 'Edorax',
+      maintainer: 'Edorax <support@edorax.com>',
+      homepage: 'https://www.edorax.com',
+      categories: ['Education', 'Development'],
+      icon: './assets/edorax.png',
+    }),
+    // Fedora and RHEL: `sudo dnf install ./edorax-<version>.x86_64.rpm`.
+    new MakerRpm({
+      name: 'edorax',
+      productName: 'Edorax',
+      genericName: 'Learning app',
+      bin: 'Edorax',
+      homepage: 'https://www.edorax.com',
+      categories: ['Education', 'Development'],
+      icon: './assets/edorax.png',
+    }),
   ],
   plugins: [
     new VitePlugin({
