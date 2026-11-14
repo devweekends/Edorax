@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { email, id, params } from "./common.js";
 import { changePasswordBody } from "./auth.js";
+import { isValidSemver } from "../utils/semver.js";
 
 export const orgIdParams = params("orgId");
 export const allocationParams = z.object({ orgId: id, courseId: id });
@@ -204,3 +205,52 @@ export const grantOrganizationCreditsBody = z.object({
 });
 export type GrantOrganizationCreditsBody = z.infer<typeof grantOrganizationCreditsBody>;
 
+
+/** Forced desktop updates: platforms and the fields to apply to each of them. */
+const desktopPlatform = z.enum(["darwin", "win32", "linux"], { message: 'platform must be "darwin", "win32" or "linux"' });
+const semverField = (name: string) =>
+  z
+    .string({ message: `${name} must be a version like 1.2.3` })
+    .refine((value) => value === value.trim() && isValidSemver(value), { message: `${name} must be a plain semver version like 1.2.3` });
+const httpsUrl = z
+  .string({ message: "downloadUrl must be an https URL" })
+  .trim()
+  .max(500, "downloadUrl must be 500 characters or fewer")
+  .refine(
+    (value) => {
+      try {
+        const url = new URL(value);
+        return url.protocol === "https:" && !url.username && !url.password;
+      } catch {
+        return false;
+      }
+    },
+    { message: "downloadUrl must be an https URL without a user name or password" }
+  );
+
+export const desktopUpdatesBody = z.object({
+  platforms: z
+    .array(desktopPlatform, { message: "platforms must be a list" })
+    .min(1, "platforms must list at least one platform")
+    .max(3, "platforms can list at most 3 platforms")
+    .refine((list) => new Set(list).size === list.length, { message: "platforms must not repeat a platform" }),
+  fields: z
+    .object(
+      {
+        minimumVersion: semverField("minimumVersion").optional(),
+        latestVersion: semverField("latestVersion").optional(),
+        downloadUrl: httpsUrl.optional(),
+        message: z.string({ message: "message must be text" }).trim().max(280, "message must be 280 characters or fewer").optional(),
+        blockedVersions: z
+          .array(semverField("blockedVersions"), { message: "blockedVersions must be a list of versions" })
+          .max(50, "blockedVersions can hold at most 50 versions")
+          .refine((list) => new Set(list).size === list.length, { message: "blockedVersions must not repeat a version" })
+          .optional(),
+      },
+      { message: "fields must be an object with the values to change" }
+    )
+    .refine((fields) => Object.values(fields).some((value) => value !== undefined), {
+      message: "fields must change at least one of minimumVersion, latestVersion, downloadUrl, message, blockedVersions",
+    }),
+});
+export type DesktopUpdatesBody = z.infer<typeof desktopUpdatesBody>;

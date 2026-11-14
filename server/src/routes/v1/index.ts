@@ -21,10 +21,15 @@ import eventRoutes from "./events.js";
 import publicRoutes from "./public.js";
 import certificateRoutes from "./certificates.js";
 import shellLabRoutes from "./shell-labs.js";
+import desktopRoutes from "./desktop.js";
+import { enforceDesktopMinVersion } from "../../middlewares/desktop-version.js";
 
 // First-party API, versioned. JSON routes use the { success, data } envelope;
 // the media route streams image bytes.
 const router = Router();
+
+// Before every route: an out-of-date desktop app gets 426 instead of an answer it cannot use.
+router.use(enforceDesktopMinVersion);
 
 router.use("/auth", authRoutes);
 router.use("/blocks", blockRoutes);
@@ -48,5 +53,6 @@ router.use("/events", eventRoutes);
 router.use("/public", publicRoutes);
 router.use("/certificates", certificateRoutes);
 router.use("/shell-labs", shellLabRoutes);
+router.use("/desktop", desktopRoutes);
 
 export default router;

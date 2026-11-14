@@ -91,6 +91,38 @@ With no labs imported, `version` is `""` and `labs` is `[]`.
 
 Deploy order: migrate first (`pnpm exec prisma migrate deploy`), then publish (`pnpm labs:publish`).
 
+## Desktop updates
+
+The desktop app can be forced to update, per platform (`darwin` = macOS, `win32` = Windows, `linux` = Linux). Platform admins manage the policy in the admin dashboard; it is stored in the `desktop_update_policies` table (one row per platform). A change takes effect at once on the instance that saved it and within 30 seconds on every other instance (policies are cached in memory for 30 seconds). A database error never blocks requests: the last cached policy, or the default policy, is used and the error is logged.
+
+Per platform: `minimumVersion`, `latestVersion`, `downloadUrl` (https, 500 characters max), `message` (280 characters max, optional) and `blockedVersions` (up to 50 exact versions). Versions are plain semver (`0.1.0`, `0.2.0-beta.1`), compared numerically (`0.10.0` is higher than `0.9.0`; `0.2.0-beta.1` is lower than `0.2.0`). A blocked version is refused even when it is above the minimum; it is compared as semver, so `0.1.0` and `0.1.0+build5` are the same version. `latestVersion` can not be lower than `minimumVersion`.
+
+**Default policy.** A platform without a saved row uses the default policy from these environment variables (validated at boot; an invalid version stops the server). The admin dashboard overrides them per platform.
+
+| Variable | Default | |
+|---|---|---|
+| `DESKTOP_MIN_VERSION` | `0.0.0` | oldest version allowed; `0.0.0` blocks nothing |
+| `DESKTOP_LATEST_VERSION` | same as min | newest released version |
+| `DESKTOP_DOWNLOAD_URL` | `https://github.com/devweekends/Edorax/releases/latest` | where to download |
+| `DESKTOP_UPDATE_MESSAGE` | empty | optional short text for the update screen |
+
+Endpoints:
+
+- `GET /api/v1/desktop/version?platform=darwin|win32|linux` (public, `Cache-Control: max-age=60`) returns `{ success, data: { minimumVersion, latestVersion, downloadUrl, message, blockedVersions } }` for that platform. A missing or unknown `platform` returns the default policy (with `blockedVersions: []`).
+- `GET /api/v1/admin/desktop-updates` (admin) returns `{ success, data: { policies } }`: always 3 entries in the order darwin, win32, linux, each `{ platform, minimumVersion, latestVersion, downloadUrl, message, blockedVersions, updatedAt, updatedBy, isDefault }`. `isDefault` is true (and `updatedAt`, `updatedBy` are `null`) when nothing is saved for the platform.
+- `PUT /api/v1/admin/desktop-updates` (admin) with `{ platforms: ["darwin", "linux"], fields: { minimumVersion?, latestVersion?, downloadUrl?, message?, blockedVersions? } }` applies the given fields to each listed platform in one transaction (a platform with no row starts from the default policy), records one audit entry (`desktop-update-policy.changed`, with from and to for each platform) and returns the same body as `GET`. A bad value answers `400` with a message that names the field.
+
+Headers the app sends on every request:
+
+- `X-Edorax-Desktop-Version: <semver>`
+- `X-Edorax-Desktop-Platform: darwin|win32|linux`
+
+The API answers `426` with `{ success: false, code: "DESKTOP_UPDATE_REQUIRED", message, data: { minimumVersion, latestVersion, downloadUrl, blockedVersions } }` when the version is lower than the platform's `minimumVersion` or is exactly one of its `blockedVersions`. A missing or unknown platform header uses the default policy.
+
+Never blocked: `GET /api/v1/desktop/version`, `GET /health`, requests without the version header (web app, old apps) and requests with an invalid version header.
+
+To force an update: publish the new release, then in the admin dashboard raise the minimum version (and the latest version) for the platforms that have it. To undo it, lower the minimum again. No deploy or restart is needed. Deploy order for this feature: migrate first (`pnpm exec prisma migrate deploy`).
+
 ## Commands
 
 | Command | |
