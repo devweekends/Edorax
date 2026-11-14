@@ -27,6 +27,39 @@ import { DockerSetup } from './DockerSetup';
 import { StartProgress } from './StartProgress';
 import { errorText, passedSteps, savePassedSteps } from './progress';
 
+/**
+ * The mission text. Lines that start with "1. ", "2. " ... become a numbered list, so the learner
+ * sees what to do as steps. Any other line is a plain paragraph. `code` spans work in both.
+ */
+function Steps({ text }: { text: string }) {
+  const blocks: { numbered: boolean; lines: string[] }[] = [];
+  for (const line of text.split('\n').map((item) => item.trim()).filter(Boolean)) {
+    const numbered = /^\d+\.\s/.test(line);
+    const last = blocks[blocks.length - 1];
+    if (last && last.numbered === numbered && numbered) last.lines.push(line.replace(/^\d+\.\s/, ''));
+    else blocks.push({ numbered, lines: [numbered ? line.replace(/^\d+\.\s/, '') : line] });
+  }
+  return (
+    <>
+      {blocks.map((block, index) =>
+        block.numbered ? (
+          <ol key={index} className="list-decimal space-y-1.5 pl-6 marker:font-semibold marker:text-primary">
+            {block.lines.map((line, item) => (
+              <li key={item} className="pl-1">
+                <Inline text={line} />
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p key={index}>
+            <Inline text={block.lines.join(' ')} />
+          </p>
+        ),
+      )}
+    </>
+  );
+}
+
 /** Plain text with `code` spans. */
 function Inline({ text }: { text: string }) {
   return (
@@ -229,8 +262,6 @@ export function ShellLabPage({ slug, onBack }: { slug: string; onBack: () => voi
           step={shown}
           index={steps.indexOf(shown)}
           total={steps.length}
-          scenario={view.scenario}
-          character={view.character}
           done={passed.includes(shown.id)}
           result={results[shown.id]}
           explained={Boolean(explained[shown.id])}
@@ -238,6 +269,11 @@ export function ShellLabPage({ slug, onBack }: { slug: string; onBack: () => voi
           running={running}
           busy={busy}
           onCheck={() => void check(shown.id)}
+          onAnswer={async (option) => {
+            const outcome = await api.answer(slug, shown.id, option);
+            if (outcome.correct) markPassed([shown.id]);
+            return outcome;
+          }}
           onHint={() => setHints((all) => ({ ...all, [shown.id]: (all[shown.id] ?? 0) + 1 }))}
           onType={(text) => setTyped({ text, nonce: Date.now(), submit: false })}
           onPrevious={steps.indexOf(shown) > 0 ? () => go(steps[steps.indexOf(shown) - 1].id) : undefined}
@@ -448,12 +484,98 @@ function Section({ icon, title, children }: { icon: ReactNode; title: string; ch
   );
 }
 
+/** A look-and-answer question. The page never knows the right answer: it asks the app and gets yes or no. */
+function Quiz({
+  stepId,
+  quiz,
+  done,
+  onAnswer,
+}: {
+  stepId: string;
+  quiz: { question: string; show?: string; options: string[] };
+  done: boolean;
+  onAnswer: (option: number) => Promise<{ correct: boolean; why: string }>;
+}) {
+  const [picked, setPicked] = useState<number | null>(null);
+  const [outcome, setOutcome] = useState<{ correct: boolean; why: string } | null>(null);
+  const [asking, setAsking] = useState(false);
+  async function submit() {
+    if (picked === null || asking) return;
+    setAsking(true);
+    try {
+      setOutcome(await onAnswer(picked));
+    } finally {
+      setAsking(false);
+    }
+  }
+  const solved = done || outcome?.correct;
+  return (
+    <fieldset className="space-y-3" aria-label="Question">
+      <legend className="text-[16px] font-medium leading-relaxed text-foreground">
+        <Inline text={quiz.question} />
+      </legend>
+      {quiz.show && (
+        <pre aria-label="Read this" className="overflow-x-auto rounded-lg bg-zinc-950 p-3 font-mono text-xs leading-relaxed text-zinc-100">
+          {quiz.show}
+        </pre>
+      )}
+      <div className="space-y-2" role="radiogroup" aria-label="Answers">
+        {quiz.options.map((option, index) => (
+          <label
+            key={index}
+            className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 text-[15px] leading-relaxed ${
+              picked === index ? 'border-primary bg-primary/10' : 'border-border bg-card hover:border-primary/60'
+            } ${solved ? 'pointer-events-none opacity-80' : ''}`}
+          >
+            <input
+              type="radio"
+              name={`quiz-${stepId}`}
+              className="mt-1.5"
+              checked={picked === index}
+              disabled={Boolean(solved)}
+              onChange={() => {
+                setPicked(index);
+                setOutcome(null);
+              }}
+            />
+            <span>
+              <Inline text={option} />
+            </span>
+          </label>
+        ))}
+      </div>
+      {!solved && (
+        <button
+          type="button"
+          onClick={() => void submit()}
+          disabled={picked === null || asking}
+          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+        >
+          {asking ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />} Check my answer
+        </button>
+      )}
+      {outcome && !outcome.correct && (
+        <p role="alert" className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-foreground">
+          <Lightbulb size={16} className="mt-0.5 shrink-0 text-amber-600" /> Not quite. Read the lines again, then try another answer.
+        </p>
+      )}
+      {outcome?.correct && outcome.why && (
+        <p className="flex items-start gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-foreground">
+          <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-emerald-600" />
+          <span>
+            <span className="font-semibold">Right. </span>
+            <Inline text={outcome.why} />
+          </span>
+        </p>
+      )}
+    </fieldset>
+  );
+}
+
 function StepView({
   step,
   index,
   total,
-  scenario,
-  character,
   done,
   result,
   explained,
@@ -461,6 +583,7 @@ function StepView({
   running,
   busy,
   onCheck,
+  onAnswer,
   onHint,
   onType,
   onPrevious,
@@ -469,8 +592,6 @@ function StepView({
   step: Step;
   index: number;
   total: number;
-  scenario: string;
-  character?: ShellLabView['character'];
   done: boolean;
   result?: ShellStepResult;
   explained: boolean;
@@ -478,6 +599,7 @@ function StepView({
   running: boolean;
   busy: string | null;
   onCheck: () => void;
+  onAnswer: (option: number) => Promise<{ correct: boolean; why: string }>;
   onHint: () => void;
   onType: (text: string) => void;
   onPrevious?: () => void;
@@ -493,32 +615,10 @@ function StepView({
         <Inline text={step.goal} />
       </h2>
 
-      {(index === 0 || step.story) && (
-        <section className="mt-4 overflow-hidden rounded-2xl border border-border bg-card shadow-sm" aria-label={index === 0 ? 'Your briefing' : 'Message'}>
-          {index === 0 && (
-            <div className="border-b border-border bg-gradient-to-br from-primary/10 via-card to-card px-5 py-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">Your briefing</p>
-              <p className="mt-1.5 text-[16px] leading-relaxed text-foreground">
-                <Inline text={scenario} />
-              </p>
-            </div>
-          )}
-          {step.story && (
-            <div className="flex items-start gap-3 px-5 py-4" aria-label={character ? `Message from ${character.name}` : 'Message'}>
-              <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground" aria-hidden>
-                {(character?.name ?? '?').slice(0, 1)}
-              </span>
-              <div className="min-w-0 flex-1 text-[16px] leading-relaxed text-foreground">
-                {character && (
-                  <p className="mb-0.5 text-xs font-semibold text-muted-foreground">
-                    {character.name} <span className="font-normal">· {character.role}</span>
-                  </p>
-                )}
-                <Inline text={step.story} />
-              </div>
-            </div>
-          )}
-        </section>
+      {step.about && (
+        <p className="mt-3 text-[16px] leading-relaxed text-muted-foreground">
+          <Inline text={step.about} />
+        </p>
       )}
 
       {done && (
@@ -548,17 +648,28 @@ function StepView({
       )}
 
 
-      <section className="mt-5 overflow-hidden rounded-2xl border border-primary/30 bg-primary/[0.04]" aria-label="Your mission">
+      <section className="mt-5 overflow-hidden rounded-2xl border border-primary/30 bg-primary/[0.04]" aria-label="What to do">
         <div className="border-b border-primary/15 bg-primary/[0.06] px-5 py-3">
           <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">
-            <Target size={13} /> Your mission
+            <Target size={13} /> What to do
           </p>
         </div>
         <div className="space-y-4 px-5 py-4">
-          <p className="text-[16px] leading-relaxed text-foreground">
-            <Inline text={step.body} />
-          </p>
-          <div>
+          <div className="space-y-3 text-[16px] leading-relaxed text-foreground">
+            <Steps text={step.body} />
+          </div>
+          {step.expected && !step.quiz && (
+            <div>
+              <p className="mb-1.5 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                <Target size={13} /> What you should get
+              </p>
+              <p className="text-[15px] leading-relaxed text-foreground/90">
+                <Inline text={step.expected} />
+              </p>
+            </div>
+          )}
+          {step.quiz && <Quiz stepId={step.id} quiz={step.quiz} done={done} onAnswer={onAnswer} />}
+          {!step.quiz && (<div>
             <p className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
               <ListChecks size={13} /> Done when
             </p>
@@ -595,7 +706,7 @@ function StepView({
           </div>
         )}
             {!running && <p className="mt-2 text-xs text-muted-foreground">Start the machine and these tick themselves as you work.</p>}
-          </div>
+          </div>)}
         </div>
       </section>
 
@@ -680,7 +791,7 @@ function StepView({
             <button onClick={onNext} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">
               {last ? 'Finish lab' : 'Next step'} <ArrowRight size={15} />
             </button>
-          ) : (
+          ) : step.quiz ? null : (
             <button
               disabled={!running || Boolean(busy)}
               onClick={onCheck}

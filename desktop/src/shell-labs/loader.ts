@@ -70,6 +70,12 @@ export function loadShellLabs(dir: string = shellLabsDir()): LoadedShellLabs {
         throw new Error(
           `the file says slug "${lab?.slug}", expected "${slug}"`,
         );
+      // A quiz step has no checks and no solution in the YAML: give the rest of the app empty ones.
+      if (Array.isArray(lab?.steps))
+        for (const step of lab.steps) {
+          step.checks ??= [];
+          step.solution ??= '';
+        }
       const problems = validateShellLab(lab);
       if (problems.length) throw new Error(problems.join('; '));
       labs.push(lab);

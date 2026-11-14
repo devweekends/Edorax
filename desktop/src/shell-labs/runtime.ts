@@ -603,6 +603,15 @@ rm -f /tmp/install.log`;
     });
   }
 
+  /** Checks a quiz answer. The right answer stays here; the page only learns whether its choice was right. */
+  answer(stepId: unknown, option: unknown): { correct: boolean; why: string } {
+    const quiz = this.lab.steps.find((item) => item.id === stepId)?.quiz;
+    if (!quiz) throw new Error('This step has no question.');
+    if (!Number.isInteger(option) || (option as number) < 0 || (option as number) >= quiz.options.length) throw new Error('Pick one of the answers.');
+    const correct = option === quiz.answer;
+    return { correct, why: correct ? quiz.why : '' };
+  }
+
   check(stepId: unknown): Promise<ShellStepResult> {
     const step = this.lab.steps.find((item) => item.id === stepId);
     if (!step) return Promise.reject(new Error('Unknown lab step.'));
@@ -663,7 +672,8 @@ rm -f /tmp/install.log`;
         const passed = passedAll.get(all.findIndex((item) => item.check === check)) === true;
         return { id: check.id, label: check.label, passed, message: passed ? '' : check.fail };
       });
-      return { stepId: step.id, passed: checks.every((check) => check.passed), checks };
+      // A quiz step has no checks to run: it passes when the learner answers it, not by the machine.
+      return { stepId: step.id, passed: step.quiz ? false : checks.every((check) => check.passed), checks };
     });
     // Only a failing step is asked about its listed mistakes, so a passing lab costs nothing extra.
     const failing = results.filter((result) => !result.passed && steps.find((step) => step.id === result.stepId)?.mistakes?.length);
