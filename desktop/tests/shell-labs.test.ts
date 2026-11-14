@@ -161,3 +161,24 @@ test('the validator checks extra machines, resource limits and where a check run
   assert.match(problems, /"db9", which is not a machine/);
   assert.match(problems, /at most 4 extra machines/);
 });
+
+test('a virtual machine lab gets the KVM device and nothing else, and others do not', () => {
+  const lab = { ...SHELL_LABS[0], machine: { ...SHELL_LABS[0].machine, vm: true, image: 'edorax-labvm:1', memoryMb: 3072, cpus: 2 } } as ShellLab;
+  const options = shellContainerOptions(lab, 'user:shell:vm');
+  assert.deepEqual(options.HostConfig.Devices, [{ PathOnHost: '/dev/kvm', PathInContainer: '/dev/kvm', CgroupPermissions: 'rwm' }]);
+  assert.deepEqual(options.HostConfig.CapDrop, ['ALL']);
+  assert.equal(options.HostConfig.NetworkMode, 'none');
+  assert.ok(options.HostConfig.SecurityOpt.includes('no-new-privileges:true'));
+  assert.equal('Cmd' in options, false, 'the image runs the hypervisor itself');
+  const plain = shellContainerOptions(SHELL_LABS[0], 'user:shell:plain');
+  assert.equal('Devices' in plain.HostConfig, false);
+  assert.deepEqual(plain.Cmd, ['sleep', 'infinity']);
+});
+
+test('the validator keeps virtual machine settings apart from container settings', () => {
+  const vm = { ...SHELL_LABS[0], machine: { ...SHELL_LABS[0].machine, packages: undefined, build: undefined, vm: true, image: 'edorax-labvm:1', memoryMb: 3072, cpus: 2 } } as ShellLab;
+  assert.deepEqual(validateShellLab(vm), []);
+  assert.match(validateShellLab({ ...vm, machine: { ...vm.machine, packages: ['curl'] } } as ShellLab).join(' '), /cannot install packages/);
+  assert.match(validateShellLab({ ...vm, machine: { ...vm.machine, sudo: true } } as ShellLab).join(' '), /capabilities or sudo/);
+  assert.match(validateShellLab({ ...SHELL_LABS[0], machine: { ...SHELL_LABS[0].machine, memoryMb: 3072 } } as ShellLab).join(' '), /only for virtual machine labs/);
+});

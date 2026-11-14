@@ -99,6 +99,12 @@ export interface ShellMachine {
    * and few capabilities.
    */
   sudo?: boolean;
+  /**
+   * Run this machine as a small virtual machine (QEMU with KVM) inside the container, so the lab has a real
+   * kernel and can run its own Docker engine. The image must be the Edorax lab VM image. The virtual machine
+   * has no network and the container no extra capabilities. Needs /dev/kvm on the learner's computer.
+   */
+  vm?: boolean;
 }
 
 /** An extra machine on the lab's private network. The learner's terminal always opens on the main `machine`. */
@@ -113,7 +119,9 @@ export interface ShellExtraMachine extends ShellMachine {
 
 export const SHELL_MAX_EXTRA_MACHINES = 4;
 
-export const SHELL_MACHINE_LIMITS = { memoryMb: [128, 2048], pids: [32, 1024], cpus: [0.5, 2] } as const;
+export const SHELL_MACHINE_LIMITS = { memoryMb: [128, 4096], pids: [32, 1024], cpus: [0.5, 2] } as const;
+/** Memory above this is only for virtual machine labs, which hold a whole guest system. */
+export const SHELL_CONTAINER_MEMORY_MB = 2048;
 
 /** Capabilities a lab may ask for on top of the default set, and why each is safe here. */
 export const SHELL_LAB_EXTRA_CAPABILITIES: readonly string[] = [
@@ -324,6 +332,11 @@ export function validateShellLab(lab: ShellLab): string[] {
       if (value !== undefined && !(typeof value === 'number' && value >= low && value <= high)) problems.push(`machine "${extra.name}": ${key} must be a number from ${low} to ${high}`);
     }
   }
+  if (lab.machine.vm) {
+    if (lab.machine.packages?.length || lab.machine.build?.trim()) problems.push('a virtual machine lab cannot install packages or run a build script: they belong in the VM image');
+    if (lab.machine.capabilities?.length || lab.machine.sudo) problems.push('a virtual machine lab cannot ask for capabilities or sudo');
+    if (lab.machines?.length) problems.push('a virtual machine lab cannot have extra machines');
+  } else if ((lab.machine.memoryMb ?? 0) > SHELL_CONTAINER_MEMORY_MB) problems.push(`machine.memoryMb above ${SHELL_CONTAINER_MEMORY_MB} is only for virtual machine labs`);
   for (const [key, [low, high]] of Object.entries(SHELL_MACHINE_LIMITS) as [keyof typeof SHELL_MACHINE_LIMITS, readonly [number, number]][]) {
     const value = lab.machine[key];
     if (value !== undefined && !(typeof value === 'number' && value >= low && value <= high)) problems.push(`machine.${key} must be a number from ${low} to ${high}`);

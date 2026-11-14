@@ -38,7 +38,7 @@ test('a shell lab teaches one step at a time, ticks live and lets the terminal m
     window.buildment = new Proxy(
       { authStatus: async () => ({ ok: true, data: { signedIn: true } }), listCourses: async () => ({ ok: true, courses: [] }), shellLabs } as Record<string, unknown>,
       { get: (target, key: string) => (key in target ? target[key] : quiet()) },
-    ) as typeof window.buildment;
+    ) as unknown as typeof window.buildment;
   }, data);
 
   page.on('console', (message) => message.type() === 'error' && console.log('PAGE ERROR:', message.text()));
@@ -121,7 +121,7 @@ test('the first start shows the steps, a percent for a download and a live line 
     window.buildment = new Proxy(
       { authStatus: async () => ({ ok: true, data: { signedIn: true } }), listCourses: async () => ({ ok: true, courses: [] }), shellLabs } as Record<string, unknown>,
       { get: (target, key: string) => (key in target ? target[key] : quiet()) },
-    ) as typeof window.buildment;
+    ) as unknown as typeof window.buildment;
   }, data);
 
   await page.goto('/');
