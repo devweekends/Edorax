@@ -39,8 +39,9 @@ import { OfflineStore, type DownloadedCourse, prepareEncryption } from './offlin
 import { LabRuntime, localDocker } from './labs/runtime';
 import { ShellLabRuntime } from './shell-labs/runtime';
 import { defaultDownloadsDir, dockerReadiness, setUpDocker, startDockerDesktop } from './shell-labs/docker-setup';
-import { SHELL_LABS, getShellLab } from './shell-labs/catalog';
-import { shellLabSummary, shellLabView } from './domain/shell-labs';
+import { configureShellLabs, getShellLab, getShellLabs, refreshShellLabs } from './shell-labs/catalog';
+import { devShellLabsDir } from './shell-labs/loader';
+import { shellLabSummary, shellLabView, type ShellLabsRefresh } from './domain/shell-labs';
 
 let ideController: ReturnType<typeof installIDE> | undefined;
 const locals = new Map<string, LocalRuntime>();
@@ -54,6 +55,24 @@ function disposeLabs() {
   locals.clear();
   for (const shell of shellLabs.values()) shell.dispose();
   shellLabs.clear();
+}
+/**
+ * Downloads newer shell labs when the server has them. Never throws. A running lab keeps the lab
+ * object it started with; new definitions apply to labs opened afterwards. Runtimes with no terminal
+ * attached are dropped for labs whose definition changed, so the next open uses the new one.
+ */
+async function refreshLabsFromServer(): Promise<ShellLabsRefresh> {
+  const { changed, ...answer } = await refreshShellLabs(async (apiPath) =>
+    previewClient.sessionSnapshot()
+      ? previewClient.request(apiPath, 'GET')
+      : { ok: false, code: 'AUTH_REQUIRED', message: 'Sign in to download labs.' },
+  );
+  for (const [scope, runtime] of shellLabs)
+    if (changed.some((slug) => scope.endsWith(`:shell:${slug}`)) && runtime.idle()) {
+      runtime.dispose();
+      shellLabs.delete(scope);
+    }
+  return answer;
 }
 async function shellLabRuntime(slug: unknown) {
   const lab = getShellLab(slug);
@@ -560,6 +579,12 @@ else {
     await offline.open();
     const saved = offline.session();
     if (saved) previewClient.restoreSession(saved);
+    // Labs: the saved copy first, else the development folder; then ask the server without waiting.
+    configureShellLabs({
+      cacheFile: path.join(app.getPath('userData'), 'shell-labs.json'),
+      devDir: devShellLabsDir(),
+    });
+    void refreshLabsFromServer();
     app.setAboutPanelOptions({
       applicationName: 'Edorax',
       applicationVersion: app.getVersion(),
@@ -713,7 +738,11 @@ else {
     });
     ipcMain.handle('shell-labs:list', (event) => {
       requireRenderer(event);
-      return SHELL_LABS.map(shellLabSummary);
+      return getShellLabs().map(shellLabSummary);
+    });
+    ipcMain.handle('shell-labs:refresh', (event) => {
+      requireRenderer(event);
+      return refreshLabsFromServer();
     });
     ipcMain.handle('shell-labs:view', (event, slug) => {
       requireRenderer(event);
@@ -929,6 +958,7 @@ else {
           );
         }
       }
+      if (result.ok) void refreshLabsFromServer();
       if (result.ok && mainWindow) {
         mainWindow.show();
         mainWindow.focus();

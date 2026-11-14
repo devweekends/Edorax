@@ -67,6 +67,7 @@ const api: DesktopAPI = {
       };
     },
     list: () => ipcRenderer.invoke('shell-labs:list'),
+    refresh: () => ipcRenderer.invoke('shell-labs:refresh'),
     view: (slug) => ipcRenderer.invoke('shell-labs:view', slug),
     status: (slug) => ipcRenderer.invoke('shell-labs:status', slug),
     start: (slug) => ipcRenderer.invoke('shell-labs:start', slug),

@@ -1,5 +1,5 @@
-// Shell labs are content, and Edorax Core owns them (labs/shell/*.yaml there). The app reads
-// them from a folder: this file turns that folder into validated labs. A lab that fails
+// Shell labs are content, and Edorax Core owns them (labs/shell/*.yaml there). The server hands them
+// to the app; for development and tests this file also turns a folder of YAML into validated labs. A lab that fails
 // validation is skipped and named in the error list, so one bad file cannot hide the others.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -13,25 +13,32 @@ export interface LoadedShellLabs {
 }
 
 /**
- * Where the labs are. In order: EDORAX_LABS_DIR (for testing a Core checkout directly), the folder
- * packaged with the app, then desktop/labs/shell (copied from Core by `pnpm sync:labs`).
+ * The development folder of labs, or null when there is none: EDORAX_LABS_DIR (for testing a Core
+ * checkout directly), else desktop/labs/shell (copied from Core by `pnpm sync:labs`). The installed
+ * app has no such folder: its labs come from the server (see catalog.ts).
  */
-export function shellLabsDir(): string {
+export function devShellLabsDir(): string | null {
   const candidates = [
     process.env.EDORAX_LABS_DIR,
-    (process as { resourcesPath?: string }).resourcesPath &&
-      path.join(
-        (process as { resourcesPath?: string }).resourcesPath!,
-        'labs',
-        'shell',
-      ),
     path.resolve(__dirname, '..', '..', 'labs', 'shell'),
     path.resolve(__dirname, '..', 'labs', 'shell'),
   ].filter((item): item is string => Boolean(item));
-  return (
-    candidates.find((dir) => fs.existsSync(path.join(dir, 'index.yaml'))) ??
-    candidates[candidates.length - 1]
-  );
+  return candidates.find((dir) => fs.existsSync(path.join(dir, 'index.yaml'))) ?? null;
+}
+
+/** The folder the loader reads by default, used by tests and tools. Falls back to a path that names the problem. */
+export function shellLabsDir(): string {
+  return devShellLabsDir() ?? path.resolve(__dirname, '..', '..', 'labs', 'shell');
+}
+
+/** A quiz step has no checks and no solution in the YAML or the server data: give the rest of the app empty ones. */
+export function normalizeShellLab(lab: ShellLab): ShellLab {
+  if (Array.isArray(lab?.steps))
+    for (const step of lab.steps) {
+      step.checks ??= [];
+      step.solution ??= '';
+    }
+  return lab;
 }
 
 export function loadShellLabs(dir: string = shellLabsDir()): LoadedShellLabs {
@@ -70,12 +77,7 @@ export function loadShellLabs(dir: string = shellLabsDir()): LoadedShellLabs {
         throw new Error(
           `the file says slug "${lab?.slug}", expected "${slug}"`,
         );
-      // A quiz step has no checks and no solution in the YAML: give the rest of the app empty ones.
-      if (Array.isArray(lab?.steps))
-        for (const step of lab.steps) {
-          step.checks ??= [];
-          step.solution ??= '';
-        }
+      normalizeShellLab(lab);
       const problems = validateShellLab(lab);
       if (problems.length) throw new Error(problems.join('; '));
       labs.push(lab);

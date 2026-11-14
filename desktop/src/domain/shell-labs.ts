@@ -292,6 +292,17 @@ export interface ShellStartProgress {
   stepStartedAt: number;
 }
 
+export interface ShellLabsRefresh {
+  /** False when the server could not be asked or answered badly. The labs already loaded stay. */
+  ok: boolean;
+  /** True when a newer list was downloaded. */
+  updated: boolean;
+  /** How many labs the app holds now. */
+  count: number;
+  /** A plain sentence for the learner, such as "Sign in to download labs." Empty when there is nothing to say. */
+  message: string;
+}
+
 export interface ShellLabsAPI {
   /** Is Docker ready for labs, installed but closed, or missing? */
   dockerState(): Promise<DockerReadiness>;
@@ -301,6 +312,8 @@ export interface ShellLabsAPI {
   setUpDocker(): Promise<DockerSetupProgress>;
   onDockerProgress(listener: (progress: DockerSetupProgress) => void): () => void;
   list(): Promise<ShellLabSummary[]>;
+  /** Asks the server for newer labs and saves them on this computer. Never rejects: a failure comes back as a plain message. */
+  refresh(): Promise<ShellLabsRefresh>;
   view(slug: string): Promise<ShellLabView>;
   status(slug: string): Promise<ShellLabStatus>;
   start(slug: string): Promise<void>;

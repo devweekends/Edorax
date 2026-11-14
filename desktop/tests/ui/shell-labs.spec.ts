@@ -1,6 +1,8 @@
 import { test, expect } from '@playwright/test';
-import { SHELL_LABS } from '../../src/shell-labs/catalog';
+import { loadShellLabs } from '../../src/shell-labs/loader';
 import { shellLabSummary, shellLabView } from '../../src/domain/shell-labs';
+
+const SHELL_LABS = loadShellLabs().labs;
 
 const lab = SHELL_LABS.find((item) => item.slug === 'linux-101')!;
 const data = { summaries: SHELL_LABS.map(shellLabSummary), view: shellLabView(lab) };
@@ -22,6 +24,7 @@ test('a shell lab teaches one step at a time, ticks live and lets the terminal m
     });
     const shellLabs = {
       list: async () => data.summaries,
+      refresh: async () => ({ ok: true, updated: false, count: data.summaries.length, message: '' }),
       view: async () => data.view,
       status: async () => ({ available: true, created: true, running: true, message: 'box1 is running' }),
       start: async () => {},
@@ -103,6 +106,7 @@ test('the first start shows the steps, a percent for a download and a live line 
     let running = false;
     const shellLabs = {
       list: async () => data.summaries,
+      refresh: async () => ({ ok: true, updated: false, count: data.summaries.length, message: '' }),
       view: async () => data.view,
       status: async () => ({ available: true, created: running, running, message: 'box1' }),
       start: () => new Promise<void>((resolve) => (release = () => { running = true; resolve(); })),
@@ -168,6 +172,7 @@ test('a quiz step shows the text to read, takes an answer and never sees the rig
       (window as unknown as { asked: number[] }).asked = asked;
       const shellLabs = {
         list: async () => data.summaries,
+        refresh: async () => ({ ok: true, updated: false, count: data.summaries.length, message: '' }),
         view: async () => data.view,
         status: async () => ({ available: true, created: false, running: false, message: 'box1 is stopped' }),
         start: async () => {}, stop: async () => {}, reset: async () => {},
@@ -213,4 +218,70 @@ test('a quiz step shows the text to read, takes an answer and never sees the rig
   await expect(page.getByText('It is right because the main process said so.')).toBeVisible();
   await expect(page.getByRole('button', { name: /Next step|Finish lab/ }).first()).toBeVisible();
   await page.screenshot({ path: 'test-results/shell-quiz.png' });
+});
+
+/** A page whose shell labs arrive only after refresh, like a first start. `plan` says what each refresh answers. */
+async function openShellTab(
+  page: import('@playwright/test').Page,
+  data: unknown[],
+  plan: { ok: boolean; message: string; labs: boolean }[],
+) {
+  await page.addInitScript(
+    ({ summaries, plan }) => {
+      const quiet = (): unknown =>
+        new Proxy(function () {}, {
+          get: (_target, key) => (key === 'then' ? (resolve?: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) => Promise.resolve({ ok: false, message: 'Not in this test', code: 'TEST' }).then(resolve, reject) : quiet()),
+          apply: () => quiet(),
+        });
+      let held: unknown[] = [];
+      const calls = { refresh: 0 };
+      (window as unknown as { calls: typeof calls }).calls = calls;
+      const shellLabs = {
+        list: async () => held,
+        refresh: async () => {
+          const step = plan[Math.min(calls.refresh++, plan.length - 1)];
+          await new Promise((resolve) => setTimeout(resolve, 150));
+          if (step.labs) held = summaries;
+          return { ok: step.ok, updated: step.labs, count: held.length, message: step.message };
+        },
+      };
+      window.buildment = new Proxy(
+        { authStatus: async () => ({ ok: true, data: { signedIn: true } }), listCourses: async () => ({ ok: true, courses: [] }), shellLabs } as Record<string, unknown>,
+        { get: (target, key: string) => (key in target ? target[key] : quiet()) },
+      ) as unknown as typeof window.buildment;
+    },
+    { summaries: data, plan },
+  );
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Labs', exact: true }).click();
+  await page.getByRole('button', { name: 'Shell', exact: true }).click();
+}
+
+test('with no labs yet the Shell tab explains it and Try again downloads them', async ({ page }) => {
+  await openShellTab(page, data.summaries, [
+    { ok: false, message: 'Sign in to download labs.', labs: false },
+    { ok: true, message: '', labs: true },
+  ]);
+  await expect(page.getByText('Updating labs...')).toBeVisible();
+  await expect(page.getByText('Labs download the first time you are online and signed in. Connect, sign in, then press Try again.')).toBeVisible();
+  await expect(page.getByText('Sign in to download labs.')).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Linux/ })).toBeDisabled();
+  await page.screenshot({ path: 'test-results/shell-hub-empty.png' });
+
+  await page.getByRole('button', { name: 'Try again' }).click();
+  await expect(page.getByText('Updating labs...')).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Linux/ })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Try again' })).toHaveCount(0);
+  await expect(page.getByText('Sign in to download labs.')).toHaveCount(0);
+  const linux = data.summaries.filter((item) => item.topic === 'linux');
+  await expect(page.getByRole('button', { name: /^Linux/ })).toContainText(`${linux.length} labs`);
+  expect(await page.evaluate(() => (window as unknown as { calls: { refresh: number } }).calls.refresh)).toBe(2);
+});
+
+test('when the refresh fails but labs are saved, the list stays with a small plain message', async ({ page }) => {
+  await openShellTab(page, data.summaries, [{ ok: false, message: 'You are offline. Showing the labs saved on this computer.', labs: true }]);
+  await expect(page.getByText('You are offline. Showing the labs saved on this computer.')).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Linux/ })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Try again' })).toHaveCount(0);
+  await page.screenshot({ path: 'test-results/shell-hub-offline.png' });
 });
