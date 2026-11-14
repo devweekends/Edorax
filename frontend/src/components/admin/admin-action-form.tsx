@@ -43,6 +43,7 @@ export function AdminActionForm({
   buttonClassName,
   feedbackClassName,
   confirm,
+  icon,
 }: {
   action: (state: AdminActionState, formData: FormData) => Promise<AdminActionState>;
   children?: React.ReactNode;
@@ -55,6 +56,8 @@ export function AdminActionForm({
   buttonClassName?: string;
   feedbackClassName?: string;
   confirm?: Confirmation;
+  /** Renders an icon-only button; `submitLabel` becomes its accessible name and tooltip. */
+  icon?: React.ReactNode;
 }) {
   const [state, formAction] = useActionState(action, initial);
   const formRef = useRef<HTMLFormElement>(null);
@@ -102,8 +105,10 @@ export function AdminActionForm({
         // open. The confirm step validates instead.
         formNoValidate={confirm ? true : undefined}
         loadingLabel={pendingLabel ?? submitLabel}
+        aria-label={icon ? submitLabel : undefined}
+        title={icon ? submitLabel : undefined}
       >
-        {submitLabel}
+        {icon ?? submitLabel}
       </Button>
 
       {state.message ? (

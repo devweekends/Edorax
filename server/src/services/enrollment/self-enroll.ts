@@ -9,7 +9,7 @@ import { SelfEnrollmentError, createSelfEnrollment } from "./create-self-enrollm
 export async function selfEnroll(userId: string, courseId: string, couponCode?: string): Promise<SelfEnrollResult> {
   try {
     const result = await createSelfEnrollment(prisma, { userId, courseId, couponCode });
-    if (result.created) await dispatchNotification(() => notifyMentorNewEnrollment(result.enrollmentId));
+    if (result.created && !result.ownCourse) await dispatchNotification(() => notifyMentorNewEnrollment(result.enrollmentId));
     return result;
   } catch (error) {
     if (!(error instanceof SelfEnrollmentError)) throw error;

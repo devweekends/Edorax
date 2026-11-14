@@ -19,12 +19,18 @@ export async function loadCheckout(courseSlug: string, userId: string): Promise<
       priceCents: true,
       currency: true,
       status: true,
+      mentorId: true,
       mentor: { select: { name: true } },
     },
   });
   if (!course || course.status !== "PUBLISHED") throw new NotFoundError("Course not found");
-  const { status: _status, mentor, ...rest } = course;
+  const { status: _status, mentor, mentorId, ...rest } = course;
   const courseFields = { ...rest, instructorName: mentor.name };
+
+  // The instructor never pays for their own course; the checkout page sends them to the course.
+  if (mentorId === userId) {
+    return { course: courseFields, enrollment: null, state: "already_paid", automaticDiscount: null, organizationDiscount: null, amountDueCents: 0 };
+  }
 
   const enrollment = await prisma.enrollment.findUnique({
     where: { courseId_userId: { courseId: course.id, userId } },

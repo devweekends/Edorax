@@ -959,3 +959,111 @@ describe("metrics", () => {
     expect((await request(app).get("/api/v1/admin/metrics").set(await mentor())).status).toBe(403);
   });
 });
+
+describe("enrollments and what was paid", () => {
+  it("lists enrollments with their payment and shows one in full", async () => {
+    await prisma.payment.create({
+      data: {
+        enrollmentId: fx.enrollment.id,
+        amountCents: 4500,
+        currency: "USD",
+        status: "SUCCEEDED",
+        provider: "polar",
+        providerRef: `order-${fx.tag}`,
+        originalAmountCents: 5000,
+        discountAmountCents: 500,
+        learnerAmountCents: 4500,
+        platformRevenueCents: 1350,
+        instructorShareCents: 3150,
+        instructorPayoutPercent: 70,
+        paidAt: new Date(),
+      },
+    });
+    try {
+      const list = await request(app).get(`/api/v1/admin/enrollments?query=${fx.tag}&payment=SUCCEEDED`).set(admin());
+      expect(list.status).toBe(200);
+      const row = list.body.data.enrollments.find((r: { id: string }) => r.id === fx.enrollment.id);
+      expect(row.learner.email).toBe(fx.learner.email);
+      expect(row.payment).toMatchObject({ status: "SUCCEEDED", amountCents: 4500, originalAmountCents: 5000 });
+      expect(row.discounts).toEqual([]);
+      expect(list.body.data.page.total).toBeGreaterThanOrEqual(1);
+
+      const none = await request(app).get(`/api/v1/admin/enrollments?query=${fx.tag}&payment=NONE`).set(admin());
+      expect(none.body.data.enrollments.some((r: { id: string }) => r.id === fx.enrollment.id)).toBe(false);
+
+      const detail = await request(app).get(`/api/v1/admin/enrollments/${fx.enrollment.id}`).set(admin());
+      expect(detail.status).toBe(200);
+      expect(detail.body.data.instructor.id).toBe(fx.mentor.id);
+      expect(detail.body.data.payment).toMatchObject({ amountCents: 4500, discountAmountCents: 500, refund: null });
+
+      expect((await request(app).get("/api/v1/admin/enrollments/missing-enrollment").set(admin())).status).toBe(404);
+      expect((await request(app).get("/api/v1/admin/enrollments").set(await mentor())).status).toBe(403);
+    } finally {
+      await prisma.payment.deleteMany({ where: { enrollmentId: fx.enrollment.id } });
+    }
+  });
+
+  it("edits an enrollment's access and payment, then deletes it completely", async () => {
+    const enrollment = await prisma.enrollment.create({
+      data: { courseId: fx.course.id, userId: fx.unverified.id, lifecycle: "PAYMENT_REQUIRED", source: "SELF" },
+    });
+
+    const noPayment = await request(app).patch(`/api/v1/admin/enrollments/${enrollment.id}`).set(admin()).send({ paymentStatus: "SUCCEEDED" });
+    expect(noPayment.status).toBe(409);
+    await prisma.payment.create({ data: { enrollmentId: enrollment.id, amountCents: 1999, status: "PENDING" } });
+    const amounts = await request(app).patch(`/api/v1/admin/enrollments/${enrollment.id}`).set(admin()).send({ amountCents: 1 });
+    expect(amounts.status).toBe(400);
+
+    const coupon = await prisma.instructorCoupon.create({
+      data: { courseId: fx.course.id, createdById: fx.mentor.id, label: "Launch week", code: `LAUNCH${fx.tag}`, percentOff: 20, maxRedemptions: 10 },
+    });
+    await prisma.instructorCouponRedemption.create({
+      data: { couponId: coupon.id, enrollmentId: enrollment.id, userId: fx.unverified.id, percentOff: 20 },
+    });
+    const discounted = await request(app).get(`/api/v1/admin/enrollments?query=${fx.tag}&discount=true`).set(admin());
+    const discountedRow = discounted.body.data.enrollments.find((r: { id: string }) => r.id === enrollment.id);
+    expect(discountedRow.discounts).toMatchObject([{ kind: "instructor_coupon", label: "Launch week", code: `LAUNCH${fx.tag}`, percentOff: 20 }]);
+    const fullPrice = await request(app).get(`/api/v1/admin/enrollments?query=${fx.tag}&discount=false`).set(admin());
+    expect(fullPrice.body.data.enrollments.some((r: { id: string }) => r.id === enrollment.id)).toBe(false);
+
+    const edited = await request(app)
+      .patch(`/api/v1/admin/enrollments/${enrollment.id}`)
+      .set(admin())
+      .send({ lifecycle: "ACTIVE", paymentStatus: "SUCCEEDED" });
+    expect(edited.status).toBe(200);
+    expect(edited.body.data.lifecycle).toBe("ACTIVE");
+    expect(edited.body.data.payment).toMatchObject({ status: "SUCCEEDED", amountCents: 1999 });
+    expect(edited.body.data.payment.paidAt).not.toBeNull();
+
+    const audit = await prisma.adminAuditLog.findFirst({ where: { targetId: enrollment.id, action: "enrollment.update" } });
+    expect(audit?.actorId).toBe(adminId);
+
+    const empty = await request(app).patch(`/api/v1/admin/enrollments/${enrollment.id}`).set(admin()).send({});
+    expect(empty.status).toBe(400);
+    const bad = await request(app).patch(`/api/v1/admin/enrollments/${enrollment.id}`).set(admin()).send({ lifecycle: "OPEN" });
+    expect(bad.status).toBe(400);
+
+    const removed = await request(app).delete(`/api/v1/admin/enrollments/${enrollment.id}`).set(admin());
+    expect(removed.status).toBe(204);
+    expect(await prisma.enrollment.findUnique({ where: { id: enrollment.id } })).toBeNull();
+    expect(await prisma.payment.findUnique({ where: { enrollmentId: enrollment.id } })).toBeNull();
+  });
+
+  it("labels an admin enrollment as its discount and filters by it", async () => {
+    const enrolled = await request(app).post(`/api/v1/admin/users/${fx.unverified.id}/enroll`).set(admin()).send({ courseId: fx.course.id });
+    expect(enrolled.status).toBeLessThan(300);
+    const enrollment = await prisma.enrollment.findFirstOrThrow({ where: { userId: fx.unverified.id, courseId: fx.course.id } });
+    try {
+      const list = await request(app).get(`/api/v1/admin/enrollments?query=${fx.tag}&discount=admin`).set(admin());
+      const row = list.body.data.enrollments.find((r: { id: string }) => r.id === enrollment.id);
+      expect(row.payment.provider).toBe("admin");
+      expect(row.discounts).toMatchObject([{ kind: "admin_enrollment", label: "Admin enrollment" }]);
+      const fullPrice = await request(app).get(`/api/v1/admin/enrollments?query=${fx.tag}&discount=false`).set(admin());
+      expect(fullPrice.body.data.enrollments.some((r: { id: string }) => r.id === enrollment.id)).toBe(false);
+      const detail = await request(app).get(`/api/v1/admin/enrollments/${enrollment.id}`).set(admin());
+      expect(detail.body.data.discounts[0].kind).toBe("admin_enrollment");
+    } finally {
+      await prisma.enrollment.delete({ where: { id: enrollment.id } });
+    }
+  });
+});

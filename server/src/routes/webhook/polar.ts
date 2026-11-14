@@ -2,7 +2,12 @@ import { Router, type Request, type Response } from "express";
 import { webhooks } from "@polar-sh/sdk/2026-10";
 import { env } from "../../config/env.js";
 import { fulfillPolarOrderPaid } from "../../services/payments/fulfill-polar-order.js";
+import { revokePolarOrderRefund } from "../../services/payments/refund-polar-order.js";
 import { logger } from "../../utils/logger.js";
+
+function orderMetadata(metadata: unknown): Record<string, unknown> | null {
+  return metadata && typeof metadata === "object" && !Array.isArray(metadata) ? (metadata as Record<string, unknown>) : null;
+}
 
 const router = Router();
 
@@ -45,18 +50,22 @@ router.post("/", async (req: Request, res: Response) => {
   try {
     if (event.type === "order.paid") {
       const order = event.data;
-      const metadata =
-        order.metadata && typeof order.metadata === "object" && !Array.isArray(order.metadata)
-          ? (order.metadata as Record<string, unknown>)
-          : null;
       await fulfillPolarOrderPaid({
         orderId: order.id,
         checkoutId: order.checkout_id,
-        metadata,
+        metadata: orderMetadata(order.metadata),
       });
     } else if (event.type === "order.refunded") {
-      // Product is non-refundable; keep access and log for ops visibility.
-      logger.info({ orderId: event.data.id, type: event.type }, "polar refund event ignored (non-refundable product)");
+      // A full refund removes course access; a partial one keeps it (see revokePolarOrderRefund).
+      const order = event.data;
+      await revokePolarOrderRefund({
+        orderId: order.id,
+        checkoutId: order.checkout_id,
+        metadata: orderMetadata(order.metadata),
+        status: order.status,
+        refundedAmount: order.refunded_amount,
+        totalAmount: order.total_amount,
+      });
     }
     res.status(200).json({ received: true });
   } catch (error) {

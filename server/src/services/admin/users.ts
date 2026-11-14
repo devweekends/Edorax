@@ -1,4 +1,5 @@
-import type { AdminBulkResult, AdminUserDetail, AdminUsersView } from "../../shared/api/admin.js";
+import type { AdminBulkResult, AdminRefundBreakdown, AdminUserDetail, AdminUsersView } from "../../shared/api/admin.js";
+import { refundBreakdown } from "../payments/refund-policy.js";
 import { ADMIN_ERROR_CODES } from "../../shared/api/admin.js";
 import type { Prisma } from "../../generated/prisma/index.js";
 import { prisma } from "../../db/prisma.js";
@@ -153,6 +154,18 @@ export async function exportUsers(filters: ListUsersQuery = {}): Promise<CsvTabl
   };
 }
 
+/**
+ * The refund an admin could make for an enrollment: only for a completed Polar payment with an
+ * order to refund, and only when the fees kept back leave something to return.
+ */
+function refundOffer(
+  payment: { provider: string | null; providerRef: string | null; status: string; amountCents: number; currency: string } | null,
+): AdminRefundBreakdown | null {
+  if (!payment || payment.provider !== "polar" || !payment.providerRef || payment.status !== "SUCCEEDED") return null;
+  const breakdown = refundBreakdown(payment.amountCents);
+  return breakdown.refundCents > 0 ? { currency: payment.currency, ...breakdown } : null;
+}
+
 export async function getUserDetail(userId: string): Promise<AdminUserDetail> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -186,6 +199,7 @@ export async function getUserDetail(userId: string): Promise<AdminUserDetail> {
           percentComplete: true,
           lastActiveAt: true,
           course: { select: { title: true, slug: true } },
+          payment: { select: { provider: true, providerRef: true, status: true, amountCents: true, currency: true } },
         },
       },
       coursesOwned: {
@@ -222,6 +236,7 @@ export async function getUserDetail(userId: string): Promise<AdminUserDetail> {
       lifecycle: row.lifecycle,
       percentComplete: row.percentComplete,
       lastActiveAt: row.lastActiveAt?.toISOString() ?? null,
+      refund: refundOffer(row.payment),
     })),
     coursesOwned: user.coursesOwned,
   };

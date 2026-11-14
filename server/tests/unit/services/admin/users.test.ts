@@ -321,4 +321,45 @@ describe("confirmed-enrollment filtering in user list and detail", () => {
       })
     );
   });
+
+  it("offers a refund, less fees, only for a completed Polar purchase", async () => {
+    const enrollment = (id: string, payment: Record<string, unknown> | null) => ({
+      id,
+      courseId: "course-1",
+      lifecycle: "ACTIVE",
+      percentComplete: 10,
+      lastActiveAt: null,
+      course: { title: "Course", slug: "course" },
+      payment,
+    });
+    const polar = { provider: "polar", providerRef: "ord_1", status: "SUCCEEDED", amountCents: 1000, currency: "USD" };
+    db.user.findUnique.mockResolvedValue({
+      id: "user-1",
+      email: "learner@test.local",
+      name: "Learner",
+      role: "MENTEE",
+      emailVerified: new Date(),
+      zipImportEnabled: false,
+      testerEnabled: false,
+      suspendedAt: null,
+      suspensionNote: null,
+      totpEnabledAt: null,
+      createdAt: new Date("2026-11-01T00:00:00Z"),
+      _count: { enrollments: 4, coursesOwned: 0, sessions: 0 },
+      enrollments: [
+        enrollment("polar", polar),
+        enrollment("manual", { ...polar, provider: "manual" }),
+        enrollment("free", null),
+        enrollment("tiny", { ...polar, amountCents: 50 }),
+      ],
+      coursesOwned: [],
+    });
+
+    const detail = await getUserDetail("user-1");
+    const refund = Object.fromEntries(detail.enrollments.map((row) => [row.id, row.refund]));
+    expect(refund.polar).toEqual({ currency: "USD", paidCents: 1000, fixedFeeCents: 50, internationalFeeCents: 15, platformFeeCents: 50, refundCents: 885 });
+    expect(refund.manual).toBeNull();
+    expect(refund.free).toBeNull();
+    expect(refund.tiny).toBeNull();
+  });
 });

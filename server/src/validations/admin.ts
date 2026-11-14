@@ -206,6 +206,15 @@ export const grantOrganizationCreditsBody = z.object({
 export type GrantOrganizationCreditsBody = z.infer<typeof grantOrganizationCreditsBody>;
 
 
+export const listEnrollmentsQuery = listQuery.extend({
+  /** A payment status, or "NONE" for enrollments with no payment row (free or admin-granted). */
+  payment: z.enum(["PENDING", "SUCCEEDED", "FAILED", "REFUNDED", "NONE"]).optional(),
+  lifecycle: z.enum(["PENDING_ACCOUNT", "PAYMENT_REQUIRED", "ACTIVE", "COMPLETED", "CANCELLED", "EXPIRED"]).optional(),
+  /** "true": a coupon or campaign was applied; "admin": enrolled by an admin; "false": full price. */
+  discount: z.enum(["true", "admin", "false"]).optional(),
+});
+export type ListEnrollmentsQuery = z.infer<typeof listEnrollmentsQuery>;
+
 /** Forced desktop updates: platforms and the fields to apply to each of them. */
 const desktopPlatform = z.enum(["darwin", "win32", "linux"], { message: 'platform must be "darwin", "win32" or "linux"' });
 const semverField = (name: string) =>

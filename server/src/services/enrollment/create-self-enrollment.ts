@@ -3,6 +3,7 @@ import { assignmentForNewEnrollment } from "../courses/variant-assignment.js";
 import { lifecycleForSignedInEnrollment } from "./lifecycle.js";
 import { rankLearnerCoupons } from "../financials/coupon-priority.js";
 import { settleAssignment } from "../financials/settlement.js";
+import { ensureOwnCourseEnrollment, isCourseInstructor } from "./own-course.js";
 
 export class SelfEnrollmentError extends Error {
   readonly code:
@@ -26,6 +27,8 @@ export type SelfEnrollmentResult = {
   lifecycle: ReturnType<typeof lifecycleForSignedInEnrollment>;
   created: boolean;
   couponApplied?: boolean;
+  /** The learner is the course's instructor: free access, no payment, no new-enrollment notice. */
+  ownCourse?: boolean;
 };
 
 export async function createSelfEnrollment(
@@ -42,11 +45,17 @@ export async function createSelfEnrollment(
       priceCents: true,
       currency: true,
       instructorPayoutPercent: true,
+      mentorId: true,
     },
   });
   if (!course) throw new SelfEnrollmentError("COURSE_NOT_FOUND", "Course not found.");
   if (course.status !== "PUBLISHED") {
     throw new SelfEnrollmentError("NOT_PUBLISHED", "This course is not open for enrollment.");
+  }
+
+  if (isCourseInstructor(input.userId, course)) {
+    const row = await ensureOwnCourseEnrollment(db, { courseId: course.id, userId: input.userId });
+    return { enrollmentId: row.id, courseSlug: course.slug, lifecycle: "ACTIVE", created: false, couponApplied: false, ownCourse: true };
   }
 
   const couponCode = input.couponCode?.trim().toUpperCase();
