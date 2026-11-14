@@ -1,0 +1,40 @@
+slug: demo-kubernetes
+topic: kubernetes
+level: beginner
+tags: [Demo, Cluster]
+title: 'Demo Cluster: a pretend cluster'
+summary: A tiny made-up lab for tests, about a pretend cluster.
+scenario: A pretend cluster needs a namespace for the demo team.
+minutes: 5
+machine:
+  name: demo-node
+  image: ubuntu:24.04
+  memoryMb: 1024
+setup: |
+  echo "cluster notes" > /root/cluster.txt
+steps:
+  - id: name-space
+    goal: Write the demo namespace name to a file
+    body: |-
+      1. Write the word `demo-team` to `/root/namespace.txt`.
+    about: The pretend cluster keeps one namespace for the demo team.
+    expected: The file holds the name demo-team.
+    learn:
+      - A namespace groups the parts of a cluster for one team.
+      - Names are short and use dashes.
+    commands:
+      - command: echo NAME
+        meaning: Prints a name.
+      - command: cat FILE
+        meaning: Shows a file.
+    hints:
+      - Print the name into a file.
+      - Use echo and a redirect.
+      - Send the namespace name into the namespace file.
+    checks:
+      - id: namespace-file
+        label: The namespace file is right
+        run: grep -qx demo-team /root/namespace.txt
+        fail: The namespace file is missing or wrong.
+    solution: |
+      echo demo-team > /root/namespace.txt

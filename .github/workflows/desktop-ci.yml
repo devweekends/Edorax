@@ -1,0 +1,49 @@
+name: Desktop checks
+
+# Checks the desktop app, but only when something the desktop app uses has changed:
+#   desktop/**              the app itself
+#   server/src/shared/**    code the desktop app imports from the server
+#   this workflow and the release workflow
+# A change to only the server, the web app or the docs does not start this workflow.
+# The release builds (Windows, macOS, Linux) are a separate workflow that runs on a tag or by hand.
+
+on:
+  pull_request:
+    paths:
+      - "desktop/**"
+      - "server/src/shared/**"
+      - ".github/workflows/desktop-ci.yml"
+      - ".github/workflows/desktop-release.yml"
+  push:
+    branches: [main]
+    paths:
+      - "desktop/**"
+      - "server/src/shared/**"
+      - ".github/workflows/desktop-ci.yml"
+      - ".github/workflows/desktop-release.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: desktop-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Desktop — unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: desktop/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      # The desktop code imports from server/src/shared, which needs the server's packages.
+      - run: pnpm --dir ../server install --frozen-lockfile
+      - run: pnpm test

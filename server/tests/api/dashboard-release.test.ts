@@ -60,7 +60,7 @@ describe("dashboard chapter publishing", () => {
     }
   });
 
-  it("saves a private draft, then publishes a new release without editing a learner's chapter", async () => {
+  it("saves a private draft, then publishes a new release that an in-progress learner gets on the next open", async () => {
     await saveChapterDraft(fx.mentor, fx.chapterA.id, "## Revised chapter\n\nA new example for future learners.");
     expect((await prisma.chapter.findUniqueOrThrow({ where: { id: fx.chapterA.id } })).source).toBe("# A");
     expect(await prisma.courseChapterDraft.findUnique({ where: { chapterId: fx.chapterA.id } })).not.toBeNull();
@@ -73,7 +73,9 @@ describe("dashboard chapter publishing", () => {
     expect(oldRelease?.modules[0].chapters[0].id).toBe(fx.chapterA.id);
     const latest = await releaseForEnrollment(fx.course.id, { releaseId: null, variantSlug: null }, null);
     expect(latest?.modules[0].chapters[0].id).not.toBe(fx.chapterA.id);
-    expect((await loadChapterReader(fx.course.slug, "chapter-a", fx.learner)).content?.source).toContain("# A");
+    // The old chapter row is untouched; the learner moves to the new release when they open the chapter.
+    expect((await prisma.chapter.findUniqueOrThrow({ where: { id: fx.chapterA.id } })).source).toBe("# A");
+    expect((await loadChapterReader(fx.course.slug, "chapter-a", fx.learner)).content?.source).toContain("## Revised chapter");
     expect(await prisma.courseChapterDraft.findUnique({ where: { chapterId: fx.chapterA.id } })).toBeNull();
     const latestPreview = await loadCourseDraftPreview(fx.mentor, fx.course.slug);
     expect(latestPreview.modules.flatMap(module => module.chapters).filter(chapter => chapter.title === "Chapter A"))

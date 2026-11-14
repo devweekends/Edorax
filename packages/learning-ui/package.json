@@ -665,6 +665,7 @@
     "./canvas/primitives/svg-step-bar": "./src/canvas/primitives/svg-step-bar.tsx",
     "./canvas/primitives/traffic-playground": "./src/canvas/primitives/traffic-playground.tsx",
     "./canvas/renderers/scene/frame": "./src/canvas/renderers/scene/frame.ts",
+    "./canvas/renderers/scene/fit": "./src/canvas/renderers/scene/fit.ts",
     "./canvas/renderers/scene/geometry": "./src/canvas/renderers/scene/geometry.ts",
     "./canvas/renderers/scene/types": "./src/canvas/renderers/scene/types.ts",
     "./canvas/sysdesign-band-overlap/model": "./src/canvas/sysdesign-band-overlap/model.ts",

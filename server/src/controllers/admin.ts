@@ -11,6 +11,7 @@ import * as courses from "../services/admin/courses.js";
 import * as courseAccess from "../services/admin/course-access.js";
 import * as profile from "../services/admin/profile.js";
 import * as audit from "../services/admin/audit.js";
+import * as desktopUpdates from "../services/admin/desktop-updates.js";
 import * as appActivity from "../services/activity/reports.js";
 import type { AppActivityUsersQuery } from "../validations/activity.js";
 import type {
@@ -22,6 +23,7 @@ import type {
   BulkIdsBody,
   BulkSuspendBody,
   CourseStatusBody,
+  DesktopUpdatesBody,
   CreateOrganizationBody,
   GrantAdminBody,
   GrantInstructorBody,
@@ -383,4 +385,15 @@ export async function getAppActivity(req: Request, res: Response) {
 // GET /api/v1/admin/app-activity/users?days=7&limit=50&offset=0&inactiveForDays=&userId=
 export async function listAppActivityUsers(req: Request, res: Response) {
   ok(res, await appActivity.listAppActivityUsers(req.query as unknown as AppActivityUsersQuery));
+}
+
+// GET /api/v1/admin/desktop-updates — forced-update policy for darwin, win32 and linux
+export async function listDesktopUpdates(_req: Request, res: Response) {
+  ok(res, await desktopUpdates.listDesktopUpdatePolicies());
+}
+
+// PUT /api/v1/admin/desktop-updates — apply fields to the listed platforms in one save
+export async function saveDesktopUpdates(req: Request, res: Response) {
+  const { platforms, fields } = req.body as DesktopUpdatesBody;
+  ok(res, await desktopUpdates.saveDesktopUpdatePolicies({ id: req.user!.id, email: req.user!.email }, platforms, fields));
 }

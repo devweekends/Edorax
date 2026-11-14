@@ -1,0 +1,7 @@
+# Made-up labs for the unit tests. They are generic on purpose: the real labs are private (Edorax Core).
+labs:
+  - demo-linux
+  - demo-servers
+  - demo-vm
+  - demo-kubernetes
+  - demo-docker

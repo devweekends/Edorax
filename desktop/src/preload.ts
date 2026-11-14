@@ -55,6 +55,47 @@ const api: DesktopAPI = {
       };
     },
   },
+  shellLabs: {
+    dockerState: () => ipcRenderer.invoke('shell-labs:docker-state'),
+    startDocker: () => ipcRenderer.invoke('shell-labs:docker-start'),
+    setUpDocker: () => ipcRenderer.invoke('shell-labs:docker-setup'),
+    onDockerProgress: (listener) => {
+      const receive = (_event: Electron.IpcRendererEvent, data: Parameters<typeof listener>[0]) => listener(data);
+      ipcRenderer.on('shell-labs:docker-progress', receive);
+      return () => {
+        ipcRenderer.removeListener('shell-labs:docker-progress', receive);
+      };
+    },
+    list: () => ipcRenderer.invoke('shell-labs:list'),
+    refresh: () => ipcRenderer.invoke('shell-labs:refresh'),
+    view: (slug) => ipcRenderer.invoke('shell-labs:view', slug),
+    status: (slug) => ipcRenderer.invoke('shell-labs:status', slug),
+    start: (slug) => ipcRenderer.invoke('shell-labs:start', slug),
+    stop: (slug) => ipcRenderer.invoke('shell-labs:stop', slug),
+    reset: (slug) => ipcRenderer.invoke('shell-labs:reset', slug),
+    check: (slug, stepId) => ipcRenderer.invoke('shell-labs:check', slug, stepId),
+    answer: (slug, stepId, option) => ipcRenderer.invoke('shell-labs:answer', slug, stepId, option),
+    checkAll: (slug) => ipcRenderer.invoke('shell-labs:check-all', slug),
+    openTerminal: (slug, id) => ipcRenderer.invoke('shell-labs:terminal-open', slug, id),
+    closeTerminal: (slug, id) => ipcRenderer.invoke('shell-labs:terminal-close', slug, id),
+    terminalInput: (slug, id, data) => ipcRenderer.invoke('shell-labs:terminal-input', slug, id, data),
+    resizeTerminal: (slug, id, cols, rows) =>
+      ipcRenderer.invoke('shell-labs:terminal-resize', slug, id, cols, rows),
+    onStartProgress: (listener) => {
+      const receive = (_event: Electron.IpcRendererEvent, data: Parameters<typeof listener>[0]) => listener(data);
+      ipcRenderer.on('shell-labs:start-progress', receive);
+      return () => {
+        ipcRenderer.removeListener('shell-labs:start-progress', receive);
+      };
+    },
+    onTerminalData: (listener) => {
+      const receive = (_event: Electron.IpcRendererEvent, data: { id: string; data: string }) => listener(data);
+      ipcRenderer.on('shell-labs:terminal-data', receive);
+      return () => {
+        ipcRenderer.removeListener('shell-labs:terminal-data', receive);
+      };
+    },
+  },
   remote: {
     request: (path, method, body) =>
       ipcRenderer.invoke('remote:request', path, method, body),
@@ -80,6 +121,18 @@ const api: DesktopAPI = {
       ipcRenderer.on('offline:sync-status', receive);
       return () => {
         ipcRenderer.removeListener('offline:sync-status', receive);
+      };
+    },
+  },
+  update: {
+    status: () => ipcRenderer.invoke('app:update-status'),
+    check: () => ipcRenderer.invoke('app:update-check'),
+    openDownload: () => ipcRenderer.invoke('app:open-download'),
+    onChange: (listener) => {
+      const receive = (_event: Electron.IpcRendererEvent, state: Parameters<typeof listener>[0]) => listener(state);
+      ipcRenderer.on('app:update-status-changed', receive);
+      return () => {
+        ipcRenderer.removeListener('app:update-status-changed', receive);
       };
     },
   },

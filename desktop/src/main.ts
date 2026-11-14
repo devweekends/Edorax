@@ -33,20 +33,67 @@ import { downloadBook, registerAudioProtocol, registerAudioScheme, removeBook } 
 
 registerAudioScheme();
 import { createPreviewClient } from './api';
+import { setDesktopPlatform, setDesktopVersion } from './api/client-info';
+import { createUpdateService } from './update/update-service';
 import { createBrowserAuth } from './auth/browser-auth';
 import { OfflineStore, type DownloadedCourse, prepareEncryption } from './offline/store';
 
 import { LabRuntime, localDocker } from './labs/runtime';
+import { ShellLabRuntime } from './shell-labs/runtime';
+import { defaultDownloadsDir, dockerReadiness, setUpDocker, startDockerDesktop } from './shell-labs/docker-setup';
+import { configureShellLabs, getShellLab, getShellLabs, refreshShellLabs } from './shell-labs/catalog';
+import { devShellLabsDir } from './shell-labs/loader';
+import { shellLabSummary, shellLabView, type ShellLabsRefresh } from './domain/shell-labs';
 
 let ideController: ReturnType<typeof installIDE> | undefined;
 const locals = new Map<string, LocalRuntime>();
 const labs = new Map<string, LabRuntime>();
+const shellLabs = new Map<string, ShellLabRuntime>();
 const runtimeRequire = createRequire(__filename);
 function disposeLabs() {
   for (const lab of labs.values()) lab.dispose();
   labs.clear();
   for (const local of locals.values()) local.dispose();
   locals.clear();
+  for (const shell of shellLabs.values()) shell.dispose();
+  shellLabs.clear();
+}
+/**
+ * Downloads newer shell labs when the server has them. Never throws. A running lab keeps the lab
+ * object it started with; new definitions apply to labs opened afterwards. Runtimes with no terminal
+ * attached are dropped for labs whose definition changed, so the next open uses the new one.
+ */
+async function refreshLabsFromServer(): Promise<ShellLabsRefresh> {
+  const { changed, ...answer } = await refreshShellLabs(async (apiPath) =>
+    previewClient.sessionSnapshot()
+      ? previewClient.request(apiPath, 'GET')
+      : { ok: false, code: 'AUTH_REQUIRED', message: 'Sign in to download labs.' },
+  );
+  for (const [scope, runtime] of shellLabs)
+    if (changed.some((slug) => scope.endsWith(`:shell:${slug}`)) && runtime.idle()) {
+      runtime.dispose();
+      shellLabs.delete(scope);
+    }
+  return answer;
+}
+async function shellLabRuntime(slug: unknown) {
+  const lab = getShellLab(slug);
+  if (!lab) throw new Error('Unknown shell lab.');
+  const user = await previewClient.resolveLocalLabUser();
+  if (!user) throw new Error('Sign in to open a shell lab.');
+  const scope = `${user}:shell:${lab.slug}`;
+  if (!shellLabs.has(scope))
+    shellLabs.set(
+      scope,
+      new ShellLabRuntime(localDocker(), lab, scope, (data) => {
+        if (mainWindow && !mainWindow.isDestroyed())
+          mainWindow.webContents.send('shell-labs:terminal-data', data);
+      }, (progress) => {
+        if (mainWindow && !mainWindow.isDestroyed())
+          mainWindow.webContents.send('shell-labs:start-progress', { slug: lab.slug, ...progress });
+      }),
+    );
+  return shellLabs.get(scope)!;
 }
 async function labRuntime(blockId: string) {
   if (
@@ -168,7 +215,22 @@ function guardQuizShortcuts(webContents: Electron.WebContents) {
 const apiBase =
   process.env.BUILDMENT_API_URL ||
   'https://buildment-eca06ffd3e8f.herokuapp.com';
-const previewClient = createPreviewClient(apiBase);
+// Every backend request carries this version and platform; a server that wants a newer app answers 426.
+setDesktopVersion(app.getVersion());
+setDesktopPlatform(process.platform);
+const appUpdates = createUpdateService({
+  currentVersion: app.getVersion(),
+  base: apiBase,
+  file: path.join(app.getPath('userData'), 'update-policy.json'),
+  openExternal: (url) => shell.openExternal(url),
+  onChange: (state) => {
+    if (mainWindow && !mainWindow.isDestroyed())
+      mainWindow.webContents.send('app:update-status-changed', state);
+  },
+});
+const previewClient = createPreviewClient(apiBase, fetch, {
+  onUpdateRequired: (info) => appUpdates.noteUpdateRequired(info),
+});
 const offline = new OfflineStore();
 const courseFolders = new CourseFolders(
   path.join(app.getPath('userData'), 'course-folders.json'),
@@ -374,6 +436,7 @@ function cancelBrowserAuth() {
   browserAuth.cancel();
 }
 app.on('before-quit', () => {
+  appUpdates.stop();
   cancelBrowserAuth();
   disposeLabs();
 });
@@ -442,6 +505,7 @@ function createWindow() {
     },
   });
   const window = mainWindow;
+  window.on('focus', () => appUpdates.onFocus());
   window.once('ready-to-show', () => {
     if (!window.isDestroyed()) window.show();
   });
@@ -534,6 +598,13 @@ else {
     await offline.open();
     const saved = offline.session();
     if (saved) previewClient.restoreSession(saved);
+    // Labs: the saved copy first, else the development folder; then ask the server without waiting.
+    configureShellLabs({
+      cacheFile: path.join(app.getPath('userData'), 'shell-labs.json'),
+      devDir: devShellLabsDir(),
+    });
+    appUpdates.start();
+    void refreshLabsFromServer();
     app.setAboutPanelOptions({
       applicationName: 'Edorax',
       applicationVersion: app.getVersion(),
@@ -654,6 +725,74 @@ else {
         return handler(await labRuntime(blockId), ...args);
       });
     }
+    // Docker setup. Everything here is the learner pressing a button; nothing installs by itself.
+    let dockerSetupRunning: Promise<unknown> | null = null;
+    ipcMain.handle('shell-labs:docker-state', (event) => {
+      requireRenderer(event);
+      return dockerReadiness(localDocker());
+    });
+    ipcMain.handle('shell-labs:docker-start', (event) => {
+      requireRenderer(event);
+      return startDockerDesktop();
+    });
+    ipcMain.handle('shell-labs:docker-setup', async (event) => {
+      requireRenderer(event);
+      if (dockerSetupRunning) throw new Error('Docker setup is already running.');
+      const send = (progress: unknown) => {
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('shell-labs:docker-progress', progress);
+      };
+      const run = setUpDocker(send, {
+        platform: process.platform,
+        arch: process.arch,
+        downloadsDir: defaultDownloadsDir(app.getPath('downloads')),
+        openPath: (file) => shell.openPath(file),
+        openExternal: (url) => shell.openExternal(url),
+        showInFolder: (file) => shell.showItemInFolder(file),
+      });
+      dockerSetupRunning = run;
+      try {
+        return await run;
+      } finally {
+        dockerSetupRunning = null;
+      }
+    });
+    ipcMain.handle('shell-labs:list', (event) => {
+      requireRenderer(event);
+      return getShellLabs().map(shellLabSummary);
+    });
+    ipcMain.handle('shell-labs:refresh', (event) => {
+      requireRenderer(event);
+      return refreshLabsFromServer();
+    });
+    ipcMain.handle('shell-labs:view', (event, slug) => {
+      requireRenderer(event);
+      const lab = getShellLab(slug);
+      if (!lab) throw new Error('Unknown shell lab.');
+      return shellLabView(lab);
+    });
+    const shellHandlers: Record<
+      string,
+      (lab: ShellLabRuntime, ...args: unknown[]) => unknown
+    > = {
+      status: (lab) => lab.status(),
+      start: (lab) => lab.start(),
+      stop: (lab) => lab.stop(),
+      reset: (lab) => lab.reset(),
+      check: (lab, stepId) => lab.check(stepId),
+      'check-all': (lab) => lab.checkAll(),
+      answer: (lab, stepId, option) => lab.answer(stepId, option),
+      'terminal-open': (lab, id) => lab.openTerminal(id),
+      'terminal-close': (lab, id) => lab.closeTerminal(id),
+      'terminal-input': (lab, id, data) => lab.terminalInput(id, data),
+      'terminal-resize': (lab, id, cols, rows) =>
+        lab.resizeTerminal(id, cols, rows),
+    };
+    for (const [name, handler] of Object.entries(shellHandlers)) {
+      ipcMain.handle(`shell-labs:${name}`, async (event, slug, ...args) => {
+        requireRenderer(event);
+        return handler(await shellLabRuntime(slug), ...args);
+      });
+    }
     ipcMain.handle('course:start-learning', (event, slug) => {
       requireRenderer(event);
       return previewClient.nextLesson(slug).then((result) => {
@@ -661,6 +800,18 @@ else {
         const href = offline.course(slug)?.overview.syllabus?.continueHref;
         return href ? { ok: true as const, data: { href } } : result;
       });
+    });
+    ipcMain.handle('app:update-status', (event) => {
+      requireRenderer(event);
+      return appUpdates.state();
+    });
+    ipcMain.handle('app:update-check', (event) => {
+      requireRenderer(event);
+      return appUpdates.check();
+    });
+    ipcMain.handle('app:open-download', (event) => {
+      requireRenderer(event);
+      return appUpdates.openDownload();
     });
     ipcMain.handle('app:web-origin', (event) => {
       requireRenderer(event);
@@ -839,6 +990,7 @@ else {
           );
         }
       }
+      if (result.ok) void refreshLabsFromServer();
       if (result.ok && mainWindow) {
         mainWindow.show();
         mainWindow.focus();

@@ -70,6 +70,59 @@ Set `R2_ENDPOINT`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, and `R2_SECRET_ACCESS_KEY` i
 
 Course creators can upload cover images in course settings and insert images from the chapter editor. JPEG, PNG, WebP, GIF, and AVIF files up to 8 MB are accepted. Uploads go through the authenticated API; the bucket can remain private, and browser CORS or an R2 public development URL are not required. Covers are served publicly through `/api/v1/media`, while chapter images are served only to course instructors, administrators, and learners with content access.
 
+## Shell labs
+
+Shell labs are YAML files in the private content repository (`labs/shell`: `index.yaml` lists the slugs in order, one `<slug>.yaml` per lab). The `shell_labs` table holds each lab as JSON (`data`, with checks and solutions, because the desktop app runs the checks), plus `position`, `active` and a `contentHash`. A lab removed from `index.yaml` is set to `active = false`, never deleted.
+
+```bash
+# Set BUILDMENT_CONTENT_ROOT to the content checkout (the same one the courses use), or pass --root <path>
+pnpm labs:check      # validate only, no database
+pnpm labs:publish    # validate everything, then import; prints added, updated, unchanged, deactivated and the version
+```
+
+A validation problem names the lab and step, exits non-zero and changes nothing.
+
+Both endpoints need a signed-in, verified user:
+
+- `GET /api/v1/shell-labs/version` returns `{ success, data: { version, count } }`
+- `GET /api/v1/shell-labs` returns `{ success, data: { version, labs } }` (active labs in `index.yaml` order)
+
+With no labs imported, `version` is `""` and `labs` is `[]`.
+
+Deploy order: migrate first (`pnpm exec prisma migrate deploy`), then publish (`pnpm labs:publish`).
+
+## Desktop updates
+
+The desktop app can be forced to update, per platform (`darwin` = macOS, `win32` = Windows, `linux` = Linux). Platform admins manage the policy in the admin dashboard; it is stored in the `desktop_update_policies` table (one row per platform). A change takes effect at once on the instance that saved it and within 30 seconds on every other instance (policies are cached in memory for 30 seconds). A database error never blocks requests: the last cached policy, or the default policy, is used and the error is logged.
+
+Per platform: `minimumVersion`, `latestVersion`, `downloadUrl` (https, 500 characters max), `message` (280 characters max, optional) and `blockedVersions` (up to 50 exact versions). Versions are plain semver (`0.1.0`, `0.2.0-beta.1`), compared numerically (`0.10.0` is higher than `0.9.0`; `0.2.0-beta.1` is lower than `0.2.0`). A blocked version is refused even when it is above the minimum; it is compared as semver, so `0.1.0` and `0.1.0+build5` are the same version. `latestVersion` can not be lower than `minimumVersion`.
+
+**Default policy.** A platform without a saved row uses the default policy from these environment variables (validated at boot; an invalid version stops the server). The admin dashboard overrides them per platform.
+
+| Variable | Default | |
+|---|---|---|
+| `DESKTOP_MIN_VERSION` | `0.0.0` | oldest version allowed; `0.0.0` blocks nothing |
+| `DESKTOP_LATEST_VERSION` | same as min | newest released version |
+| `DESKTOP_DOWNLOAD_URL` | `https://github.com/devweekends/Edorax/releases/latest` | where to download |
+| `DESKTOP_UPDATE_MESSAGE` | empty | optional short text for the update screen |
+
+Endpoints:
+
+- `GET /api/v1/desktop/version?platform=darwin|win32|linux` (public, `Cache-Control: max-age=60`) returns `{ success, data: { minimumVersion, latestVersion, downloadUrl, message, blockedVersions } }` for that platform. A missing or unknown `platform` returns the default policy (with `blockedVersions: []`).
+- `GET /api/v1/admin/desktop-updates` (admin) returns `{ success, data: { policies } }`: always 3 entries in the order darwin, win32, linux, each `{ platform, minimumVersion, latestVersion, downloadUrl, message, blockedVersions, updatedAt, updatedBy, isDefault }`. `isDefault` is true (and `updatedAt`, `updatedBy` are `null`) when nothing is saved for the platform.
+- `PUT /api/v1/admin/desktop-updates` (admin) with `{ platforms: ["darwin", "linux"], fields: { minimumVersion?, latestVersion?, downloadUrl?, message?, blockedVersions? } }` applies the given fields to each listed platform in one transaction (a platform with no row starts from the default policy), records one audit entry (`desktop-update-policy.changed`, with from and to for each platform) and returns the same body as `GET`. A bad value answers `400` with a message that names the field.
+
+Headers the app sends on every request:
+
+- `X-Edorax-Desktop-Version: <semver>`
+- `X-Edorax-Desktop-Platform: darwin|win32|linux`
+
+The API answers `426` with `{ success: false, code: "DESKTOP_UPDATE_REQUIRED", message, data: { minimumVersion, latestVersion, downloadUrl, blockedVersions } }` when the version is lower than the platform's `minimumVersion` or is exactly one of its `blockedVersions`. A missing or unknown platform header uses the default policy.
+
+Never blocked: `GET /api/v1/desktop/version`, `GET /health`, requests without the version header (web app, old apps) and requests with an invalid version header.
+
+To force an update: publish the new release, then in the admin dashboard raise the minimum version (and the latest version) for the platforms that have it. To undo it, lower the minimum again. No deploy or restart is needed. Deploy order for this feature: migrate first (`pnpm exec prisma migrate deploy`).
+
 ## Commands
 
 | Command | |
@@ -80,6 +133,7 @@ Course creators can upload cover images in course settings and insert images fro
 | `pnpm typecheck` / `pnpm lint` | |
 | `pnpm db:migrate` / `db:ready` / `db:seed` / `db:studio` | Prisma |
 | `pnpm content:import` / `content:validate` / `content:validate:source` / `content:audit` | content pipeline with a private checkout through `BUILDMENT_CONTENT_ROOT` |
+| `pnpm labs:check` / `labs:publish` | validate / publish shell labs from `BUILDMENT_CONTENT_ROOT` |
 | `pnpm db:seed:showcase` / `db:seed:integration` / `stats:backfill` | demo data and maintenance |
 | `pnpm db:pull-production` | replace the local database with a copy of production (reads Heroku only; needs the Heroku CLI and Docker) |
 | `pnpm sync-shared` / `sync-shared:check` | copy `src/shared` into the web app / verify the copy is current |

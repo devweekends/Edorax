@@ -146,3 +146,6 @@ vite.config.ts.timestamp-*
 out/
 test-results/
 playwright-report/
+
+# Shell labs are copied from Edorax Core by `pnpm sync:labs`; Core owns them.
+/labs/

@@ -6,6 +6,7 @@ import { COURSE_CATEGORIES, type CourseCategory } from "@/shared/domain/enums";
 import { getSessionUser } from "@/server/auth/guards";
 import { serverApiFetch } from "@/lib/api-server";
 import { COURSE_CATEGORY_INFO, categoryFromParam } from "@/lib/course-categories";
+import { withoutGuidedTracks } from "@/lib/guided-labs";
 import { CatalogCourseCard } from "@/components/learn/catalog-course-card";
 import { CatalogCategoryTiles } from "@/components/learn/catalog-category-tiles";
 import { Dot } from "@/components/brand/dot";
@@ -52,7 +53,9 @@ export const metadata: Metadata = {
 
 export default async function CatalogPage({ searchParams }: { searchParams: Promise<{ category?: string; subcategory?: string; tag?: string; q?: string }> }) {
   const user = await getSessionUser();
-  const { courses } = await serverApiFetch<{ courses: CatalogCourseSummary[] }>("/api/v1/catalog");
+  const catalog = await serverApiFetch<{ courses: CatalogCourseSummary[] }>("/api/v1/catalog");
+  // The Dev Weekends tracks are listed under Guided labs, not here.
+  const courses = withoutGuidedTracks(catalog.courses);
   const params = await searchParams;
   const active = categoryFromParam(params.category);
   const query = params.q?.trim() ?? "";

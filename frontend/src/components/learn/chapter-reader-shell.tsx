@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect, useState, useCallback, type CSSProperties } from "react";
+import { useRef, useEffect, useState, useCallback } from "react";
 import { useBrowserStorage, useHydrated } from "@/lib/use-browser-storage";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -145,7 +145,8 @@ export function ChapterReaderShell({
   const router = useRouter();
   const hydrated = useHydrated();
   const [focusStored, setFocusStored] = useBrowserStorage("buildment:reader-focus", "0");
-  const focusMode = hydrated && focusStored === "1";
+  // "1": the reader chose focus mode. "quiz": a quiz chapter turned it on, so it ends with the quiz.
+  const focusMode = hydrated && (focusStored === "1" || focusStored === "quiz");
 
   const [showSkeleton, setShowSkeleton] = useState(!skipSkeleton);
   const [mentorOpen, setMentorOpen] = useState(false);
@@ -174,12 +175,14 @@ export function ChapterReaderShell({
     }
   }, [setFocusStored, setLeftCollapsed, setRightCollapsed]);
 
-  const enterFocusMode = useCallback(async () => {
+  const enterFocusMode = useCallback(async (source: "reader" | "quiz" = "reader") => {
     skipFocusRestore.current = true;
-    if (focusStored !== "1") {
+    const alreadyOn = focusStored === "1" || focusStored === "quiz";
+    if (!alreadyOn) {
       layoutBeforeFocus.current = { left: leftCollapsed, right: rightCollapsed };
     }
-    setFocusStored("1");
+    // A quiz never downgrades focus mode the reader chose.
+    if (!(source === "quiz" && focusStored === "1")) setFocusStored(source === "quiz" ? "quiz" : "1");
     setLeftCollapsed(true);
     setRightCollapsed(true);
     try {
@@ -198,7 +201,7 @@ export function ChapterReaderShell({
   }, [focusMode, enterFocusMode, exitFocusMode]);
 
   useEffect(() => {
-    if (!hydrated || focusStored !== "1") {
+    if (!hydrated || (focusStored !== "1" && focusStored !== "quiz")) {
       skipFocusRestore.current = false;
       return;
     }
@@ -253,8 +256,18 @@ export function ChapterReaderShell({
     if (readerMode !== "QUIZ") return;
     if (quizAutoFocusSlug.current === chapterSlug) return;
     quizAutoFocusSlug.current = chapterSlug;
-    void enterFocusMode();
+    void enterFocusMode("quiz");
   }, [chapterSlug, readerMode, enterFocusMode]);
+
+  // Focus mode that a quiz turned on must not follow the reader to a reading chapter,
+  // where it would hide the chapter list with no sign of why. The saved layout may be
+  // lost by then (a reload, a new chapter), so bring the chapter list back on desktop.
+  useEffect(() => {
+    if (!hydrated || readerMode === "QUIZ" || focusStored !== "quiz") return;
+    void exitFocusMode().then(() => {
+      if (!isMobile) setLeftCollapsed(false);
+    });
+  }, [hydrated, readerMode, focusStored, exitFocusMode, isMobile, setLeftCollapsed]);
 
   useEffect(() => {
     if (readerMode !== "QUIZ") return;
@@ -275,7 +288,7 @@ export function ChapterReaderShell({
     if (readerMode !== "QUIZ") return;
     const onQuizFocus = () => {
       if (!focusMode) {
-        void enterFocusMode();
+        void enterFocusMode("quiz");
         return;
       }
       if (!document.fullscreenElement) void document.documentElement.requestFullscreen?.().catch(() => undefined);
@@ -409,8 +422,6 @@ export function ChapterReaderShell({
                 "flex-1 overflow-y-auto",
                 focusMode ? "px-4 pt-10 pb-24 sm:px-8 lg:px-16" : "px-4 pt-8 pb-24 sm:px-6 lg:px-10"
               )}
-              // The Listen player cancels this top padding so it can sit flush with the top edge while pinned.
-              style={{ "--reader-pt": focusMode ? "2.5rem" : "2rem" } as CSSProperties}
             >
               {/* ~70 characters per line at 18px: long chapters stay comfortable to read. */}
               <div className="mx-auto max-w-[40rem]">
@@ -420,10 +431,10 @@ export function ChapterReaderShell({
                     {chapterTitle}
                   </h1>
                   {projectGoal && readerMode !== "QUIZ" ? (
-                    <p className="mt-4 border border-border bg-card px-4 py-3 text-base leading-6 text-muted-foreground">
-                      <span className="font-medium text-foreground">The project: </span>
-                      {projectGoal.trim().replace(/\.+$/, "")}.
-                    </p>
+                    <details className="mt-4 border border-border bg-card px-4 py-3 text-base leading-6 text-muted-foreground">
+                      <summary className="cursor-pointer font-medium text-foreground">Project overview</summary>
+                      <p className="mt-2">{projectGoal.trim().replace(/\.+$/, "")}.</p>
+                    </details>
                   ) : null}
                   {variant && readerMode !== "QUIZ" ? (
                     <p className="mt-2 bg-secondary px-4 py-3 text-base leading-6 text-muted-foreground">

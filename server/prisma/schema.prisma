@@ -336,6 +336,7 @@ model User {
   emailOutbox                   EmailOutbox[]
   studyReminders                StudyReminderLog[]
   engagementEvents              EngagementEvent[]
+  desktopUpdatePolicies         DesktopUpdatePolicy[]
   xpEntries                     XpEntry[]
   streakFreezeDays              StreakFreezeDay[]
   leaderboardMemberships        LeaderboardMember[]
@@ -1678,4 +1679,53 @@ model Certificate {
 
   @@index([userId])
   @@index([courseId])
+}
+
+/// A hands-on shell lab served to the desktop app. Authored as YAML in the private
+/// content repository (labs/shell) and published with `pnpm labs:publish`.
+/// `data` holds the whole lab (checks and solutions included): the app runs the checks.
+/// A lab dropped from index.yaml is kept with active=false, never deleted.
+model ShellLab {
+  slug        String   @id
+  topic       String
+  level       String
+  title       String
+  summary     String
+  minutes     Int
+  /// Order in index.yaml.
+  position    Int
+  active      Boolean  @default(true)
+  /// sha256 of the canonical JSON of `data`.
+  contentHash String
+  data        Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([active, position])
+  @@map("shell_labs")
+}
+
+enum DesktopPlatform {
+  DARWIN
+  WIN32
+  LINUX
+}
+
+/// Forced-update policy of the desktop app for one platform, managed by platform admins.
+/// A platform without a row uses the default policy from the DESKTOP_* environment variables.
+model DesktopUpdatePolicy {
+  id              String          @id @default(cuid())
+  platform        DesktopPlatform @unique
+  /// Plain semver. The app must run at least this version.
+  minimumVersion  String
+  latestVersion   String
+  downloadUrl     String
+  message         String          @default("")
+  /// Exact versions that are refused even when they are above the minimum.
+  blockedVersions String[]        @default([])
+  updatedAt       DateTime        @updatedAt
+  updatedById     String?
+  updatedBy       User?           @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@map("desktop_update_policies")
 }
