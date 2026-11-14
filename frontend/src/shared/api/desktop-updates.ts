@@ -1,3 +1,4 @@
+// GENERATED from server/src/shared — do not edit here. Run `pnpm sync-shared` in server/.
 // Types for the admin desktop-update policy API (/api/v1/admin/desktop-updates).
 
 export type DesktopPlatform = "darwin" | "win32" | "linux";
