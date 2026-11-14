@@ -149,3 +149,6 @@ playwright-report/
 
 # Shell labs are copied from Edorax Core by `pnpm sync:labs`; Core owns them.
 /labs/
+
+# Slim copy of the built IDE that Forge ships (scripts/stage-ide.mjs).
+/.ide-bundle/

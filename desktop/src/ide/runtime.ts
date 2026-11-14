@@ -40,7 +40,14 @@ export class TheiaRuntime {
       : process.platform === 'win32'
         ? 'node.exe'
         : 'node';
-    const main = path.join(this.directory, 'src-gen/backend/main.js');
+    // The production build bundles the backend into lib/backend/main.js, which runs without
+    // node_modules. src-gen/backend/main.js is the unbundled entry and needs ide/node_modules.
+    const bundledMain = path.join(this.directory, 'lib/backend/main.js');
+    const sourceMain = path.join(this.directory, 'src-gen/backend/main.js');
+    const main = await access(bundledMain).then(
+      () => bundledMain,
+      () => sourceMain,
+    );
     try {
       await access(main);
     } catch {

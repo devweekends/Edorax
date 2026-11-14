@@ -1,18 +1,23 @@
 name: Desktop release
 
 # Builds the Edorax desktop app for Windows, macOS and Linux.
-# Manual only for now: Actions tab -> "Desktop release" -> "Run workflow", then pick the branch.
 #
+# Make a release:  bump "version" in desktop/package.json, commit, then
+#                  git tag desktop-v<version> && git push origin desktop-v<version>
+#                  The tag must match the version in desktop/package.json.
+#
+# Or by hand: Actions tab -> "Desktop release" -> "Run workflow", then pick the branch.
 #   publish = false (default)  build only; the installers are kept as workflow artifacts.
 #   publish = true             also tag the commit as desktop-v<version in desktop/package.json>
 #                              (or reuse that tag if it was pushed for this commit)
 #                              and attach the installers to a GitHub pre-release.
-# Pushing a tag on its own does not start this workflow.
 #
 # The app carries no labs. It downloads them from the server after sign-in, so this workflow needs no secrets.
 # The installers are not code signed yet: Windows SmartScreen and macOS Gatekeeper will warn on first open.
 
 on:
+  push:
+    tags: ["desktop-v*"]
   workflow_dispatch:
     inputs:
       publish:
@@ -68,7 +73,7 @@ jobs:
   release:
     name: Publish release
     needs: make
-    if: inputs.publish
+    if: inputs.publish || startsWith(github.ref, 'refs/tags/desktop-v')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -77,6 +82,10 @@ jobs:
         run: |
           version=$(node -p "require('./desktop/package.json').version")
           tag="desktop-v${version}"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ] && [ "${GITHUB_REF_NAME}" != "${tag}" ]; then
+            echo "::error::Pushed tag ${GITHUB_REF_NAME} does not match desktop/package.json (${tag}). Bump the version or fix the tag."
+            exit 1
+          fi
           # A tag pushed by hand for this same commit is fine; a tag on another commit means the version was not bumped.
           existing=$(git ls-remote --tags origin "refs/tags/${tag}^{}" "refs/tags/${tag}" | awk '{print $1}' | head -n1)
           if [ -n "$existing" ] && [ "$existing" != "$GITHUB_SHA" ]; then

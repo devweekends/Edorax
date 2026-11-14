@@ -1,4 +1,5 @@
 import { preparePty } from './scripts/prepare-pty.mjs';
+import { stageIde } from './scripts/stage-ide.mjs';
 import type { ForgeConfig } from '@electron-forge/shared-types';
 import { MakerSquirrel } from '@electron-forge/maker-squirrel';
 import { MakerZIP } from '@electron-forge/maker-zip';
@@ -12,6 +13,10 @@ const config: ForgeConfig = {
   hooks: {
     generateAssets: async () => {
       await preparePty();
+    },
+    // Ship only the built IDE (lib, plugins, package.json), not ide/node_modules and its sources.
+    prePackage: async () => {
+      await stageIde();
     },
   },
   packagerConfig: {
@@ -29,7 +34,8 @@ const config: ForgeConfig = {
     extraResource: [
       './assets/edorax.png',
       './assets/edorax-dock.png',
-      './ide',
+      // Staged by scripts/stage-ide.mjs; still lands at resources/ide.
+      './.ide-bundle/ide',
     ],
   },
   // TEMPORARY: node-pty's Electron rebuild needs a working Visual Studio install, which this machine
@@ -62,6 +68,8 @@ const config: ForgeConfig = {
       homepage: 'https://www.edorax.com',
       categories: ['Education', 'Development'],
       icon: './assets/edorax.png',
+      // rpm 4.20+ (current ubuntu-latest) breaks the stock template's relative `cp -r usr/*`.
+      specTemplate: './packaging/rpm.spec.ejs',
     }),
   ],
   plugins: [
