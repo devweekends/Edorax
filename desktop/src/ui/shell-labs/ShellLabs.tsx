@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, Clock, Terminal } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Clock, Terminal } from 'lucide-react';
 import { SHELL_TOPICS, type ShellLabSummary, type ShellTopic } from '../../domain/shell-labs';
 import { ShellLabPage } from './ShellLabPage';
-import { errorText, passedSteps } from './progress';
+import { errorText, passedSteps, syncPassedSteps } from './progress';
 
 /**
  * Labs that need a real kernel of their own (systemd as PID 1, mount and loop devices). They arrive
@@ -29,6 +29,12 @@ export function ShellLabs({ onBack, topic: only }: { onBack: () => void; topic?:
       .list()
       .then(setLabs)
       .catch((reason: unknown) => setError(errorText(reason)));
+  }, []);
+
+  // Progress also lives on the account: bring in steps done on another computer or before a reinstall.
+  const [, setSynced] = useState(0);
+  useEffect(() => {
+    void syncPassedSteps().then((changed) => changed && setSynced((n) => n + 1));
   }, []);
 
   if (open) return <ShellLabPage key={open} slug={open} onBack={() => setOpen(null)} />;
@@ -90,9 +96,13 @@ export function ShellLabs({ onBack, topic: only }: { onBack: () => void; topic?:
                         <span className="inline-flex items-center gap-1">
                           <Clock size={12} /> {lab.minutes} min
                         </span>
-                        <span>
-                          {done ? `${Math.min(done, lab.steps)} of ${lab.steps} steps done` : `${lab.steps} steps`}
-                        </span>
+                        {done >= lab.steps ? (
+                          <span className="inline-flex items-center gap-1 font-semibold text-emerald-400">
+                            <CheckCircle2 size={12} /> Completed
+                          </span>
+                        ) : (
+                          <span>{done ? `${done} of ${lab.steps} steps done` : `${lab.steps} steps`}</span>
+                        )}
                       </span>
                     </button>
                   </li>

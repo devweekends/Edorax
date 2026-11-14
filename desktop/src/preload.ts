@@ -68,6 +68,8 @@ const api: DesktopAPI = {
     },
     list: () => ipcRenderer.invoke('shell-labs:list'),
     refresh: () => ipcRenderer.invoke('shell-labs:refresh'),
+    progress: () => ipcRenderer.invoke('shell-labs:progress'),
+    saveProgress: (slug, steps) => ipcRenderer.invoke('shell-labs:save-progress', slug, steps),
     view: (slug) => ipcRenderer.invoke('shell-labs:view', slug),
     status: (slug) => ipcRenderer.invoke('shell-labs:status', slug),
     start: (slug) => ipcRenderer.invoke('shell-labs:start', slug),
