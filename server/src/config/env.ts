@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { z } from "zod";
+import { isValidSemver } from "../utils/semver.js";
 
 // Every environment variable the API reads is declared here and validated once at
 // boot. Modules import `env`, never `process.env`, so a missing or malformed value
@@ -19,6 +20,12 @@ const optionalString = z
   .string()
   .optional()
   .transform((value) => (value && value.trim() ? value.trim() : undefined));
+
+const optionalSemver = (name: string) =>
+  optionalString.refine(
+    (value) => value === undefined || isValidSemver(value),
+    `${name} must be a plain semver version such as 0.1.0 or 0.2.0-beta.1`
+  );
 
 const schema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
@@ -155,6 +162,18 @@ const schema = z.object({
     .optional()
     .transform((value) => value !== "false"),
 
+  /**
+   * Forced desktop updates. The desktop app sends its version in X-Edorax-Desktop-Version and gets
+   * 426 DESKTOP_UPDATE_REQUIRED while it is lower than DESKTOP_MIN_VERSION. The default 0.0.0 blocks
+   * nothing. Change them with an environment change and a restart; no code deploy is needed.
+   */
+  DESKTOP_MIN_VERSION: optionalSemver("DESKTOP_MIN_VERSION"),
+  /** Newest released desktop version, for a soft "update available" prompt. Defaults to DESKTOP_MIN_VERSION. */
+  DESKTOP_LATEST_VERSION: optionalSemver("DESKTOP_LATEST_VERSION"),
+  DESKTOP_DOWNLOAD_URL: z.string().trim().url().default("https://github.com/devweekends/Edorax/releases/latest"),
+  /** Optional short text shown in the update screen; replaces the default 426 message. */
+  DESKTOP_UPDATE_MESSAGE: optionalString,
+
   /** Local testing only: e2e suites sign up repeatedly from one IP. Never set in production. */
   DISABLE_RATE_LIMITS: z
     .string()
@@ -171,7 +190,12 @@ const schema = z.object({
   POLAR_ENVIRONMENT: z.enum(["sandbox", "production"]).default("sandbox"),
 });
 
-export type Env = z.infer<typeof schema>;
+type Parsed = z.infer<typeof schema>;
+/** The parsed environment with the desktop version defaults filled in. */
+export type Env = Omit<Parsed, "DESKTOP_MIN_VERSION" | "DESKTOP_LATEST_VERSION"> & {
+  DESKTOP_MIN_VERSION: string;
+  DESKTOP_LATEST_VERSION: string;
+};
 
 function loadEnv(): Env {
   const parsed = schema.safeParse(process.env);
@@ -181,9 +205,12 @@ function loadEnv(): Env {
       .join("\n");
     throw new Error(`Invalid environment configuration:\n${problems}`);
   }
+  const desktopMinVersion = parsed.data.DESKTOP_MIN_VERSION ?? "0.0.0";
   return {
     ...parsed.data,
     APP_URL: parsed.data.APP_URL.replace(/\/$/, ""),
+    DESKTOP_MIN_VERSION: desktopMinVersion,
+    DESKTOP_LATEST_VERSION: parsed.data.DESKTOP_LATEST_VERSION ?? desktopMinVersion,
   };
 }
 

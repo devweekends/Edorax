@@ -91,6 +91,25 @@ With no labs imported, `version` is `""` and `labs` is `[]`.
 
 Deploy order: migrate first (`pnpm exec prisma migrate deploy`), then publish (`pnpm labs:publish`).
 
+## Desktop updates
+
+The desktop app can be forced to update. Settings are environment variables (validated at boot; an invalid version stops the server):
+
+| Variable | Default | |
+|---|---|---|
+| `DESKTOP_MIN_VERSION` | `0.0.0` | oldest version allowed; `0.0.0` blocks nothing |
+| `DESKTOP_LATEST_VERSION` | same as min | newest released version |
+| `DESKTOP_DOWNLOAD_URL` | `https://github.com/devweekends/Edorax/releases/latest` | where to download |
+| `DESKTOP_UPDATE_MESSAGE` | empty | optional short text for the update screen |
+
+Versions are plain semver (`0.1.0`, `0.2.0-beta.1`), compared numerically (`0.10.0` is higher than `0.9.0`; `0.2.0-beta.1` is lower than `0.2.0`).
+
+- `GET /api/v1/desktop/version` (public, `Cache-Control: max-age=60`) returns `{ success, data: { minimumVersion, latestVersion, downloadUrl, message } }`.
+- The app sends `X-Edorax-Desktop-Version: <semver>` on every request. If it is lower than `DESKTOP_MIN_VERSION`, any `/api/v1` route answers `426` with `{ success: false, code: "DESKTOP_UPDATE_REQUIRED", message, data: { minimumVersion, downloadUrl } }`.
+- Never blocked: `GET /api/v1/desktop/version`, `GET /health`, requests without the header (web app, old apps) and requests with an invalid header value.
+
+To force an update: publish the new release, set `DESKTOP_MIN_VERSION` (and `DESKTOP_LATEST_VERSION`) to the new version, and restart the API. No code deploy is needed. To undo it, set `DESKTOP_MIN_VERSION` back and restart.
+
 ## Commands
 
 | Command | |
