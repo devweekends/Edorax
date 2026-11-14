@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
-import { Container, FolderOpen, LogIn, MonitorDown, Terminal } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight, Container, FolderOpen, LogIn, MonitorDown, Terminal } from "lucide-react";
 import { SITE_SHARE_IMAGE } from "@/lib/site";
-import { AreaHero, AreaPage, AreaSection, CardGrid, ComingSoonPanel, InfoCard } from "@/components/areas/area-page";
+import { AreaHero, AreaPage, AreaSection, CardGrid, InfoCard } from "@/components/areas/area-page";
 
 export const metadata: Metadata = {
   title: "Shell labs and the desktop app",
-  description: "Real shell work on real machines, in the Edorax desktop app. What it does today and what is coming.",
+  description: "46 hands-on shell labs on real Linux machines, containers and networks, in the free Edorax desktop app. Download it here.",
   alternates: { canonical: "/labs/shell" },
   openGraph: { title: "Shell labs on Edorax", url: "/labs/shell", images: [SITE_SHARE_IMAGE] },
 };
@@ -16,9 +17,9 @@ export default function ShellLabsPage() {
       <AreaHero
         eyebrow="Labs"
         title="Shell labs"
-        status="coming-soon"
+        status="live"
         mood="determined"
-        intro="Real shell work: Linux machines, containers and small networks you can break and fix from a terminal. Shell labs run in the Edorax desktop app, which is being built now."
+        intro="Real shell work: Linux machines, containers and small networks you can break and fix from a terminal. There are 46 labs, from your first Linux commands to Docker networks. They run in the free Edorax desktop app: download it, sign in with your account and start."
       />
 
       <AreaSection id="what" title="What you will do">
@@ -32,11 +33,12 @@ export default function ShellLabsPage() {
       <AreaSection
         id="desktop"
         title="The desktop app"
-        intro="The Edorax desktop app is where shell labs will live. These notes cover what it does today and how it connects to your account."
+        intro="Shell labs run in the Edorax desktop app. Download it, sign in with your Edorax account and open the Labs tab."
       >
         <div className="grid gap-5 lg:grid-cols-2">
           <DocBlock icon={<MonitorDown className="size-5" />} title="What it does today">
             <ul className="list-disc space-y-1.5 pl-5">
+              <li>Run the 46 shell labs: each gives you a task, hints and a Check button that looks at the machine.</li>
               <li>Browse the course catalogue and course previews.</li>
               <li>Read lessons in a native reader, with the same diagrams, labs and quizzes as the web.</li>
               <li>Open a course IDE beside a lesson: edit files, run a terminal, and check exercises.</li>
@@ -55,22 +57,37 @@ export default function ShellLabsPage() {
               before it removes them. You need Docker Desktop running for this mode.
             </p>
           </DocBlock>
-          <DocBlock icon={<Terminal className="size-5" />} title="What is coming for shell labs">
+          <DocBlock icon={<Terminal className="size-5" />} title="Still to come">
             <ul className="list-disc space-y-1.5 pl-5">
-              <li>Lab machines that a course defines: Linux hosts, containers and small networks.</li>
-              <li>Tests that check the machine after each step.</li>
-              <li>Progress that syncs to your account, the same as chapters.</li>
+              <li>Labs that need their own kernel, such as systemd and disk storage.</li>
+              <li>Installers that are signed, so Windows and macOS stop showing a warning.</li>
+              <li>An app that updates itself. For now you download a new version.</li>
             </ul>
           </DocBlock>
         </div>
         <p className="mt-5 text-base text-muted-foreground">
-          The app is tested on Apple silicon Macs first. Windows and Intel Macs follow. Downloads will be linked here when it is ready.
+          Shell labs need Docker Desktop running on your computer. Your lab progress is saved on your account.
         </p>
       </AreaSection>
 
-      <ComingSoonPanel title="Shell labs arrive with the desktop app" action={{ href: "/labs?kind=visual", label: "Try a visual lab now" }}>
-        Visual labs are open today in the browser, with no install.
-      </ComingSoonPanel>
+      <AreaSection id="download" title="Download the desktop app">
+        <div className="flex flex-col gap-4 border border-border bg-card p-6 text-base text-muted-foreground sm:flex-row sm:items-center">
+          <div className="min-w-0 flex-1">
+            <p className="text-foreground">Windows, macOS (Apple silicon) and Linux. Version 0.1.0, early release.</p>
+            <p className="mt-1">
+              The installers are not signed yet, so Windows or macOS may show a warning the first time. Choose to run it anyway. Intel Macs are
+              not built yet.
+            </p>
+          </div>
+          <Link
+            href="https://github.com/devweekends/Edorax/releases"
+            className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-md border-2 border-primary px-5 text-base font-bold text-primary outline-none transition-colors hover:bg-secondary focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-brand-yellow"
+          >
+            Download the app
+            <ArrowRight className="size-4" aria-hidden />
+          </Link>
+        </div>
+      </AreaSection>
     </AreaPage>
   );
 }
