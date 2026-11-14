@@ -102,7 +102,9 @@ describe("course ZIP variant overrides", () => {
       expect(pinnedEnrollment.releaseId).toBe(release.id);
       const pinned = await releaseForEnrollment(course.id, pinnedEnrollment, course.familySlug);
       expect(pinned?.modules.find(module => module.key === variantModule.key)?.chapters[0]?.id).toBe(firstOwn.id);
-      expect((await loadChapterReader(slug, firstOwn.slug, learner)).content?.source).toBe(readerChapter.source);
+      // Opening the chapter moves the in-progress learner to the new release and its revised text.
+      expect((await loadChapterReader(slug, firstOwn.slug, learner)).content?.source).toContain("A revised book-specific evidence step.");
+      expect((await prisma.enrollment.findUniqueOrThrow({ where: { courseId_userId: { courseId: course.id, userId: learner.id } } })).releaseId).toBe(latest.activeReleaseId);
     } finally {
       await prisma.course.deleteMany({ where: { slug } });
       if (learnerId) await prisma.user.delete({ where: { id: learnerId } });
