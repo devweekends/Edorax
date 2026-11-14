@@ -725,6 +725,11 @@ rm -f /tmp/install.log`;
     this.disconnect();
   }
 
+  /** True when no terminal is attached, so the app can swap this runtime for one built from a newer lab. */
+  idle() {
+    return !this.terminal;
+  }
+
   openTerminal(id: unknown) {
     return this.serial(async () => {
       if (typeof id !== 'string' || !/^[a-zA-Z0-9-]{1,80}$/.test(id)) throw new Error('Invalid terminal session.');

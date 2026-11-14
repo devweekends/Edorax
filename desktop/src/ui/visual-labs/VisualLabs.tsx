@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ArrowLeft, ArrowRight, FlaskConical, Route, Terminal } from 'lucide-react';
 import { Lab } from '@buildment/learning-ui/labs/Lab';
 import { visualLabGroups } from '../../domain/visual-labs';
@@ -39,13 +39,40 @@ export function VisualLabs({
   const [topic, setTopic] = useState<string>('all');
   const [openSlug, setOpenSlug] = useState<string | null>(null);
   const [shellLabs, setShellLabs] = useState<ShellLabSummary[]>([]);
+  // The list is read once at start. Opening the Shell tab, or pressing Try again, asks the server
+  // for newer labs first, then reads the list again.
+  const [listed, setListed] = useState(false);
+  const [updating, setUpdating] = useState(false);
+  const [note, setNote] = useState('');
   useEffect(() => {
     if (!onOpenShellLabs) return;
     window.buildment.shellLabs
       .list()
-      .then(setShellLabs)
+      .then((list) => {
+        setShellLabs(list);
+        setListed(true);
+      })
       .catch(() => setShellLabs([]));
   }, [onOpenShellLabs]);
+  const refreshShell = useCallback(async () => {
+    setUpdating(true);
+    try {
+      const result = await window.buildment.shellLabs.refresh();
+      setNote(result.ok ? '' : result.message);
+    } catch {
+      setNote('Could not update the labs.');
+    }
+    try {
+      setShellLabs(await window.buildment.shellLabs.list());
+    } catch {
+      /* keep the list on screen */
+    }
+    setListed(true);
+    setUpdating(false);
+  }, []);
+  useEffect(() => {
+    if (onOpenShellLabs && kind === 'shell') void refreshShell();
+  }, [kind, onOpenShellLabs, refreshShell]);
 
   if (openSlug) {
     return (
@@ -169,6 +196,30 @@ export function VisualLabs({
       {(kind === 'all' || kind === 'shell') && onOpenShellLabs && (
         <div className="mt-12">
           <h2 className="font-heading text-xl font-bold tracking-tight text-foreground">Shell labs</h2>
+          {updating && (
+            <p role="status" className="mt-2 text-xs text-muted-foreground">
+              Updating labs...
+            </p>
+          )}
+          {!updating && note && (
+            <p role="status" className="mt-2 text-xs text-muted-foreground">
+              {note}
+            </p>
+          )}
+          {listed && !updating && !shellLabs.length && (
+            <div className="mt-4 max-w-xl rounded-2xl border border-dashed border-border p-5">
+              <p className="text-sm text-muted-foreground">
+                Labs download the first time you are online and signed in. Connect, sign in, then press Try again.
+              </p>
+              <button
+                type="button"
+                onClick={() => void refreshShell()}
+                className="mt-3 rounded-md border border-border px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted"
+              >
+                Try again
+              </button>
+            </div>
+          )}
           <ul className="mt-5 grid max-w-4xl grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4">
             {SHELL_TOPICS.map((topic) => {
               const labs = shellLabs.filter((lab) => lab.topic === topic.id);

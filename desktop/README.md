@@ -67,6 +67,10 @@ BUILDMENT_WEB_URL=https://edorax.com npm --prefix desktop start
 
 The reader sidebar and heading outline are shared with web. Desktop bundles DM Sans, Unbounded, and JetBrains Mono locally, so typography does not require a font-network request. HTTPS links in lesson prose open in the system browser; same-course chapter links stay in the desktop reader.
 
+## Shell labs
+
+Shell labs come from the Edorax server (`GET /api/v1/shell-labs/version` and `/api/v1/shell-labs`), not from the installer. The app checks the version when it starts, after sign-in and when the Shell tab opens, and downloads the full list only when the version changed. The last good list is saved as `shell-labs.json` in the app's user data folder, so labs still open offline. A first start with no saved list and no network shows no labs until the app is online and signed in. For development and tests, the app falls back to a folder of YAML files when there is no saved list: `EDORAX_LABS_DIR`, or `desktop/labs/shell`. `pnpm sync:labs` (with `EDORAX_CORE_DIR` set to an Edorax Core checkout) fills that folder; it is no longer part of the installer.
+
 ## Edorax branding
 
 The desktop name is Edorax. Sidebar/startup branding and packaged/Dock icons use `frontend/public/logo.svg`, the web app's current mark. After a web logo change, run `node desktop/scripts/sync-brand.mjs` on macOS with frontend dependencies installed to regenerate the SVG copy and PNG/ICNS/ICO assets. Restart Electron to refresh the native app name and Dock icon.

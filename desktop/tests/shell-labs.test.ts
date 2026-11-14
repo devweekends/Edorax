@@ -4,10 +4,13 @@ import os from 'node:os';
 import path from 'node:path';
 import { dump as dumpYaml } from 'js-yaml';
 import assert from 'node:assert/strict';
-import { SHELL_LABS, getShellLab } from '../src/shell-labs/catalog';
+import { configureShellLabs, getShellLab, getShellLabs } from '../src/shell-labs/catalog';
 import { shellLabView, validateShellLab, type ShellLab } from '../src/domain/shell-labs';
 import { SHELL_LAB_CAPABILITIES, ShellLabRuntime, shellContainerOptions, shellLabName, shellNetworkName } from '../src/shell-labs/runtime';
-import { loadShellLabs } from '../src/shell-labs/loader';
+import { devShellLabsDir, loadShellLabs } from '../src/shell-labs/loader';
+
+// The labs for these tests come from the development folder (run "pnpm sync:labs" first).
+const SHELL_LABS = loadShellLabs().labs;
 
 test('every shell lab is valid and has a unique slug', () => {
   const slugs = new Set<string>();
@@ -82,7 +85,9 @@ test('lookup only returns registered labs', () => {
   assert.equal(getShellLab('nope'), null);
   assert.equal(getShellLab('__proto__'), null);
   assert.equal(getShellLab(42), null);
-  assert.equal(getShellLab(SHELL_LABS[0].slug), SHELL_LABS[0]);
+  configureShellLabs({ cacheFile: null, devDir: devShellLabsDir() });
+  assert.equal(getShellLab(SHELL_LABS[0].slug), getShellLabs()[0]);
+  assert.deepEqual(getShellLab(SHELL_LABS[0].slug), SHELL_LABS[0]);
 });
 
 test('lab machines are isolated: no network, no mounts, few capabilities, bounded resources', () => {

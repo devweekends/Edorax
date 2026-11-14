@@ -4,8 +4,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { localDocker } from '../src/labs/runtime';
-import { SHELL_LABS } from '../src/shell-labs/catalog';
+import { loadShellLabs } from '../src/shell-labs/loader';
 import { ShellLabRuntime, shellLabName } from '../src/shell-labs/runtime';
+
+const SHELL_LABS = loadShellLabs().labs;
 
 async function sh(docker: ReturnType<typeof localDocker>, name: string, script: string) {
   const execution = await docker.getContainer(name).exec({ Cmd: ['bash', '-c', script], AttachStdout: true, AttachStderr: true });
