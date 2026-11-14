@@ -32,6 +32,8 @@
     "courses:check": "tsx scripts/repository-course-publish.ts --check",
     "courses:package:check": "tsx scripts/check-marketplace-package.ts",
     "courses:publish": "tsx scripts/repository-course-publish.ts --publish",
+    "labs:check": "tsx scripts/shell-labs-publish.ts --check",
+    "labs:publish": "tsx scripts/shell-labs-publish.ts --publish",
     "capstone:calibrate": "tsx scripts/capstone-calibrate.ts",
     "content:strip-code": "tsx scripts/strip-code-exercises.ts",
     "content:seed-predicts": "tsx scripts/seed-predict-fences.ts",

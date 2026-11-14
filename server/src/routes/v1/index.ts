@@ -20,6 +20,7 @@ import engagementRoutes from "./engagement.js";
 import eventRoutes from "./events.js";
 import publicRoutes from "./public.js";
 import certificateRoutes from "./certificates.js";
+import shellLabRoutes from "./shell-labs.js";
 
 // First-party API, versioned. JSON routes use the { success, data } envelope;
 // the media route streams image bytes.
@@ -46,5 +47,6 @@ router.use("/events", engagementRoutes);
 router.use("/events", eventRoutes);
 router.use("/public", publicRoutes);
 router.use("/certificates", certificateRoutes);
+router.use("/shell-labs", shellLabRoutes);
 
 export default router;

@@ -1679,3 +1679,27 @@ model Certificate {
   @@index([userId])
   @@index([courseId])
 }
+
+/// A hands-on shell lab served to the desktop app. Authored as YAML in the private
+/// content repository (labs/shell) and published with `pnpm labs:publish`.
+/// `data` holds the whole lab (checks and solutions included): the app runs the checks.
+/// A lab dropped from index.yaml is kept with active=false, never deleted.
+model ShellLab {
+  slug        String   @id
+  topic       String
+  level       String
+  title       String
+  summary     String
+  minutes     Int
+  /// Order in index.yaml.
+  position    Int
+  active      Boolean  @default(true)
+  /// sha256 of the canonical JSON of `data`.
+  contentHash String
+  data        Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([active, position])
+  @@map("shell_labs")
+}
