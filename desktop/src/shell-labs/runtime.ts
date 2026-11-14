@@ -5,9 +5,10 @@
 // the container, so every attempt starts from the same broken server.
 import type Docker from 'dockerode';
 import { createHash } from 'node:crypto';
+import fs from 'node:fs';
 import { StringDecoder } from 'node:string_decoder';
 import { PassThrough, type Duplex } from 'node:stream';
-import { SHELL_LAB_EXTRA_CAPABILITIES, type ShellLab, type ShellLabStatus, type ShellMachine, type ShellStepResult } from '../domain/shell-labs';
+import { SHELL_LAB_EXTRA_CAPABILITIES, type ShellLab, type ShellLabStatus, type ShellMachine, type ShellStartProgress, type ShellStepResult } from '../domain/shell-labs';
 
 const LABEL = 'com.edorax.shell-lab';
 const OUTPUT_LIMIT = 64 * 1024;
@@ -15,6 +16,63 @@ const OUTPUT_LIMIT = 64 * 1024;
 const CHECK_SECONDS = 12;
 const RESULT_MARK = '@@edorax-check';
 const missing = (error: unknown) => (error as { statusCode?: number })?.statusCode === 404;
+/** Progress sent to the app, without the lab slug (the caller adds it). */
+export type StartProgress = Omit<ShellStartProgress, 'slug'>;
+const PROGRESS_EVERY_MS = 150;
+
+/** Bytes as the learner reads them: 12.3 MB. */
+function megabytes(bytes: number) {
+  return `${(bytes / 1_000_000).toFixed(bytes < 10_000_000 ? 1 : 0)} MB`;
+}
+
+/**
+ * Tells the app which step of a first start is running and how far it is. A step either has
+ * a measured percent (a download, a package install) or only a live line and a timer.
+ */
+class StartReporter {
+  private step = -1;
+  private stepStartedAt = Date.now();
+  private lastSent = 0;
+  /** The last percent of this step, kept so a plain output line does not turn the bar back into a moving one. */
+  private percent: number | undefined;
+  constructor(
+    private readonly plan: string[],
+    private readonly send: (progress: StartProgress) => void,
+  ) {}
+
+  begin(label: string) {
+    const next = this.plan.indexOf(label, this.step + 1);
+    this.step = next === -1 ? Math.min(this.step + 1, this.plan.length - 1) : next;
+    this.stepStartedAt = Date.now();
+    this.lastSent = 0;
+    this.percent = undefined;
+    this.update({});
+  }
+
+  update(part: { percent?: number; detail?: string }) {
+    if (part.percent !== undefined) this.percent = part.percent;
+    const now = Date.now();
+    if (now - this.lastSent < PROGRESS_EVERY_MS && part.percent !== 100) return;
+    this.lastSent = now;
+    this.send({ plan: this.plan, step: Math.max(this.step, 0), stepStartedAt: this.stepStartedAt, percent: this.percent, ...(part.detail ? { detail: part.detail } : {}) });
+  }
+
+  /** A line a script printed. Carriage returns (progress bars) count as line ends. */
+  line(raw: string) {
+    const text = raw.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '').trim();
+    if (text) this.update({ detail: text.slice(0, 120) });
+  }
+}
+
+/** Splits a stream into lines for a callback, treating \r like \n, and keeps a partial line for the next chunk. */
+function lineSplitter(onLine: (line: string) => void) {
+  let rest = '';
+  return (chunk: string) => {
+    const parts = (rest + chunk).split(/[\r\n]+/);
+    rest = parts.pop() ?? '';
+    for (const part of parts) onLine(part);
+  };
+}
 
 export function shellLabName(scope: string) {
   return `edorax-shell-${createHash('sha256').update(scope).digest('hex').slice(0, 24)}`;
@@ -34,6 +92,15 @@ export function shellLabImage(lab: ShellLab, machine: ShellMachine = lab.machine
   const identity = `${machine.image}\n${packages.join('\n')}${build ? `\n--build--\n${build}` : ''}`;
   const hash = createHash('sha256').update(identity).digest('hex').slice(0, 20);
   return `edorax-shell-lab:${hash}`;
+}
+
+/** The group that may open /dev/kvm on this computer. The hypervisor container runs as a normal user and joins that group. */
+function kvmGroup(): number | undefined {
+  try {
+    return fs.statSync('/dev/kvm').gid;
+  } catch {
+    return undefined;
+  }
 }
 
 /** The private network of a lab with more than one machine. It has no way out: machines reach each other, nothing else. */
@@ -56,23 +123,35 @@ export function shellContainerOptions(lab: ShellLab, scope: string, machine: She
     // Every machine carries the lead container's name as its owner label, so one check proves ownership of all of them.
     Labels: { [LABEL]: lead, 'com.edorax.shell-lab.slug': lab.slug, 'com.edorax.shell-lab.machine': machine.name },
     WorkingDir: '/root',
-    Cmd: ['sleep', 'infinity'],
+    // A virtual machine lab runs the image's own command (the hypervisor); the others just stay alive.
+    ...(machine.vm ? {} : { Cmd: ['sleep', 'infinity'] }),
     ...(multi ? { NetworkingConfig: { EndpointsConfig: { [network]: { Aliases: [machine.name] } } } } : {}),
     HostConfig: {
       // A tiny init as PID 1 reaps exited processes, so daemons a learner starts and stops
       // (sshd, dnsmasq) do not pile up as zombies against the process limit.
-      Init: true,
-      Memory: (machine.memoryMb ?? 256) * 1024 * 1024,
-      MemorySwap: (machine.memoryMb ?? 256) * 1024 * 1024,
-      NanoCpus: Math.round((machine.cpus ?? 1) * 1_000_000_000),
-      PidsLimit: machine.pids ?? 128,
+      Init: !machine.vm,
+      Memory: (machine.memoryMb ?? (machine.vm ? 2800 : 256)) * 1024 * 1024,
+      MemorySwap: (machine.memoryMb ?? (machine.vm ? 2800 : 256)) * 1024 * 1024,
+      NanoCpus: Math.round((machine.cpus ?? (machine.vm ? 2 : 1)) * 1_000_000_000),
+      PidsLimit: machine.pids ?? (machine.vm ? 256 : 128),
       CapDrop: ['ALL'],
       CapAdd: [...SHELL_LAB_CAPABILITIES, ...extra],
       SecurityOpt: machine.sudo ? [] : ['no-new-privileges:true'],
       NetworkMode: multi ? network : 'none',
       // exec: learners write small scripts in /tmp and run them, and Docker mounts a tmpfs noexec by default.
-      Tmpfs: { '/tmp': 'rw,exec,nosuid,size=32m' },
+      Tmpfs: { '/tmp': 'rw,exec,nosuid,size=32m', ...(machine.vm ? { '/run/labvm': 'size=16m,uid=10001,mode=0700' } : {}) },
+      // The hypervisor needs KVM and nothing else: still no capabilities, no network, no host mounts.
+      ...(machine.vm
+        ? {
+            Devices: [{ PathOnHost: '/dev/kvm', PathInContainer: '/dev/kvm', CgroupPermissions: 'rwm' }],
+            // Without capabilities root cannot open /dev/kvm, so the image runs as a normal user in kvm's group.
+            ...(kvmGroup() !== undefined ? { GroupAdd: [String(kvmGroup())] } : {}),
+            ReadonlyRootfs: true,
+          }
+        : {}),
     },
+    // The virtual machine's disk changes live in a volume on real disk, removed with the container.
+    ...(machine.vm ? { Volumes: { '/var/lib/labvm': {} } } : {}),
   };
 }
 
@@ -86,6 +165,7 @@ export class ShellLabRuntime {
     private readonly lab: ShellLab,
     private readonly scope: string,
     private readonly emit: (event: { id: string; data: string }) => void = () => {},
+    private readonly progress: (progress: StartProgress) => void = () => {},
   ) {
     this.name = shellLabName(scope);
   }
@@ -115,6 +195,11 @@ export class ShellLabRuntime {
       if (missing(error)) return null;
       throw error;
     }
+  }
+
+  /** Does this lab machine run as a virtual machine? */
+  private isVm(machineName: string) {
+    return Boolean(this.machines().find((machine) => machine.spec.name === machineName)?.spec.vm);
   }
 
   /** The main machine, or null when it does not exist. */
@@ -170,26 +255,105 @@ export class ShellLabRuntime {
     }
   }
 
-  private async pull() {
-    for (const machine of this.machines()) {
+  /** What a first start must fetch or build, one entry per image that is not on this computer yet. */
+  private async imageWork() {
+    const machines = this.machines();
+    const multi = machines.length > 1;
+    const targets = new Set<string>();
+    const bases = new Set<string>();
+    const work: { spec: ShellMachine; target: string; tag: string; pullBase: boolean; install: boolean; build: boolean }[] = [];
+    for (const machine of machines) {
       const target = shellLabImage(this.lab, machine.spec);
-      if (await this.hasImage(target)) continue;
-      if (!(await this.hasImage(machine.spec.image))) {
-        const stream = await this.docker.pull(machine.spec.image);
-        await new Promise<void>((resolve, reject) =>
-          this.docker.modem.followProgress(stream, (error: unknown) => (error ? reject(error) : resolve())),
-        );
-      }
-      if (target !== machine.spec.image) await this.bake(target, machine.spec);
+      if (targets.has(target) || (await this.hasImage(target))) continue;
+      targets.add(target);
+      const base = machine.spec.image;
+      const pullBase = !bases.has(base) && !(await this.hasImage(base));
+      bases.add(base);
+      const baked = target !== base;
+      work.push({
+        spec: machine.spec,
+        target,
+        tag: multi ? ` (${machine.spec.name})` : '',
+        pullBase,
+        install: baked && Boolean(machine.spec.packages?.length),
+        build: baked && Boolean(machine.spec.build?.trim()),
+      });
     }
+    return work;
+  }
+
+  /** The steps a first start will show, in order. */
+  private planLabels(work: Awaited<ReturnType<ShellLabRuntime['imageWork']>>) {
+    const labels: string[] = [];
+    for (const item of work) {
+      if (item.pullBase) labels.push(`Download the base system${item.tag}`);
+      if (item.install) labels.push(`Install the tools${item.tag}`);
+      if (item.build) labels.push(`Build the lab tools${item.tag}`);
+    }
+    const machines = this.machines();
+    labels.push(machines.length > 1 ? 'Start the machines' : 'Start the machine');
+    if (machines.some((machine) => machine.spec.vm)) labels.push('Boot the virtual machine');
+    if (machines.some((machine) => machine.setup)) labels.push('Prepare the lab');
+    return labels;
+  }
+
+  private async pull(work: Awaited<ReturnType<ShellLabRuntime['imageWork']>>, report: StartReporter) {
+    for (const item of work) {
+      if (item.pullBase) {
+        report.begin(`Download the base system${item.tag}`);
+        try {
+          await this.pullBase(item.spec.image, report);
+        } catch (error) {
+          // The lab VM image is not published anywhere yet: it is built once on the learner's computer.
+          if (item.spec.vm)
+            throw new Error(`The lab VM image ${item.spec.image} is not on this computer yet. Build it once with labs/vm/build.sh from Edorax Core (LABVM_IMAGE=${item.spec.image}), then start the lab again.`);
+          throw error;
+        }
+      }
+      // A base image another machine's build already pulled is simply there now.
+      if (item.target !== item.spec.image) await this.bake(item.target, item.spec, item.tag, report);
+    }
+  }
+
+  /** Pull an image and report how many bytes of its layers have arrived. */
+  private async pullBase(image: string, report: StartReporter) {
+    const stream = await this.docker.pull(image);
+    const layers = new Map<string, { current: number; total: number }>();
+    let best = 0;
+    await new Promise<void>((resolve, reject) =>
+      this.docker.modem.followProgress(
+        stream,
+        (error: unknown) => (error ? reject(error) : resolve()),
+        (event: { id?: string; status?: string; progressDetail?: { current?: number; total?: number } }) => {
+          if (!event.id) return;
+          const detail = event.progressDetail;
+          if (event.status === 'Downloading' && detail?.total) layers.set(event.id, { current: detail.current ?? 0, total: detail.total });
+          else if (/complete|Already exists/.test(event.status ?? '')) {
+            const layer = layers.get(event.id);
+            if (layer) layers.set(event.id, { current: layer.total, total: layer.total });
+          }
+          let current = 0;
+          let total = 0;
+          for (const layer of layers.values()) {
+            current += layer.current;
+            total += layer.total;
+          }
+          if (!total) return;
+          // The total grows as layers are discovered; never let the bar move backwards.
+          best = Math.max(best, Math.min(99, Math.round((current / total) * 100)));
+          report.update({ percent: best, detail: `${megabytes(current)} of ${megabytes(total)}` });
+        },
+      ),
+    );
+    report.update({ percent: 100 });
   }
 
   /**
    * Install a machine's packages in a throwaway container that has network, and save the result
    * as the lab image. Runs once per package list; the lab machines themselves never have outside network.
    */
-  private async bake(target: string, spec: ShellMachine) {
-    const [repo, tag] = target.split(':');
+  private async bake(target: string, spec: ShellMachine, tag: string, report: StartReporter) {
+    const [repo, version] = target.split(':');
     const packages = [...new Set(spec.packages ?? [])].sort();
     const builder = await this.docker.createContainer({
       Image: spec.image,
@@ -201,53 +365,87 @@ export class ShellLabRuntime {
       const list = packages.join(' ');
       // apt: policy-rc.d stops packages starting their services during install; a daemon left
       // running would hold this command's output open and the build would never finish.
+      // The script prints EDORAX_TOTAL (how many packages will be installed) so the app can show a percent.
       // dnf images (Rocky, Alma) have no service manager running, so nothing starts there.
       const install = !packages.length
-        ? 'true'
-        : `if command -v apt-get >/dev/null; then
+        ? ''
+        : `set -o pipefail
+if command -v apt-get >/dev/null; then
   export DEBIAN_FRONTEND=noninteractive
   printf '#!/bin/sh\\nexit 101\\n' > /usr/sbin/policy-rc.d; chmod +x /usr/sbin/policy-rc.d
-  { apt-get update -qq && apt-get install -y -qq --no-install-recommends ${list}; } </dev/null >/tmp/install.log 2>&1 || { tail -20 /tmp/install.log; exit 1; }
+  echo "EDORAX_STAGE Reading the package list"
+  apt-get update -q </dev/null >/dev/null 2>&1 || { echo "apt-get update failed"; exit 1; }
+  echo "EDORAX_TOTAL $(apt-get -s install -y --no-install-recommends ${list} </dev/null 2>/dev/null | grep -c '^Inst ')"
+  { apt-get install -y -q --no-install-recommends ${list}; } </dev/null 2>&1 | tee /tmp/install.log || { tail -20 /tmp/install.log; exit 1; }
   rm -f /usr/sbin/policy-rc.d; rm -rf /var/lib/apt/lists/*
 elif command -v dnf >/dev/null; then
-  dnf install -y -q --setopt=install_weak_deps=False ${list} </dev/null >/tmp/install.log 2>&1 || { tail -20 /tmp/install.log; exit 1; }
+  dnf install -y -q --setopt=install_weak_deps=False ${list} </dev/null 2>&1 | tee /tmp/install.log || { tail -20 /tmp/install.log; exit 1; }
   dnf clean all -q >/dev/null 2>&1 || true
 else
   echo "The image has neither apt-get nor dnf."; exit 1
-fi`;
+fi
+rm -f /tmp/install.log`;
       const build = spec.build?.trim();
       const encoded = build ? Buffer.from(build).toString('base64') : '';
-      const result = await this.run(
-        builder,
-        `set -e
-${install}
-rm -f /tmp/install.log
-${build ? `printf %s '${encoded}' | base64 -d > /tmp/edorax-build.sh; bash -e /tmp/edorax-build.sh </dev/null 2>&1 | tail -20; status=\${PIPESTATUS[0]}; rm -f /tmp/edorax-build.sh; exit $status` : ''}`,
-        1_200_000,
-      );
-      if (result.code)
-        throw new Error(`The lab tools could not be installed. Check your internet connection and try again. ${result.output.trim().slice(-400)}`);
-      await builder.commit({ repo, tag, changes: ['CMD ["sleep", "infinity"]'] });
+      const failure = (output: string) =>
+        new Error(`The lab tools could not be installed. Check your internet connection and try again. ${output.trim().slice(-400)}`);
+
+      if (install) {
+        report.begin(`Install the tools${tag}`);
+        let total = 0;
+        let steps = 0;
+        const reading = lineSplitter((line) => {
+          const total_ = /^EDORAX_TOTAL (\d+)/.exec(line);
+          if (total_) {
+            total = Number(total_[1]);
+            report.update({ percent: 0, detail: `${total} packages` });
+            return;
+          }
+          const stage = /^EDORAX_STAGE (.+)/.exec(line);
+          if (stage) return report.update({ detail: stage[1] });
+          // Each package shows up twice: once as "Get:" (download) and once as "Setting up" (install).
+          if (total && /^(Get:\d+|Setting up )/.test(line)) {
+            steps += 1;
+            const percent = Math.min(99, Math.round((steps / (total * 2)) * 100));
+            report.update({ percent, detail: line.replace(/^Get:\d+\s+\S+\s+\S+\s+\S+\s+/, 'Downloading ').replace(/^Setting up /, 'Installing ').slice(0, 80) });
+          } else if (total && /^Unpacking /.test(line)) report.update({ detail: line.replace(/^Unpacking /, 'Unpacking ').slice(0, 80) });
+        });
+        const result = await this.run(builder, install, 1_200_000, reading);
+        if (result.code) throw failure(result.output);
+        report.update({ percent: 100 });
+      }
+      if (build) {
+        report.begin(`Build the lab tools${tag}`);
+        const result = await this.run(
+          builder,
+          `printf %s '${encoded}' | base64 -d > /tmp/edorax-build.sh; bash -e /tmp/edorax-build.sh </dev/null 2>&1 | tee /tmp/build.log; status=\${PIPESTATUS[0]}; rm -f /tmp/edorax-build.sh; [ $status = 0 ] || tail -20 /tmp/build.log; rm -f /tmp/build.log; exit $status`,
+          1_200_000,
+          lineSplitter((line) => report.line(line)),
+        );
+        if (result.code) throw failure(result.output);
+      }
+      await builder.commit({ repo, tag: version, changes: ['CMD ["sleep", "infinity"]'] });
     } finally {
       await builder.remove({ force: true }).catch(() => {});
     }
   }
 
   /** Run a bash script as root in the machine. Only lab-authored scripts come here. */
-  private async run(container: Docker.Container, script: string, timeoutMs = 20_000) {
-    const execution = await container.exec({
-      Cmd: ['bash', '-c', script],
-      User: 'root',
-      WorkingDir: '/root',
-      AttachStdout: true,
-      AttachStderr: true,
-    });
+  private async run(container: Docker.Container, script: string, timeoutMs = 20_000, onText?: (chunk: string) => void, vm = false) {
+    // In a virtual machine lab the script runs as root inside the VM; the container user only relays it.
+    const execution = await container.exec(
+      vm
+        ? { Cmd: ['labvm-exec', '-t', String(Math.ceil(timeoutMs / 1000)), script], AttachStdout: true, AttachStderr: true }
+        : { Cmd: ['bash', '-c', script], User: 'root', WorkingDir: '/root', AttachStdout: true, AttachStderr: true },
+    );
     const stream = await execution.start({ hijack: true, stdin: false });
     const output = new PassThrough();
     const decoder = new StringDecoder('utf8');
     let text = '';
     output.on('data', (chunk: Buffer) => {
-      text = (text + decoder.write(chunk)).slice(-OUTPUT_LIMIT);
+      const piece = decoder.write(chunk);
+      text = (text + piece).slice(-OUTPUT_LIMIT);
+      onText?.(piece);
     });
     this.docker.modem.demuxStream(stream, output, output);
     await new Promise<void>((resolve, reject) => {
@@ -265,6 +463,37 @@ ${build ? `printf %s '${encoded}' | base64 -d > /tmp/edorax-build.sh; bash -e /t
       });
     });
     return { code: (await execution.inspect()).ExitCode ?? 1, output: text };
+  }
+
+  /** Waits until the virtual machine inside a lab container has booted and its Docker engine answers. */
+  private async waitForVm(container: Docker.Container, report?: StartReporter) {
+    const execution = await container.exec({ Cmd: ['labvm-wait'], AttachStdout: true, AttachStderr: true });
+    const stream = await execution.start({ hijack: true, stdin: false });
+    const output = new PassThrough();
+    const decoder = new StringDecoder('utf8');
+    let text = '';
+    const lines = lineSplitter((line) => report?.line(line));
+    output.on('data', (chunk: Buffer) => {
+      const piece = decoder.write(chunk);
+      text = (text + piece).slice(-2000);
+      lines(piece);
+    });
+    this.docker.modem.demuxStream(stream, output, output);
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        stream.destroy();
+        reject(new Error('The lab virtual machine took too long to start.'));
+      }, 240_000);
+      stream.once('end', () => {
+        clearTimeout(timer);
+        resolve();
+      });
+      stream.once('error', (error) => {
+        clearTimeout(timer);
+        reject(error);
+      });
+    });
+    if ((await execution.inspect()).ExitCode) throw new Error(`The lab virtual machine did not start. ${text.trim().slice(-300)}`);
   }
 
   private async running() {
@@ -289,7 +518,7 @@ ${build ? `printf %s '${encoded}' | base64 -d > /tmp/edorax-build.sh; bash -e /t
     const machines = this.machines();
     for (const machine of [...machines].reverse()) {
       const resource = await this.inspectOwned(machine.container);
-      if (resource) await resource.container.remove({ force: true }).catch(() => {});
+      if (resource) await resource.container.remove({ force: true, v: true }).catch(() => {});
     }
     if (machines.length > 1) await this.docker.getNetwork(shellNetworkName(this.scope)).remove().catch(() => {});
   }
@@ -300,8 +529,11 @@ ${build ? `printf %s '${encoded}' | base64 -d > /tmp/edorax-build.sh; bash -e /t
       if (!found.has(this.lab.machine.name)) {
         // A leftover extra machine without the main one is a broken lab: start clean.
         if (found.size) await this.removeAll();
-        await this.pull();
+        const work = await this.imageWork();
+        const report = new StartReporter(this.planLabels(work), this.progress);
+        await this.pull(work, report);
         const machines = this.machines();
+        report.begin(machines.length > 1 ? 'Start the machines' : 'Start the machine');
         try {
           if (machines.length > 1)
             await this.docker.createNetwork({ Name: shellNetworkName(this.scope), Driver: 'bridge', Internal: true, Labels: { [LABEL]: this.name } });
@@ -311,11 +543,16 @@ ${build ? `printf %s '${encoded}' | base64 -d > /tmp/edorax-build.sh; bash -e /t
             await container.start();
             created.push({ machine, container });
           }
+          if (machines.some((item) => item.spec.vm)) {
+            report.begin('Boot the virtual machine');
+            for (const { machine, container } of created) if (machine.spec.vm) await this.waitForVm(container, report);
+          }
           // Setup runs once, on fresh machines. Resuming never runs it again. Extra machines go first,
           // so the main machine's setup can already reach them.
+          if (machines.some((item) => item.setup)) report.begin('Prepare the lab');
           for (const { machine, container } of [...created.slice(1), created[0]]) {
             if (!machine.setup) continue;
-            const result = await this.run(container, machine.setup, 420_000).catch((error: unknown) => ({
+            const result = await this.run(container, machine.setup, 420_000, lineSplitter((line) => report.line(line)), machine.spec.vm).catch((error: unknown) => ({
               code: 1,
               output: error instanceof Error ? error.message : String(error),
             }));
@@ -323,6 +560,8 @@ ${build ? `printf %s '${encoded}' | base64 -d > /tmp/edorax-build.sh; bash -e /t
           }
         } catch (error) {
           await this.removeAll();
+          if (machines.some((item) => item.spec.vm) && /kvm/i.test(error instanceof Error ? error.message : String(error)))
+            throw new Error('This lab needs hardware virtualization (KVM), and this computer does not offer it to Docker. Turn on virtualization in the BIOS, or use a computer with KVM.');
           throw error;
         }
         return;
@@ -331,12 +570,15 @@ ${build ? `printf %s '${encoded}' | base64 -d > /tmp/edorax-build.sh; bash -e /t
       const stopped = machines.filter((machine) => !found.get(machine.spec.name)?.info.State.Running);
       for (const machine of machines) {
         const resource = found.get(machine.spec.name);
-        if (resource && !resource.info.State.Running) await resource.container.start();
+        if (resource && !resource.info.State.Running) {
+          await resource.container.start();
+          if (machine.spec.vm) await this.waitForVm(resource.container);
+        }
       }
       // Best effort: a boot script that fails leaves the machine running, as a real boot would.
       for (const machine of [...stopped.filter((item) => !item.main), ...stopped.filter((item) => item.main)]) {
         const resource = await this.inspectOwned(machine.container);
-        if (resource && machine.boot) await this.run(resource.container, machine.boot, 90_000).catch(() => {});
+        if (resource && machine.boot) await this.run(resource.container, machine.boot, 90_000, undefined, machine.spec.vm).catch(() => {});
       }
     });
   }
@@ -348,7 +590,7 @@ ${build ? `printf %s '${encoded}' | base64 -d > /tmp/edorax-build.sh; bash -e /t
       for (const machine of [...this.machines()].reverse()) {
         const resource = found.get(machine.spec.name);
         if (!resource?.info.State.Running) continue;
-        if (machine.shutdown) await this.run(resource.container, machine.shutdown, 15_000).catch(() => {});
+        if (machine.shutdown) await this.run(resource.container, machine.shutdown, 15_000, undefined, machine.spec.vm).catch(() => {});
         await resource.container.stop({ t: 1 });
       }
     });
@@ -359,6 +601,15 @@ ${build ? `printf %s '${encoded}' | base64 -d > /tmp/edorax-build.sh; bash -e /t
       this.disconnect();
       await this.removeAll();
     });
+  }
+
+  /** Checks a quiz answer. The right answer stays here; the page only learns whether its choice was right. */
+  answer(stepId: unknown, option: unknown): { correct: boolean; why: string } {
+    const quiz = this.lab.steps.find((item) => item.id === stepId)?.quiz;
+    if (!quiz) throw new Error('This step has no question.');
+    if (!Number.isInteger(option) || (option as number) < 0 || (option as number) >= quiz.options.length) throw new Error('Pick one of the answers.');
+    const correct = option === quiz.answer;
+    return { correct, why: correct ? quiz.why : '' };
   }
 
   check(stepId: unknown): Promise<ShellStepResult> {
@@ -386,14 +637,14 @@ ${build ? `printf %s '${encoded}' | base64 -d > /tmp/edorax-build.sh; bash -e /t
   }
 
   /** Runs scripts on one machine, one bash per script with its own time limit. Returns the exit code of each, by index. */
-  private async runEach(container: Docker.Container, scripts: string[], mark: string): Promise<Map<number, number>> {
+  private async runEach(container: Docker.Container, scripts: string[], mark: string, vm = false): Promise<Map<number, number>> {
     const body = scripts
       .map((script, index) => {
         const encoded = Buffer.from(script).toString('base64');
         return `timeout ${CHECK_SECONDS} bash -c "$(printf %s '${encoded}' | base64 -d)" </dev/null >/dev/null 2>&1; echo "${mark} ${index} $?"`;
       })
       .join('\n');
-    const { output } = await this.run(container, body, (CHECK_SECONDS * scripts.length + 10) * 1000).catch(() => ({ code: 1, output: '' }));
+    const { output } = await this.run(container, body, (CHECK_SECONDS * scripts.length + 10) * 1000, undefined, vm).catch(() => ({ code: 1, output: '' }));
     const codes = new Map<number, number>();
     for (const line of output.split('\n')) {
       const match = new RegExp(`^${mark} (\\d+) (\\d+)$`).exec(line.trim());
@@ -413,7 +664,7 @@ ${build ? `printf %s '${encoded}' | base64 -d > /tmp/edorax-build.sh; bash -e /t
     for (const [machine, container] of containers) {
       const mine = all.map((item, index) => ({ item, index })).filter(({ item }) => item.on === machine);
       if (!mine.length) continue;
-      const codes = await this.runEach(container, mine.map(({ item }) => item.check.run), RESULT_MARK);
+      const codes = await this.runEach(container, mine.map(({ item }) => item.check.run), RESULT_MARK, this.isVm(machine));
       mine.forEach(({ index }, position) => passedAll.set(index, codes.get(position) === 0));
     }
     const results: ShellStepResult[] = steps.map((step) => {
@@ -421,7 +672,8 @@ ${build ? `printf %s '${encoded}' | base64 -d > /tmp/edorax-build.sh; bash -e /t
         const passed = passedAll.get(all.findIndex((item) => item.check === check)) === true;
         return { id: check.id, label: check.label, passed, message: passed ? '' : check.fail };
       });
-      return { stepId: step.id, passed: checks.every((check) => check.passed), checks };
+      // A quiz step has no checks to run: it passes when the learner answers it, not by the machine.
+      return { stepId: step.id, passed: step.quiz ? false : checks.every((check) => check.passed), checks };
     });
     // Only a failing step is asked about its listed mistakes, so a passing lab costs nothing extra.
     const failing = results.filter((result) => !result.passed && steps.find((step) => step.id === result.stepId)?.mistakes?.length);
@@ -431,7 +683,7 @@ ${build ? `printf %s '${encoded}' | base64 -d > /tmp/edorax-build.sh; bash -e /t
       for (const [machine, container] of containers) {
         const mine = asked.map((item, index) => ({ item, index })).filter(({ item }) => item.on === machine);
         if (!mine.length) continue;
-        const codes = await this.runEach(container, mine.map(({ item }) => item.mistake.when), `${RESULT_MARK}m`);
+        const codes = await this.runEach(container, mine.map(({ item }) => item.mistake.when), `${RESULT_MARK}m`, this.isVm(machine));
         mine.forEach(({ index }, position) => hit.set(index, codes.get(position) === 0));
       }
       asked.forEach(({ result, mistake }, index) => {
@@ -453,6 +705,8 @@ ${build ? `printf %s '${encoded}' | base64 -d > /tmp/edorax-build.sh; bash -e /t
   /** Best effort: sends the old terminal's shell a hang-up signal, as closing a real terminal window does. */
   private async hangUp(id: string) {
     try {
+      // A VM shell is an ssh session: closing the stream ends it and the VM's shell gets the hang-up itself.
+      if (this.lab.machine.vm) return;
       if (!/^[a-zA-Z0-9-]{1,80}$/.test(id)) return;
       const container = this.docker.getContainer(this.name);
       const execution = await container.exec({
@@ -476,17 +730,21 @@ ${build ? `printf %s '${encoded}' | base64 -d > /tmp/edorax-build.sh; bash -e /t
       if (typeof id !== 'string' || !/^[a-zA-Z0-9-]{1,80}$/.test(id)) throw new Error('Invalid terminal session.');
       this.disconnect();
       const container = await this.running();
-      const execution = await container.exec({
-        // The shell writes its own process id first, so hangUp can find it later, then replaces itself with bash.
-        Cmd: ['bash', '-c', `echo $$ > /run/edorax-term-${id}; exec bash -l`],
-        User: 'root',
-        Tty: true,
-        AttachStdin: true,
-        AttachStdout: true,
-        AttachStderr: true,
-        WorkingDir: '/root',
-        Env: ['TERM=xterm-256color'],
-      });
+      const execution = await container.exec(
+        this.lab.machine.vm
+          ? { Cmd: ['labvm-shell'], Tty: true, AttachStdin: true, AttachStdout: true, AttachStderr: true, Env: ['TERM=xterm-256color'] }
+          : {
+              // The shell writes its own process id first, so hangUp can find it later, then replaces itself with bash.
+              Cmd: ['bash', '-c', `echo $$ > /run/edorax-term-${id}; exec bash -l`],
+              User: 'root',
+              Tty: true,
+              AttachStdin: true,
+              AttachStdout: true,
+              AttachStderr: true,
+              WorkingDir: '/root',
+              Env: ['TERM=xterm-256color'],
+            },
+      );
       const stream = await execution.start({ hijack: true, stdin: true, Tty: true });
       this.terminal = { id, exec: execution, stream };
       const decoder = new StringDecoder('utf8');

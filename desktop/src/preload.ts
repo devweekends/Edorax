@@ -73,12 +73,20 @@ const api: DesktopAPI = {
     stop: (slug) => ipcRenderer.invoke('shell-labs:stop', slug),
     reset: (slug) => ipcRenderer.invoke('shell-labs:reset', slug),
     check: (slug, stepId) => ipcRenderer.invoke('shell-labs:check', slug, stepId),
+    answer: (slug, stepId, option) => ipcRenderer.invoke('shell-labs:answer', slug, stepId, option),
     checkAll: (slug) => ipcRenderer.invoke('shell-labs:check-all', slug),
     openTerminal: (slug, id) => ipcRenderer.invoke('shell-labs:terminal-open', slug, id),
     closeTerminal: (slug, id) => ipcRenderer.invoke('shell-labs:terminal-close', slug, id),
     terminalInput: (slug, id, data) => ipcRenderer.invoke('shell-labs:terminal-input', slug, id, data),
     resizeTerminal: (slug, id, cols, rows) =>
       ipcRenderer.invoke('shell-labs:terminal-resize', slug, id, cols, rows),
+    onStartProgress: (listener) => {
+      const receive = (_event: Electron.IpcRendererEvent, data: Parameters<typeof listener>[0]) => listener(data);
+      ipcRenderer.on('shell-labs:start-progress', receive);
+      return () => {
+        ipcRenderer.removeListener('shell-labs:start-progress', receive);
+      };
+    },
     onTerminalData: (listener) => {
       const receive = (_event: Electron.IpcRendererEvent, data: { id: string; data: string }) => listener(data);
       ipcRenderer.on('shell-labs:terminal-data', receive);

@@ -34,6 +34,11 @@ test('the learner view carries no setup, check scripts or solutions', () => {
     const text = JSON.stringify(shellLabView(lab));
     assert.equal(text.includes(lab.setup), false);
     for (const step of lab.steps) {
+      if (step.quiz) {
+        // The question and answers are shown; the right answer and its explanation are not.
+        assert.equal(text.includes(step.quiz.why), false, `${lab.slug} ${step.id} leaks the quiz explanation`);
+        continue;
+      }
       assert.equal(text.includes(step.solution), false, `${lab.slug} ${step.id} leaks its solution`);
       for (const check of step.checks) assert.equal(text.includes(check.run), false);
     }
@@ -67,7 +72,9 @@ test('the learner view carries each step\'s lesson and commands', () => {
   for (const lab of SHELL_LABS)
     for (const step of shellLabView(lab).stepList) {
       assert.ok(step.learn.length >= 2, `${lab.slug} ${step.id} teaches too little`);
-      assert.ok(step.commands.length >= 2, `${lab.slug} ${step.id} lists too few commands`);
+      if (!step.quiz) assert.ok(step.commands.length >= 2, `${lab.slug} ${step.id} lists too few commands`);
+      assert.ok(step.about && (step.expected || step.quiz), `${lab.slug} ${step.id} needs "about" and "expected"`);
+      assert.match(step.body, /^1\. /, `${lab.slug} ${step.id}: the body must be numbered steps`);
     }
 });
 
@@ -160,4 +167,55 @@ test('the validator checks extra machines, resource limits and where a check run
   assert.match(problems, /memoryMb must be a number/);
   assert.match(problems, /"db9", which is not a machine/);
   assert.match(problems, /at most 4 extra machines/);
+});
+
+test('a virtual machine lab gets the KVM device and nothing else, and others do not', () => {
+  const lab = { ...SHELL_LABS[0], machine: { ...SHELL_LABS[0].machine, vm: true, image: 'edorax-labvm:1', memoryMb: 3072, cpus: 2 } } as ShellLab;
+  const options = shellContainerOptions(lab, 'user:shell:vm');
+  assert.deepEqual(options.HostConfig.Devices, [{ PathOnHost: '/dev/kvm', PathInContainer: '/dev/kvm', CgroupPermissions: 'rwm' }]);
+  assert.deepEqual(options.HostConfig.CapDrop, ['ALL']);
+  assert.equal(options.HostConfig.NetworkMode, 'none');
+  assert.ok(options.HostConfig.SecurityOpt.includes('no-new-privileges:true'));
+  assert.equal('Cmd' in options, false, 'the image runs the hypervisor itself');
+  const plain = shellContainerOptions(SHELL_LABS[0], 'user:shell:plain');
+  assert.equal('Devices' in plain.HostConfig, false);
+  assert.deepEqual(plain.Cmd, ['sleep', 'infinity']);
+});
+
+test('the validator keeps virtual machine settings apart from container settings', () => {
+  const vm = { ...SHELL_LABS[0], machine: { ...SHELL_LABS[0].machine, packages: undefined, build: undefined, vm: true, image: 'edorax-labvm:1', memoryMb: 3072, cpus: 2 } } as ShellLab;
+  assert.deepEqual(validateShellLab(vm), []);
+  assert.match(validateShellLab({ ...vm, machine: { ...vm.machine, packages: ['curl'] } } as ShellLab).join(' '), /cannot install packages/);
+  assert.match(validateShellLab({ ...vm, machine: { ...vm.machine, sudo: true } } as ShellLab).join(' '), /capabilities or sudo/);
+  assert.match(validateShellLab({ ...SHELL_LABS[0], machine: { ...SHELL_LABS[0].machine, memoryMb: 3072 } } as ShellLab).join(' '), /only for virtual machine labs/);
+});
+
+
+test('a quiz step is answered in the main process and its right answer never reaches the page', () => {
+  const base = SHELL_LABS[0];
+  const quizStep = {
+    id: 'read-it',
+    goal: 'Read the output and pick what it means',
+    body: '1. Read the lines.\n2. Pick the answer.',
+    learn: ['Short lesson.'],
+    hints: ['a', 'b', 'c'],
+    checks: [],
+    solution: '',
+    quiz: { question: 'What is shown?', options: ['One', 'Two', 'Three'], answer: 1, why: 'Because two.' },
+  };
+  const lab = { ...base, steps: [quizStep] } as unknown as ShellLab;
+  assert.deepEqual(validateShellLab(lab), []);
+  const view = JSON.stringify(shellLabView(lab));
+  assert.ok(view.includes('What is shown?'));
+  assert.equal(view.includes('Because two.'), false);
+  assert.equal(/"answer"/.test(view), false);
+  const runtime = new ShellLabRuntime({} as any, lab, 'user:shell:quiz');
+  assert.deepEqual(runtime.answer('read-it', 0), { correct: false, why: '' });
+  assert.deepEqual(runtime.answer('read-it', 1), { correct: true, why: 'Because two.' });
+  assert.throws(() => runtime.answer('read-it', 7), /Pick one/);
+  assert.throws(() => runtime.answer('nope', 0), /no question/);
+  const broken = { ...lab, steps: [{ ...quizStep, quiz: { ...quizStep.quiz, answer: 5 } }] } as unknown as ShellLab;
+  assert.match(validateShellLab(broken).join(' '), /answer must be the number/);
+  const withChecks = { ...lab, steps: [{ ...quizStep, checks: [{ id: 'x', label: 'x', run: 'true', fail: 'no' }] }] } as unknown as ShellLab;
+  assert.match(validateShellLab(withChecks).join(' '), /quiz, so it has no checks/);
 });
