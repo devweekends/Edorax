@@ -11,6 +11,7 @@ import {
   History,
   LayoutDashboard,
   LineChart,
+  MonitorDown,
   Users,
   Wallet,
 } from "lucide-react";
@@ -85,6 +86,12 @@ export function AdminWorkspaceShell({
           href: "/admin/course-access",
           icon: Wallet,
           active: pathname.startsWith("/admin/course-access"),
+        },
+        {
+          label: "Desktop updates",
+          href: "/admin/desktop-updates",
+          icon: MonitorDown,
+          active: pathname.startsWith("/admin/desktop-updates"),
         },
         { label: "Audit log", href: "/admin/audit", icon: History, active: pathname.startsWith("/admin/audit") },
       ],
