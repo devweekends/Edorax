@@ -73,7 +73,7 @@ export function HandsOnLabs() {
         <p style={{ margin: "16px 0 0", color: MUTED, maxWidth: "600px" }}>
           Three kinds of lab, from no code at all to a real Linux machine. Every lab checks your work and tells you what is still missing.
         </p>
-        <div className={s.rail} style={{ marginTop: "48px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(300px, 100%), 1fr))", gap: "16px" }}>
+        <div className={s.rail} style={{ marginTop: "48px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(230px, 100%), 1fr))", gap: "16px" }}>
           {LAB_KINDS.map((kind) => (
             <Link key={kind.id} href={kind.href} style={{ border: `1px solid ${LINE}`, background: "#FFFFFF", color: INK, textDecoration: "none", display: "flex", flexDirection: "column" }}>
               {VISUALS[kind.id]}

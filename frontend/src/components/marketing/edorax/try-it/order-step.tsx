@@ -114,7 +114,7 @@ export function OrderStep({ onSolved, headingRef }: StepProps) {
         Put the trip in order, from Go to the page on your screen.
       </StepHeading>
       <p id="order-help" style={{ margin: 0, fontSize: "14px", color: MUTED }}>
-        Drag the blocks. On a keyboard, press Space on a block, then the arrow keys.
+        Drag the blocks into order.<span className={s.keyboardTip}> On a keyboard, press Space on a block, then the arrow keys.</span>
       </p>
       <ol ref={listRef} className={s.orderList} aria-describedby="order-help">
         {order.map((id, i) => {

@@ -39,8 +39,14 @@
     grid-template-columns: minmax(0, 1fr) !important;
   }
 
+  /* Sized so "The #1 platform for" stays on one line on a phone. */
   .h1 {
-    font-size: 32px !important;
+    font-size: clamp(25px, 7.4vw, 32px) !important;
+  }
+
+  .heroLead {
+    margin-top: 14px !important;
+    font-size: 17px !important;
   }
 
   .h2 {
@@ -81,9 +87,9 @@
   }
 
   .hero {
-    padding-top: 24px !important;
-    padding-bottom: 56px !important;
-    gap: 32px !important;
+    padding-top: 16px !important;
+    padding-bottom: 48px !important;
+    gap: 16px !important;
   }
 
   /* Card sets become a swipe row with the next card peeking in, not a tall stack. */

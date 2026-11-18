@@ -55,7 +55,7 @@ export function EdoraxLanding({ dashboardHref = null }: { dashboardHref?: string
         <div className={s.hero} style={{ maxWidth: "1200px", margin: "0 auto", padding: "40px 24px 96px", boxSizing: "border-box", display: "flex", flexWrap: "wrap", alignItems: "center", gap: "56px" }}>
           <div style={{ flex: "1 1 480px", minWidth: "0" }}>
             <RotatingHeadline className={s.h1} style={{ margin: "0", fontFamily: "var(--font-unbounded), sans-serif", fontWeight: "700", fontSize: "54px", lineHeight: "1.1", letterSpacing: "-0.035em" }} />
-            <p style={{ margin: "24px 0 0", fontSize: "20px", color: "#46507A", maxWidth: "520px" }}>Courses you read, play, hear and prove. Labs you build and break. Try each kind right here in two minutes, no account needed.</p>
+            <p className={s.heroLead} style={{ margin: "24px 0 0", fontSize: "20px", color: "#46507A", maxWidth: "520px" }}>Courses you read, play, hear and prove. Labs you build and break. Try each kind right here in two minutes, no account needed.</p>
             <div className={s.hideSm} style={{ marginTop: "36px", display: "flex", flexWrap: "wrap", gap: "14px" }}>
               <a href="#try" style={{ background: "#2434E0", color: "#F6F7FB", textDecoration: "none", fontWeight: "700", padding: "15px 28px" }}>Start trying</a>
               <a href="#labs" style={{ color: "#0A0F2C", textDecoration: "none", fontWeight: "700", padding: "13px 26px", border: "2px solid #0A0F2C" }}>See the labs</a>

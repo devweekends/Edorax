@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useCallback, useRef, useState, type ComponentType } from "react";
+import { useCallback, useEffect, useRef, useState, type ComponentType } from "react";
 import { Dot } from "@/components/brand/dot";
 import { COBALT, HEADING, INK, LINE, MUTED, PAPER } from "./brand";
 import { QuestionStep } from "./question-step";
@@ -38,9 +38,28 @@ export function TryIt() {
   const moved = useRef(false);
   // Keyboard and screen reader users land on the new step's heading, not on the page top.
   // A callback ref, because later steps load on demand and mount after the step changes.
+  // On a phone the Next button sits low on the screen, so bring the new step's top into view.
   const headingRef = useCallback((node: HTMLHeadingElement | null) => {
-    if (node && moved.current) node.focus({ preventScroll: true });
+    if (!node || !moved.current) return;
+    node.focus({ preventScroll: true });
+    const panel = node.closest("[data-try-panel]");
+    if (panel && panel.getBoundingClientRect().top < 0) {
+      const smooth = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      panel.scrollIntoView({ block: "start", behavior: smooth ? "smooth" : "auto" });
+    }
   }, []);
+  const progressRef = useRef<HTMLOListElement>(null);
+
+  // Keep the current step's chip visible when the step list scrolls sideways on a phone.
+  useEffect(() => {
+    const list = progressRef.current;
+    const chip = list?.querySelector<HTMLElement>("[aria-current='step']");
+    if (!list || !chip) return;
+    const chipLeft = chip.offsetLeft - list.offsetLeft;
+    if (chipLeft < list.scrollLeft || chipLeft + chip.offsetWidth > list.scrollLeft + list.clientWidth) {
+      list.scrollLeft = Math.max(0, chipLeft - 16);
+    }
+  }, [current]);
   const finished = current >= LIVE_STEPS.length;
   const step = finished ? null : LIVE_STEPS[current];
   const stepSolved = step ? solved.has(step.id) : false;
@@ -67,8 +86,8 @@ export function TryIt() {
         <Dot mood={dotMood} size={112} />
         <div className={s.bubble}>{dotLine}</div>
       </div>
-      <div className={s.panel}>
-        <ol className={s.progress} aria-label="Try Edorax in a few steps">
+      <div className={s.panel} data-try-panel>
+        <ol ref={progressRef} className={s.progress} aria-label="Try Edorax in a few steps">
           {TRY_STEPS.map((t) => {
             const live = LIVE_STEPS.findIndex((l) => l.id === t.id);
             const isCurrent = live === current;
@@ -123,7 +142,7 @@ function Finished({ headingRef, onRestart }: { headingRef: React.Ref<HTMLHeading
     <div className={s.stepBody}>
       <div>
         <div style={{ fontSize: "14px", color: MUTED }}>You tried {tried.slice(0, -1).join(", ")} and {tried[tried.length - 1]}</div>
-        <h2 ref={headingRef} tabIndex={-1} style={{ margin: "6px 0 0", fontFamily: HEADING, fontWeight: 700, fontSize: "21px", lineHeight: 1.3, letterSpacing: "-0.02em", outline: "none" }}>
+        <h2 ref={headingRef} tabIndex={-1} className={s.stepTitle} style={{ margin: "6px 0 0", fontFamily: HEADING, fontWeight: 700, fontSize: "21px", lineHeight: 1.3, letterSpacing: "-0.02em", outline: "none" }}>
           That was Edorax in two minutes. The real thing goes much deeper.
         </h2>
       </div>

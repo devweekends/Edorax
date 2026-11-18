@@ -207,6 +207,13 @@ button.chip:hover {
 }
 
 /* Order step */
+/* Touch screens have no keyboard tip to read. */
+@media (pointer: coarse) {
+  .keyboardTip {
+    display: none;
+  }
+}
+
 .orderList {
   margin: 0;
   padding: 0;
@@ -347,6 +354,7 @@ button.chip:hover {
 .labPoints {
   margin: 0;
   padding: 0 0 0 18px;
+  list-style: disc;
   flex: 1 1 200px;
   font-size: 15px;
   line-height: 1.6;
@@ -363,9 +371,66 @@ button.chip:hover {
   font-weight: 700;
 }
 
+/* Phones: keep the first question close to the top of the screen. */
 @media (max-width: 520px) {
   .panel {
-    padding: 18px 16px 20px;
+    padding: 16px 16px 20px;
+    gap: 16px;
+  }
+
+  .dotRow {
+    padding-left: 4px;
+  }
+
+  .dotRow > svg {
+    width: 76px;
+    height: 76px;
+  }
+
+  .bubble {
+    margin-bottom: 12px;
+    font-size: 14px;
+    padding: 8px 12px;
+  }
+
+  /* The step list becomes one swipeable row instead of three wrapped rows. */
+  .progress {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    margin-right: -16px;
+    padding-right: 16px;
+    padding-bottom: 12px;
+  }
+
+  .progress::-webkit-scrollbar {
+    display: none;
+  }
+
+  .progress li {
+    flex: none;
+  }
+
+  .chip {
+    white-space: nowrap;
+  }
+
+  .stepTitle {
+    font-size: 19px !important;
+  }
+
+  .stepBody {
+    gap: 14px;
+  }
+
+  .nextRow .next {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .finishLinks a {
+    flex: 1 1 100%;
+    text-align: center;
   }
 
 
