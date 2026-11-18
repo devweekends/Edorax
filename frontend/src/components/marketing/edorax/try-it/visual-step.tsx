@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { RunScore } from "@buildment/learning-ui/labs/HldBoard";
 import { COBALT, INK, MUTED, PAPER, TINT } from "./brand";
 import { StepHeading, type StepProps } from "./step-frame";
@@ -25,6 +25,7 @@ const RealVisualLab = dynamic(() => import("./real-visual-lab"), {
  */
 export function VisualStep({ onSolved, headingRef }: StepProps) {
   const [open, setOpen] = useState(false);
+  const launchRef = useRef<HTMLButtonElement>(null);
   const [best, setBest] = useState<RunScore | null>(null);
   const passed = best?.allPass === true;
 
@@ -59,7 +60,7 @@ export function VisualStep({ onSolved, headingRef }: StepProps) {
         </ul>
       </div>
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "12px 16px" }}>
-        <button type="button" className={s.primary} onClick={() => setOpen(true)} aria-haspopup="dialog">
+        <button ref={launchRef} type="button" className={s.primary} onClick={() => setOpen(true)} aria-haspopup="dialog">
           <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
             <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
           </svg>
@@ -81,7 +82,14 @@ export function VisualStep({ onSolved, headingRef }: StepProps) {
           ""
         )}
       </p>
-      {open ? <RealVisualLab onClose={() => setOpen(false)} onRunDone={onRunDone} /> : null}
+      {open ? <RealVisualLab
+          onClose={() => {
+            setOpen(false);
+            // Back from full screen, keyboard users carry on from the button that opened it.
+            requestAnimationFrame(() => launchRef.current?.focus());
+          }}
+          onRunDone={onRunDone}
+        /> : null}
     </div>
   );
 }
