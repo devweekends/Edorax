@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { validateLabSpec, type LabSpec } from "./types";
 import { HldBoard } from "./HldBoard";
+import type { ChallengeReport } from "./challenge";
+import type { Board } from "./types";
 import { getLabSpec } from "./registry";
 import { BuildBoard } from "./net/BuildBoard";
 import { NetBoard } from "./net/NetBoard";
@@ -80,6 +82,7 @@ export function Lab({
   version,
   presentation,
   courseMode = false,
+  onRunComplete,
 }: {
   spec?: LabSpec | null;
   slug?: unknown;
@@ -87,6 +90,8 @@ export function Lab({
   presentation?: unknown;
   /** Course readers use a compact launcher; galleries and previews keep the full inline board. */
   courseMode?: boolean;
+  /** For an hld lab: called once when a run finishes, with the report the board shows. */
+  onRunComplete?: (report: ChallengeReport, board: Board, load: number) => void;
 }) {
   const pres = presentationSchema.safeParse(presentation);
   const presOptions = pres.success ? pres.data : undefined;
@@ -153,7 +158,7 @@ export function Lab({
     <PortablePresentationFrame presentation={presOptions}>
       <LabFrame eyebrow={eyebrow} title={resolvedSpec.title} purpose={resolvedSpec.purpose} limits={resolvedSpec.limits}>
         {resolvedSpec.family === "hld" ? (
-          <HldBoard spec={resolvedSpec} />
+          <HldBoard spec={resolvedSpec} onRunComplete={onRunComplete} />
         ) : resolvedSpec.family === "net" ? (
           resolvedSpec.mode === "plan" && resolvedSpec.plan ? (
             <PlanBoard plan={resolvedSpec.plan} solution={resolvedSpec.solution} />

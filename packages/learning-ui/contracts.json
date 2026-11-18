@@ -20,5 +20,9 @@
   "api/syllabus.ts",
   "domain/enums.ts",
   "lib/course-tracks.ts",
-  "html-preview/spec.ts"
+  "html-preview/spec.ts",
+  "lab/engine/catalog.ts",
+  "lab/engine/hld-types.ts",
+  "lab/engine/tiered-architecture.ts",
+  "lab/engine/challenge.ts"
 ]

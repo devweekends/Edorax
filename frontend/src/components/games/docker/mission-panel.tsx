@@ -1,76 +1,136 @@
 "use client";
 
-import { CheckCircle2, Circle, Lightbulb, RotateCcw, Send } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import type { ReactNode } from "react";
+import { CheckList, FrameButton, type FrameCheck } from "../game-frame";
 import { cn } from "@/lib/utils";
 
-export type MissionGoal = { label: string; met: boolean | null };
+export const LEVELS = ["EASY", "MEDIUM", "HARD"] as const;
 
-type Props = {
-  title: string;
-  goals: MissionGoal[];
-  /** The count line, for example "3 commands, par 3". */
-  counter: { label: string; value: number; par: number; limit: number; text?: string };
+export function levelOf(roundIndex: number): { level: string; levelNumber: number } {
+  const i = Math.min(Math.max(roundIndex, 0), LEVELS.length - 1);
+  return { level: LEVELS[i]!, levelNumber: i + 1 };
+}
+
+export type Primary = { label: string; onClick: () => void; disabled?: boolean; pulse?: boolean };
+
+type ActionProps = {
   hints: string[];
   hintsUsed: number;
   onHint: () => void;
   onReset: () => void;
-  onFinish: () => void;
-  finishLabel: string;
-  canFinish: boolean;
-  ready: boolean;
+  primary: Primary;
   locked: boolean;
 };
 
-/** The objective checklist, the command counter against par, the hints and the reset and finish buttons. */
-export function MissionPanel({ title, goals, counter, hints, hintsUsed, onHint, onReset, onFinish, finishLabel, canFinish, ready, locked }: Props) {
-  const pace = counter.value <= counter.par + 1 ? "text-emerald-600 dark:text-emerald-400" : counter.value <= counter.par + 4 ? "text-amber-600 dark:text-amber-400" : "text-red-600 dark:text-red-400";
-  const fill = Math.min(100, Math.round((counter.value / Math.max(1, counter.par + 4)) * 100));
-  const more = hintsUsed < hints.length;
+/** The buttons in the dark header bar: Hint, Reset and one green primary action. */
+export function HeaderActions({ hints, hintsUsed, onHint, onReset, primary, locked }: ActionProps) {
+  const left = hints.length - hintsUsed;
   return (
-    <section aria-label="Mission" className="rounded-md border border-border bg-card p-3 sm:p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">{title}</h3>
-        <p className={cn("text-sm font-semibold tabular-nums", pace)} aria-live="polite">
-          {counter.text ?? `${counter.value} ${counter.label}, par ${counter.par}`}
-        </p>
-      </div>
-      <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden>
-        <div className={cn("h-full rounded-full transition-all duration-300", counter.value <= counter.par + 1 ? "bg-emerald-500" : counter.value <= counter.par + 4 ? "bg-amber-500" : "bg-red-500")} style={{ width: `${fill}%` }} />
-      </div>
+    <>
+      <FrameButton
+        onClick={onHint}
+        disabled={locked || left <= 0}
+        className="min-h-11 sm:min-h-9"
+        title="Each hint can cost a star"
+      >
+        {left > 0 ? `Hint (${left} left)` : "No hints left"}
+      </FrameButton>
+      <FrameButton onClick={onReset} disabled={locked} className="min-h-11 sm:min-h-9">
+        Reset
+      </FrameButton>
+      {/* On a phone the primary action sits in the bar at the bottom, so it is always in reach. */}
+      <FrameButton tone="primary" onClick={primary.onClick} disabled={locked || primary.disabled} pulse={primary.pulse} className="hidden sm:inline-flex">
+        {primary.label}
+      </FrameButton>
+    </>
+  );
+}
 
-      <ul className="mt-3 space-y-1.5" aria-label="Objectives">
-        {goals.map((g) => (
-          <li key={g.label} className="flex items-start gap-2 text-sm">
-            {g.met ? <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-500 motion-safe:animate-[bm-pop_0.3s_ease-out_both]" aria-hidden /> : <Circle className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />}
-            <span className={cn(g.met && "text-foreground", g.met === false || g.met === null ? "text-muted-foreground" : "")}>
-              {g.label}
-              <span className="sr-only">{g.met ? " (done)" : " (not done)"}</span>
-            </span>
-          </li>
-        ))}
-      </ul>
+/** Phone only: the same primary action, pinned to the bottom of the screen while the game is in view. */
+export function MobileBar({ primary, passed, total, locked }: { primary: Primary; passed: number; total: number; locked: boolean }) {
+  return (
+    <div className="sticky bottom-[calc(4rem+env(safe-area-inset-bottom))] z-20 flex items-center gap-3 border border-border bg-card px-3 py-2 sm:hidden">
+      <p className="flex-1 font-mono text-[12px] font-bold uppercase tracking-wider text-muted-foreground" aria-hidden>
+        {passed}/{total} pass
+      </p>
+      <FrameButton tone="primary" onClick={primary.onClick} disabled={locked || primary.disabled} pulse={primary.pulse} className="min-h-11 min-w-32 justify-center">
+        {primary.label}
+      </FrameButton>
+    </div>
+  );
+}
+
+export function SectionLabel({ children, right }: { children: ReactNode; right?: ReactNode }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <h3 className="font-mono text-[11px] font-bold uppercase tracking-wider text-muted-foreground">{children}</h3>
+      {right ? <span className="font-mono text-[11px] font-bold text-muted-foreground">{right}</span> : null}
+    </div>
+  );
+}
+
+type PanelProps = {
+  checks: FrameCheck[];
+  counter: { noun: string; value: number; par: number; threeStarsAt: number };
+  hints: string[];
+  hintsUsed: number;
+};
+
+/** The checks (Wait or Pass), the count against par, and the hints already used. */
+export function MissionPanel({ checks, counter, hints, hintsUsed }: PanelProps) {
+  const { noun, value, par, threeStarsAt } = counter;
+  const tone = value <= par ? "text-emerald-700 dark:text-emerald-400" : value <= threeStarsAt ? "text-foreground" : "text-amber-700 dark:text-amber-400";
+  return (
+    <div className="space-y-4">
+      <CheckList checks={checks} />
+
+      <section aria-label="Par" className="border border-border bg-card px-3 py-2.5">
+        <div className="flex items-baseline justify-between gap-3">
+          <span className="font-mono text-[11px] font-bold uppercase tracking-wider text-muted-foreground">{noun} used</span>
+          <span className="font-mono text-sm font-bold tabular-nums" aria-live="polite">
+            <span className={tone}>{value}</span>
+            <span className="text-muted-foreground"> / par {par}</span>
+          </span>
+        </div>
+        <p className="mt-1 text-[13px] text-muted-foreground">Three stars: no hints and {threeStarsAt} {noun} or fewer.</p>
+      </section>
 
       {hintsUsed > 0 ? (
-        <ol className="mt-3 space-y-1.5 rounded-md border border-brand-yellow/50 bg-brand-yellow/10 p-2.5 text-sm" aria-label="Hints used">
-          {hints.slice(0, hintsUsed).map((h, i) => (
-            <li key={i}><span className="font-bold">Hint {i + 1}.</span> {h}</li>
-          ))}
-        </ol>
+        <section aria-label="Hints used">
+          <SectionLabel>Hints</SectionLabel>
+          <ol className="mt-2 divide-y divide-border border border-border bg-card">
+            {hints.slice(0, hintsUsed).map((h, i) => (
+              <li key={i} className="flex gap-3 px-3 py-2.5 text-sm">
+                <span className="font-mono text-[11px] font-bold uppercase tracking-wider text-muted-foreground">{i + 1}</span>
+                <span>{h}</span>
+              </li>
+            ))}
+          </ol>
+        </section>
       ) : null}
+    </div>
+  );
+}
 
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <Button type="button" variant="outline" size="sm" disabled={locked || !more} onClick={onHint} aria-label={more ? `Show hint ${hintsUsed + 1} of ${hints.length}. Each hint can cost a star.` : "No more hints"}>
-          <Lightbulb className="mr-1.5 size-4" aria-hidden /> {more ? (hintsUsed === 0 ? `Hint (1 of ${hints.length})` : `Next hint (${hintsUsed + 1} of ${hints.length})`) : "No more hints"}
-        </Button>
-        <Button type="button" variant="outline" size="sm" disabled={locked} onClick={onReset}>
-          <RotateCcw className="mr-1.5 size-4" aria-hidden /> Reset
-        </Button>
-        <Button type="button" size="sm" disabled={locked || !canFinish} onClick={onFinish} className={cn("ml-auto", ready && "motion-safe:animate-pulse")}>
-          <Send className="mr-1.5 size-4" aria-hidden /> {finishLabel}
-        </Button>
-      </div>
-      <p className="mt-2 text-xs text-muted-foreground">Hints cost stars: no hints and few {counter.label} give three stars.</p>
-    </section>
+export type StripTone = "good" | "bad" | "info";
+
+const STRIP: Record<StripTone, string> = {
+  good: "border-l-emerald-500 bg-emerald-50 dark:bg-emerald-950/40",
+  bad: "border-l-red-500 bg-red-50 dark:bg-red-950/40",
+  info: "border-l-slate-400 bg-secondary",
+};
+const STRIP_TAG: Record<StripTone, string> = {
+  good: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300",
+  bad: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
+  info: "bg-background text-muted-foreground",
+};
+
+/** A flat one-line message with a small tag, used for results and for order feedback. */
+export function Strip({ tone, tag, children, role }: { tone: StripTone; tag: string; children: ReactNode; role?: "status" | "alert" }) {
+  return (
+    <div role={role} className={cn("flex items-start gap-3 border border-border border-l-4 px-3 py-2.5 text-sm", STRIP[tone])}>
+      <span className={cn("mt-0.5 shrink-0 rounded-[3px] px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider", STRIP_TAG[tone])}>{tag}</span>
+      <span className="min-w-0 flex-1 break-words">{children}</span>
+    </div>
   );
 }

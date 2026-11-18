@@ -46,7 +46,7 @@ import { COMPONENT_CATALOG, SIZE_CATALOG, canConnect, isComponentKind, roleOf } 
 import type { Board, HldLabSpec } from "./types";
 import { initialControls, type BoardControls, type NodeConfig } from "./hld-board-model";
 import type { EdgePart, ModelResult, TierLoad } from "./tiered-architecture";
-import { runChallenge, runModel } from "./challenge";
+import { runChallenge, runModel, type ChallengeReport } from "./challenge";
 import { ResultsDialog, RunPanel, PHASE_MS, type RunState } from "./RunPanel";
 import { SettingsDrawer, anchorStyle, cacheSentence } from "./SettingsDrawer";
 import { CompareView, ConfirmBar, PartExplainer, PartList } from "./SolutionPanel";
@@ -266,9 +266,11 @@ interface EditorProps {
   onHideCompare?: () => void;
   isFullscreen?: boolean;
   onToggleFullscreen?: () => void;
+  /** Called once when a run finishes, with the report the board shows, the design that ran and its load. */
+  onRunComplete?: (report: ChallengeReport, board: Board, load: number) => void;
 }
 
-function Editor({ spec, onReset, solutionMode = false, onRun, onSnapshot, canOpenSolution = false, onOpenSolution, onBack, onCopy, onCompare, compare, onHideCompare, isFullscreen = false, onToggleFullscreen }: EditorProps) {
+function Editor({ spec, onReset, solutionMode = false, onRun, onRunComplete, onSnapshot, canOpenSolution = false, onOpenSolution, onBack, onCopy, onCompare, compare, onHideCompare, isFullscreen = false, onToggleFullscreen }: EditorProps) {
   const readOnly = solutionMode;
   const [confirm, setConfirm] = useState<"solution" | "copy" | null>(null);
   const start: Board = spec.startingBoard ?? { nodes: [], edges: [] };
@@ -374,6 +376,7 @@ function Editor({ spec, onReset, solutionMode = false, onRun, onSnapshot, canOpe
     const key = designKey;
     if (typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
       setRanKey(key);
+      onRunComplete?.(report, board, load);
       return;
     }
     const total = report.phases.length;
@@ -382,7 +385,7 @@ function Editor({ spec, onReset, solutionMode = false, onRun, onSnapshot, canOpe
       timers.current.push(
         setTimeout(() => {
           if (i + 1 < total) step(i + 1);
-          else { setRunPhase(null); setRanKey(key); }
+          else { setRunPhase(null); setRanKey(key); onRunComplete?.(report, board, load); }
         }, PHASE_MS),
       );
     };
@@ -392,6 +395,7 @@ function Editor({ spec, onReset, solutionMode = false, onRun, onSnapshot, canOpe
     clearTimers();
     setRunPhase(null);
     setRanKey(designKey);
+    onRunComplete?.(report, board, load);
   }
 
   // What the board shows: the learner's design, or one scenario of the run.
@@ -1063,6 +1067,7 @@ export function HldBoard({
   fullscreenActive,
   hideWhenInline = false,
   onExitFullscreen,
+  onRunComplete,
 }: {
   spec: HldLabSpec;
   initialFullscreen?: boolean;
@@ -1072,6 +1077,8 @@ export function HldBoard({
   hideWhenInline?: boolean;
   /** Course launchers close the workspace when the learner exits full screen. */
   onExitFullscreen?: () => void;
+  /** Called once when a run finishes, with the same report the board shows. */
+  onRunComplete?: (report: ChallengeReport, board: Board, load: number) => void;
 }) {
   const [generation, setGeneration] = useState(0);
   const [mode, setMode] = useState<"mine" | "solution">("mine");
@@ -1155,6 +1162,7 @@ export function HldBoard({
               spec={mineSpec}
               onReset={() => { setSeed(null); setGeneration((g) => g + 1); }}
               onRun={() => setEverRan(true)}
+              onRunComplete={onRunComplete}
               onSnapshot={onSnapshot}
               canOpenSolution={everRan}
               onOpenSolution={() => { setCompare(null); setMode("solution"); }}

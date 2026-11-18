@@ -23,6 +23,10 @@ The same engine runs in the browser (instant feedback, animation) and on the ser
 
 The browser part is a play component, `frontend/src/components/games/<game>/<game>-play.tsx`, default export, props `GamePlayProps<Round, Submission>` (`components/games/types.ts`). It draws the board or terminal and calls `onFinish(submission)` when the player is done. The shell (`game-host.tsx`) verifies, plays the result sound, shows stars, XP and confetti, saves the round for a signed-in learner, and offers the next round. A play component must reset itself when `attempt` changes (the shell also remounts it with a new `key`), and must ignore input while `locked`.
 
+## System Design Runner uses the lab board
+
+The System Design game is not a separate board. Each round is a real lab spec (`HldLabSpec`) with a broken starting board, played on the same `HldBoard` as the labs, with the same Run tests flow, results and reference solution. The lab model moved to the shared contract (`server/src/shared/lab/engine/`: `catalog`, `hld-types`, `tiered-architecture`, `challenge`) so the server can replay a submitted board with `runChallenge`. The old paths in `packages/learning-ui/src/labs/` re-export it, so every lab works as before. A round passes when every check passes; stars come from cost against the reference solution. The six incidents are in `server/src/shared/games/sysdesign/incidents.ts` (two per difficulty).
+
 ## Look and feel
 
 These are real games, not forms. Every game must have:
@@ -30,6 +34,7 @@ These are real games, not forms. Every game must have:
 - **Sound.** Use `sounds` from props (`lib/games/audio.ts`: `key`, `enter`, `ok`, `error`, `snap`, `coin`, `whoosh`, `alarm`, `boot`, `win`, `fanfare`, `lose`). Add new synthesized effects to that file if a game needs one (keep them short and quiet). Sound is off for people who ask for reduced motion, and the shell has a mute switch.
 - **Motion with meaning:** packets flowing, bars filling, containers pulsing or shaking, layers stacking, counters ticking, shake on a mistake. Wrap decorative motion in `motion-safe:`; the game must still work with `motion-reduce`.
 - **Feedback on every action** (sound plus a visible change), a clear goal, a visible progress or score, a hint that costs a star, and a short, friendly message when something is wrong.
+- Sit inside `GameFrame` (`components/games/game-frame.tsx`): the dark header bar with the level tag and actions, three plain steps, the brief, and a `CheckList` of Wait and Pass checks. It copies the lab board so a game looks like part of the platform. One obvious primary action per screen, no decoration that does not help the player act.
 - Use the Tailwind theme tokens (`bg-card`, `border-border`, `text-muted-foreground`, `bg-secondary`, `text-primary`, `brand-yellow`) so light and dark both work, and `GameTerminal` (`components/games/game-terminal.tsx`) for any terminal. Phone first: it must be playable at 375 px wide and with the keyboard alone, with labels on controls.
 - No em dashes or en dashes in any text, comment or test. Plain, short English, for a learner who may read English as a second language.
 

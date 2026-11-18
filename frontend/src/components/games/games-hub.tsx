@@ -7,12 +7,13 @@ import { fetchDailyGames } from "@/lib/games/client";
 import type { DailyGamesView } from "@/shared/api/games";
 import type { GameId } from "@/shared/games";
 import { cn } from "@/lib/utils";
+import { buttonVariants } from "@/components/ui/button";
 import { StarRow } from "./celebration";
 
-const LOOK: Record<GameId, { icon: LucideIcon; accent: string; cta: string }> = {
-  sysdesign: { icon: Network, accent: "bg-sky-500/15 text-sky-700 dark:text-sky-300", cta: "Fix today's incidents" },
-  linux: { icon: Terminal, accent: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300", cta: "Start today's quests" },
-  docker: { icon: Boxes, accent: "bg-orange-500/15 text-orange-700 dark:text-orange-300", cta: "Fix today's containers" },
+const LOOK: Record<GameId, { icon: LucideIcon; label: string; does: string; cta: string }> = {
+  sysdesign: { icon: Network, label: "System design", does: "A live system is breaking. Change the design on the lab board until every check passes.", cta: "Start" },
+  linux: { icon: Terminal, label: "Linux", does: "Type real commands on a made-up server to find, count or fix something.", cta: "Start" },
+  docker: { icon: Boxes, label: "Docker", does: "Repair a broken container with commands, or put a Dockerfile together from pieces.", cta: "Start" },
 };
 
 function timeLeft(resetsAt: string, now: number): string {
@@ -45,13 +46,26 @@ export function GamesHub() {
 
   return (
     <div className="mt-8 space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-card px-4 py-3">
+      <ol className="grid gap-px border border-border bg-border sm:grid-cols-3" aria-label="How it works">
+        {[
+          ["Pick a game", "Each game has three rounds today: easy, medium and hard."],
+          ["Solve a round", "Do what the round asks. Press Check when you think you are done."],
+          ["Collect XP", "A solved round gives 3 XP. All three rounds in one game give 2 more."],
+        ].map(([title, body], i) => (
+          <li key={title} className="flex items-start gap-3 bg-card px-4 py-3">
+            <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-primary font-mono text-xs font-bold text-primary-foreground">{i + 1}</span>
+            <span className="text-sm leading-snug"><strong className="block">{title}</strong><span className="text-muted-foreground">{body}</span></span>
+          </li>
+        ))}
+      </ol>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 border border-border bg-card px-4 py-3">
         <p className="flex items-center gap-2 text-sm">
           <Zap className="size-4 text-brand-yellow" aria-hidden />
           {daily.signedIn ? (
-            <span><strong>{daily.xpToday} XP</strong> earned today, up to <strong>{daily.xpToday + daily.xpLeft}</strong> from the games.</span>
+            <span><strong>{daily.xpToday} XP</strong> earned today. Up to <strong>{daily.xpToday + daily.xpLeft}</strong> are possible.</span>
           ) : (
-            <span>Play without an account. <Link href="/login" className="font-semibold underline">Sign in</Link> to save stars and earn XP.</span>
+            <span>You can play now. <Link href="/login" className="font-semibold underline">Sign in</Link> to save your stars and earn XP.</span>
           )}
         </p>
         <p className="text-sm text-muted-foreground">New games in <strong className="text-foreground">{timeLeft(daily.resetsAt, now)}</strong></p>
@@ -63,29 +77,34 @@ export function GamesHub() {
           const Icon = look.icon;
           const solved = game.progress.length;
           return (
-            <Link
-              key={game.id}
-              href={`/puzzles/${game.id}`}
-              className="group flex flex-col rounded-md border border-border bg-card p-5 transition-colors hover:border-primary hover:bg-secondary/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
-            >
-              <span className={cn("inline-flex size-11 items-center justify-center rounded-md", look.accent)}><Icon className="size-6" aria-hidden /></span>
-              <h2 className="mt-4 text-xl font-bold tracking-tight">{game.title}</h2>
-              <p className="mt-1 flex-1 text-sm leading-relaxed text-muted-foreground">{game.tagline}</p>
-              <ol className="mt-4 flex gap-2" aria-label={`${solved} of 3 rounds solved`}>
-                {[0, 1, 2].map((i) => {
-                  const done = game.progress.find((p) => p.roundIndex === i);
-                  return (
-                    <li key={i} className={cn("flex-1 rounded-sm border px-2 py-1.5", done ? "border-emerald-500/60 bg-emerald-500/10" : "border-border")}>
-                      <span className="block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">{["Easy", "Medium", "Hard"][i]}</span>
-                      {done ? <StarRow stars={done.stars} size="sm" /> : <span className="text-xs text-muted-foreground">Open</span>}
-                    </li>
-                  );
-                })}
-              </ol>
-              <span className="mt-4 text-sm font-semibold text-primary group-hover:underline">
-                {game.setComplete ? "All solved. Play again for practice" : solved > 0 ? "Keep going" : look.cta}
-              </span>
-            </Link>
+            <article key={game.id} className="flex flex-col overflow-hidden border border-border bg-card">
+              <header className="flex items-center gap-2.5 bg-[#0f1b33] px-4 py-2.5 text-slate-100">
+                <Icon className="size-4 text-sky-300" aria-hidden />
+                <span className="font-mono text-[11px] font-bold uppercase tracking-wider">{look.label}</span>
+                <span className="ml-auto font-mono text-[11px] font-bold uppercase tracking-wider text-slate-300">{solved}/3</span>
+              </header>
+              <div className="flex flex-1 flex-col p-4">
+                <h2 className="text-xl font-bold leading-tight tracking-tight">{game.title}</h2>
+                <p className="mt-1.5 flex-1 text-sm leading-relaxed text-muted-foreground">{look.does}</p>
+                <ol className="mt-4 grid grid-cols-3 gap-px border border-border bg-border" aria-label={`${solved} of 3 rounds solved`}>
+                  {[0, 1, 2].map((i) => {
+                    const done = game.progress.find((p) => p.roundIndex === i);
+                    return (
+                      <li key={i} className={cn("px-2 py-1.5", done ? "bg-emerald-500/10" : "bg-card")}>
+                        <span className="block font-mono text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{["Easy", "Medium", "Hard"][i]}</span>
+                        {done ? <StarRow stars={done.stars} size="sm" /> : <span className="text-xs text-muted-foreground">Open</span>}
+                      </li>
+                    );
+                  })}
+                </ol>
+                <Link
+                  href={`/puzzles/${game.id}`}
+                  className={cn(buttonVariants({ variant: game.setComplete ? "outline" : "default", size: "lg" }), "mt-4 w-full font-mono text-xs font-bold uppercase tracking-wider")}
+                >
+                  {game.setComplete ? "Play again for practice" : solved > 0 ? "Continue" : look.cta}
+                </Link>
+              </div>
+            </article>
           );
         })}
       </div>

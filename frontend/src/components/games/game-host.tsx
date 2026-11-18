@@ -145,7 +145,7 @@ export function GameHost({ game }: { game: GameId }) {
         </button>
       </div>
 
-      <div role="tablist" aria-label="Today's rounds" className="grid grid-cols-3 gap-2">
+      <div role="tablist" aria-label="Today&apos;s rounds" className="grid grid-cols-3 gap-px border border-border bg-border">
         {[0, 1, 2].map((i) => {
           const done = solved(i);
           return (
@@ -156,21 +156,20 @@ export function GameHost({ game }: { game: GameId }) {
               type="button"
               onClick={() => pick(i)}
               className={cn(
-                "flex flex-col items-start gap-1 rounded-md border p-3 text-left transition-colors",
-                i === roundIndex ? "border-primary bg-secondary" : "border-border bg-card hover:bg-secondary/60",
+                "flex min-h-16 flex-col items-start justify-center gap-1 px-3 py-2 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary",
+                i === roundIndex ? "bg-secondary" : "bg-card hover:bg-secondary/60",
               )}
             >
-              <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">{TIER_LABEL[i]}</span>
+              <span className="flex w-full items-center justify-between gap-2">
+                <span className={cn("font-mono text-[11px] font-bold uppercase tracking-wider", i === roundIndex ? "text-primary" : "text-muted-foreground")}>
+                  {i + 1}. {TIER_LABEL[i]}
+                </span>
+                {done ? <StarRow stars={done.stars} size="sm" /> : <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Open</span>}
+              </span>
               <span className="line-clamp-1 text-sm font-semibold">{view.rounds[i]!.title}</span>
-              {done ? <StarRow stars={done.stars} size="sm" /> : <span className="text-xs text-muted-foreground">Not solved yet</span>}
             </button>
           );
         })}
-      </div>
-
-      <div className="rounded-md border border-border bg-card p-4 sm:p-5">
-        <h2 className="text-lg font-bold tracking-tight">{round.title}</h2>
-        <p className="mt-1 max-w-3xl text-sm leading-relaxed text-muted-foreground">{round.brief}</p>
       </div>
 
       <div className={cn(outcome && !passed && "motion-safe:animate-[feedback-shake_420ms_both]")}>
@@ -183,14 +182,15 @@ export function GameHost({ game }: { game: GameId }) {
         <div
           role="status"
           className={cn(
-            "rounded-md border p-5 motion-safe:animate-[bm-pop_0.35s_ease-out_both]",
+            "border p-5 motion-safe:animate-[bm-pop_0.35s_ease-out_both]",
             passed ? "border-emerald-500/60 bg-emerald-500/10" : "border-border bg-card",
           )}
         >
           <div className="flex flex-wrap items-center gap-4">
             {passed ? <StarRow stars={stars} /> : null}
             <div className="min-w-0 flex-1">
-              <p className="text-lg font-bold">{passed ? (setDone ? "All three solved today!" : "Solved!") : "Not yet"}</p>
+              <p className="font-mono text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Result</p>
+              <p className="text-xl font-bold tracking-tight">{passed ? (setDone ? "All three solved today" : "Solved") : "Not yet"}</p>
               <p className="text-sm text-muted-foreground">{outcome.local.message}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
