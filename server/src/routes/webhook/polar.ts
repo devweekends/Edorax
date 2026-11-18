@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import { webhooks } from "@polar-sh/sdk/2026-10";
 import { env } from "../../config/env.js";
+import { prisma } from "../../db/prisma.js";
 import { fulfillPolarOrderPaid } from "../../services/payments/fulfill-polar-order.js";
 import { logger } from "../../utils/logger.js";
 
@@ -55,8 +56,16 @@ router.post("/", async (req: Request, res: Response) => {
         metadata,
       });
     } else if (event.type === "order.refunded") {
-      // Product is non-refundable; keep access and log for ops visibility.
-      logger.info({ orderId: event.data.id, type: event.type }, "polar refund event ignored (non-refundable product)");
+      const order = event.data;
+      const updated = await prisma.payment.updateMany({
+        where: {
+          provider: "polar",
+          providerRef: { in: [order.id, order.checkout_id].filter((value): value is string => Boolean(value)) },
+          status: "SUCCEEDED",
+        },
+        data: { status: "REFUNDED", instructorPayoutStatus: "NOT_DUE" },
+      });
+      logger.info({ orderId: order.id, updated: updated.count, type: event.type }, "polar refund recorded");
     }
     res.status(200).json({ received: true });
   } catch (error) {
