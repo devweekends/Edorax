@@ -4,6 +4,7 @@ import request from "supertest";
 
 const validateEvent = vi.hoisted(() => vi.fn());
 const fulfillPolarOrderPaid = vi.hoisted(() => vi.fn());
+const recordPolarOrderRefunded = vi.hoisted(() => vi.fn());
 
 vi.mock("@polar-sh/sdk/2026-10", () => {
   class PolarWebhookVerificationError extends Error {}
@@ -21,7 +22,7 @@ vi.mock("../../../../src/config/env.js", () => ({
   env: { POLAR_WEBHOOK_SECRET: "whsec_test" },
 }));
 
-vi.mock("../../../../src/services/payments/fulfill-polar-order.js", () => ({ fulfillPolarOrderPaid }));
+vi.mock("../../../../src/services/payments/fulfill-polar-order.js", () => ({ fulfillPolarOrderPaid, recordPolarOrderRefunded }));
 vi.mock("../../../../src/utils/logger.js", () => ({ logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn() } }));
 
 import polarWebhookRoutes from "../../../../src/routes/webhook/polar.js";
@@ -93,5 +94,6 @@ describe("POST /webhooks/polar", () => {
 
     expect(res.status).toBe(200);
     expect(fulfillPolarOrderPaid).not.toHaveBeenCalled();
+    expect(recordPolarOrderRefunded).toHaveBeenCalledWith({ orderId: "ord_refund", checkoutId: undefined });
   });
 });

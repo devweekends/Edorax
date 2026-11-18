@@ -9,6 +9,15 @@ export type PolarOrderPaidInput = {
   metadata: Record<string, unknown> | null | undefined;
 };
 
+export async function recordPolarOrderRefunded(input: { orderId: string; checkoutId?: string | null }): Promise<number> {
+  const providerRefs = [input.orderId, input.checkoutId].filter((value): value is string => Boolean(value));
+  const updated = await prisma.payment.updateMany({
+    where: { provider: "polar", providerRef: { in: providerRefs }, status: "SUCCEEDED" },
+    data: { status: "REFUNDED", instructorPayoutStatus: "NOT_DUE" },
+  });
+  return updated.count;
+}
+
 function metadataString(metadata: Record<string, unknown> | null | undefined, key: string): string | null {
   const value = metadata?.[key];
   return typeof value === "string" && value.trim() ? value.trim() : null;
