@@ -25,7 +25,7 @@ export function LinuxStep({ onSolved, headingRef }: StepProps) {
 
   function onProgress(count: number) {
     setDone(count);
-    if (count >= LINUX_TASKS.length) onSolved();
+    if (count >= LINUX_TASKS.length) onSolved(true);
   }
 
   return (
@@ -65,6 +65,9 @@ export function LinuxStep({ onSolved, headingRef }: StepProps) {
             Launch lab
           </button>
           <span style={{ fontSize: "14px", color: MUTED }}>Starts a practice terminal right here. Nothing to install.</span>
+          <button type="button" className={s.skip} onClick={() => onSolved(false)}>
+            Skip this lab
+          </button>
         </div>
       )}
       <p role="status" aria-live="polite" style={{ margin: 0, fontSize: "15px", lineHeight: 1.5, color: finished ? INK : MUTED, minHeight: "23px" }}>

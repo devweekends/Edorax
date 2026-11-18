@@ -92,20 +92,18 @@ export function OrderStep({ onSolved, headingRef }: StepProps) {
     }
   }
 
+  // One try: a wrong order is put right on screen, with the reason, and the visitor moves on.
   function check() {
     setLifted(null);
+    setSolved(true);
     if (order.every((id, i) => id === RIGHT_ORDER[i])) {
-      setSolved(true);
       setMessage("That is the whole trip: name, address, connection, request, reply.");
-      onSolved();
+      onSolved(true);
       return;
     }
-    const firstWrong = order.findIndex((id, i) => id !== RIGHT_ORDER[i]);
-    setMessage(
-      firstWrong === 0
-        ? "Not yet. What does your phone need before it can connect to anything?"
-        : `Close. The first ${firstWrong} ${firstWrong === 1 ? "is" : "are"} right. What has to happen next?`,
-    );
+    setOrder([...RIGHT_ORDER]);
+    setMessage("Not quite. Here is the right order: your phone needs the address from DNS before it can connect, and it can only ask for the page once it is connected.");
+    onSolved(false);
   }
 
   return (

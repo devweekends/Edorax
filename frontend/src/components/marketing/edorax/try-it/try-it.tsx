@@ -35,6 +35,7 @@ const DONE_LINE = "Four for four. You have tried it all.";
 export function TryIt() {
   const [current, setCurrent] = useState(0);
   const [solved, setSolved] = useState<ReadonlySet<TryStepId>>(new Set());
+  const [missed, setMissed] = useState<ReadonlySet<TryStepId>>(new Set());
   const moved = useRef(false);
   // Keyboard and screen reader users land on the new step's heading, not on the page top.
   // A callback ref, because later steps load on demand and mount after the step changes.
@@ -65,9 +66,15 @@ export function TryIt() {
   const stepSolved = step ? solved.has(step.id) : false;
   const next = LIVE_STEPS[current + 1];
 
-  function markSolved() {
+  function markSolved(right: boolean) {
     if (!step) return;
     setSolved((prev) => new Set(prev).add(step.id));
+    setMissed((prev) => {
+      const nextMissed = new Set(prev);
+      if (right) nextMissed.delete(step.id);
+      else nextMissed.add(step.id);
+      return nextMissed;
+    });
     if (next && next.id in loaders) void loaders[next.id as keyof typeof loaders]();
   }
 
@@ -77,8 +84,9 @@ export function TryIt() {
   }
 
   const Step = step ? STEP_COMPONENTS[step.id] : undefined;
-  const dotMood = finished ? "cheer" : stepSolved ? "wink" : (step?.dotMood ?? "think");
-  const dotLine = finished ? DONE_LINE : stepSolved ? "You got it." : (step?.dotLine ?? "");
+  const stepMissed = step ? missed.has(step.id) : false;
+  const dotMood = finished ? "cheer" : stepSolved ? (stepMissed ? "happy" : "wink") : (step?.dotMood ?? "think");
+  const dotLine = finished ? DONE_LINE : stepSolved ? (stepMissed ? "Now you know. On to the next one." : "You got it.") : (step?.dotLine ?? "");
 
   return (
     <div id="try" className={s.tryIt}>
@@ -117,7 +125,7 @@ export function TryIt() {
           {Step && step ? (
             <Step onSolved={markSolved} headingRef={headingRef} />
           ) : (
-            <Finished headingRef={headingRef} onRestart={() => { setSolved(new Set()); go(0); }} />
+            <Finished headingRef={headingRef} onRestart={() => { setSolved(new Set()); setMissed(new Set()); go(0); }} />
           )}
         </div>
         {stepSolved && !finished ? (

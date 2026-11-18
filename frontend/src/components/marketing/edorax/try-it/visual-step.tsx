@@ -29,9 +29,10 @@ export function VisualStep({ onSolved, headingRef }: StepProps) {
   const [best, setBest] = useState<RunScore | null>(null);
   const passed = best?.allPass === true;
 
+  // Any finished run opens the next step, so nobody is stuck here; a full pass counts as right.
   function onRunDone(score: RunScore) {
     setBest((prev) => (!prev || score.passed > prev.passed ? score : prev));
-    if (score.allPass) onSolved();
+    onSolved(score.allPass);
   }
 
   return (
@@ -67,6 +68,11 @@ export function VisualStep({ onSolved, headingRef }: StepProps) {
           {best ? "Open the lab again" : "Launch visual lab"}
         </button>
         <span style={{ fontSize: "14px", color: MUTED }}>Opens full screen. Press Esc to come back.</span>
+        {!best ? (
+          <button type="button" className={s.skip} onClick={() => onSolved(false)}>
+            Skip this lab
+          </button>
+        ) : null}
       </div>
       <p role="status" aria-live="polite" style={{ margin: 0, fontSize: "15px", lineHeight: 1.5, color: passed ? INK : MUTED, minHeight: "23px", background: passed ? TINT : "transparent", padding: passed ? "10px 12px" : 0 }}>
         {passed && best ? (
@@ -77,7 +83,7 @@ export function VisualStep({ onSolved, headingRef }: StepProps) {
             </Link>
           </>
         ) : best ? (
-          `Best run so far: ${best.passed} of ${best.total} checks. Stuck? The board has hints, and a Solution button after your first run.`
+          `Best run so far: ${best.passed} of ${best.total} checks. Try again, open the board's Solution, or move on.`
         ) : (
           ""
         )}

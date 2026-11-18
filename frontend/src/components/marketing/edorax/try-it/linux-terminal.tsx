@@ -64,8 +64,7 @@ export default function LinuxTerminal({ onProgress }: { onProgress: (doneCount: 
     if (el) el.scrollTop = el.scrollHeight;
   }, [lines]);
 
-  function submit() {
-    const line = value;
+  function submit(line: string = value) {
     const state = shell.current;
     push("in", `learner@edorax-lab:${displayPath(state.cwd)}$ ${line}`);
     setValue("");
@@ -159,6 +158,19 @@ export default function LinuxTerminal({ onProgress }: { onProgress: (doneCount: 
           </form>
         ) : null}
       </div>
+      {ready && done < LINUX_TASKS.length ? (
+        <div className={s.terminalHelp}>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              submit(LINUX_TASKS[done].command);
+            }}
+          >
+            Run it for me
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -3,8 +3,11 @@ import { HEADING, MUTED } from "./brand";
 import s from "./try-it.module.css";
 
 export interface StepProps {
-  /** Call once the visitor gets the step right; the panel then offers the next step. */
-  onSolved: () => void;
+  /**
+   * Call once the step is over: right, or wrong with the answer now shown. Visitors are
+   * short on time, so a wrong answer never blocks them; the panel offers the next step.
+   */
+  onSolved: (right: boolean) => void;
   /** The step's heading, focused when the step opens so keyboard users land on it. */
   headingRef: Ref<HTMLHeadingElement>;
 }

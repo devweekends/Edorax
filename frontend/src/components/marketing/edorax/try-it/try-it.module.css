@@ -182,6 +182,36 @@ button.chip:hover {
   animation: stepIn 300ms ease-out both;
 }
 
+.skip {
+  background: none;
+  border: 0;
+  padding: 8px 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #46507a;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.launchBox .skip {
+  color: #c9cff0;
+}
+
+.terminalHelp {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 12px 10px;
+}
+
+.terminalHelp button {
+  background: transparent;
+  border: 1px solid #3a4270;
+  color: #ffc933;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 6px 12px;
+}
+
 .textButton {
   background: none;
   border: 0;
