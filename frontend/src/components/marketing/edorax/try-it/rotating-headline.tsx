@@ -1,23 +1,24 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import s from "./try-it.module.css";
 
 const WORDS = ["hands-on labs", "interactive labs", "learning", "practice"] as const;
 const TYPE_MS = 70;
 const DELETE_MS = 35;
-const HOLD_MS = 1600;
+const HOLD_MS = 2000;
 const GAP_MS = 300;
-// Two full cycles, then it rests on the first word, so the headline never moves forever.
-const MAX_WORDS = WORDS.length * 2;
+// Six full rounds (about two minutes), then it rests on the first word, so the headline
+// never moves forever. It only runs while the headline is on screen.
+const MAX_WORDS = WORDS.length * 6;
 
 type Phase = "typing" | "holding" | "deleting";
 
 /**
  * "The #1 platform for ..." with the last words typed out, held, deleted and typed
  * again. Screen readers get the whole sentence once; the typed words are hidden from
- * them. It pauses while the pointer is on it. With reduced motion the words swap whole,
- * with no typing and no blinking cursor.
+ * them. It pauses while a mouse is over it or it is scrolled away. With reduced motion
+ * the words swap whole, with no typing and no blinking cursor.
  */
 export function RotatingHeadline({ className, style }: { className?: string; style?: React.CSSProperties }) {
   const [shown, setShown] = useState(0);
@@ -25,6 +26,16 @@ export function RotatingHeadline({ className, style }: { className?: string; sty
   const [phase, setPhase] = useState<Phase>("holding");
   const [paused, setPaused] = useState(false);
   const [reduced, setReduced] = useState(false);
+  const [visible, setVisible] = useState(true);
+  const ref = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(([entry]) => setVisible(entry.isIntersecting));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     const query = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -38,7 +49,7 @@ export function RotatingHeadline({ className, style }: { className?: string; sty
   const done = shown >= MAX_WORDS;
 
   useEffect(() => {
-    if (paused || done) return;
+    if (paused || done || !visible) return;
     let delay: number;
     let step: () => void;
     if (reduced) {
@@ -72,14 +83,14 @@ export function RotatingHeadline({ className, style }: { className?: string; sty
     }
     const id = window.setTimeout(step, delay);
     return () => window.clearTimeout(id);
-  }, [paused, done, reduced, phase, chars, word, shown]);
+  }, [paused, done, visible, reduced, phase, chars, word, shown]);
 
   // At rest, show the first word in full.
   const text = done ? WORDS[0] : word.slice(0, chars);
   const typing = !reduced && !done;
 
   return (
-    <h1 className={className} style={style} onPointerEnter={() => setPaused(true)} onPointerLeave={() => setPaused(false)}>
+    <h1 ref={ref} className={className} style={style} onPointerEnter={(e) => e.pointerType === "mouse" && setPaused(true)} onPointerLeave={() => setPaused(false)}>
       <span className={s.srOnly}>The #1 platform for hands-on labs, interactive labs, learning and practice.</span>
       <span aria-hidden="true">
         The #1 platform for
