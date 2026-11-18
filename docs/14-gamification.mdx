@@ -55,6 +55,8 @@ Amounts are data in `shared/gamification/xp.ts`:
 | Open answer approved by a mentor | 15 | `answer:<blockId>` |
 | Course completed | 100 | `course:<courseId>` |
 | Weekly goal met | 25 | `weekly_goal:<learner-local Monday>` |
+| Daily game round solved (first time that day) | 3, 9 a day at most | `game_round:<day>:<game>:<round>` |
+| All three rounds of one daily game in a day | +2 | `game_set:<day>:<game>` |
 
 Logging in and raw time never earn XP.
 

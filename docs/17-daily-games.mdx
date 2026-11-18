@@ -1,0 +1,40 @@
+---
+title: Daily games
+status: framework and three games in progress (2026-11-18)
+---
+
+# Daily games
+
+Three short browser games every day, inside `/puzzles`: **System Design Runner**, **Linux Command Explorer** and **Docker Commands**. Each game has three rounds a day (easy, medium, hard), the same for everyone. Each round solved for the first time that day gives a little XP, and finishing all three rounds of one game gives a small bonus.
+
+## XP
+
+Amounts live in `server/src/shared/gamification/xp.ts` (change a number there and every client agrees): `game_round` 3 XP, `game_set` 2 XP. The most the games give in a day is 33 XP. A replayed round gives nothing. Keys are `game_round:<day>:<game>:<round>` and `game_set:<day>:<game>`, so XP is paid once. Only learners (role MENTEE) earn XP; a visitor can play without an account and sees a prompt to sign in.
+
+## How a game is built
+
+A game is a **pure, deterministic engine** in `server/src/shared/games/<game>/engine.ts` that implements `GameEngine` (`shared/games/types.ts`):
+
+- `roundsFor(dayKey)` returns today's three rounds (use `pickDaily` from `shared/games/daily.ts`, one scenario per difficulty, rotating through the pool).
+- `parseSubmission(input)` narrows an unknown value from the network. It must be strict and never throw.
+- `verify(round, submission)` replays the submission and returns `{ passed, stars, score, message }`. It must be pure, deterministic and never throw. No clock, no `Math.random` (use `seededRandom`), no DOM, no network.
+
+The same engine runs in the browser (instant feedback, animation) and on the server (`services/games/daily.ts` replays the submission before it records the round and awards XP). Engines are in `server/src/shared`, which `pnpm sync-shared` copies into `frontend/src/shared`. Never edit the copy.
+
+The browser part is a play component, `frontend/src/components/games/<game>/<game>-play.tsx`, default export, props `GamePlayProps<Round, Submission>` (`components/games/types.ts`). It draws the board or terminal and calls `onFinish(submission)` when the player is done. The shell (`game-host.tsx`) verifies, plays the result sound, shows stars, XP and confetti, saves the round for a signed-in learner, and offers the next round. A play component must reset itself when `attempt` changes (the shell also remounts it with a new `key`), and must ignore input while `locked`.
+
+## Look and feel
+
+These are real games, not forms. Every game must have:
+
+- **Sound.** Use `sounds` from props (`lib/games/audio.ts`: `key`, `enter`, `ok`, `error`, `snap`, `coin`, `whoosh`, `alarm`, `boot`, `win`, `fanfare`, `lose`). Add new synthesized effects to that file if a game needs one (keep them short and quiet). Sound is off for people who ask for reduced motion, and the shell has a mute switch.
+- **Motion with meaning:** packets flowing, bars filling, containers pulsing or shaking, layers stacking, counters ticking, shake on a mistake. Wrap decorative motion in `motion-safe:`; the game must still work with `motion-reduce`.
+- **Feedback on every action** (sound plus a visible change), a clear goal, a visible progress or score, a hint that costs a star, and a short, friendly message when something is wrong.
+- Use the Tailwind theme tokens (`bg-card`, `border-border`, `text-muted-foreground`, `bg-secondary`, `text-primary`, `brand-yellow`) so light and dark both work, and `GameTerminal` (`components/games/game-terminal.tsx`) for any terminal. Phone first: it must be playable at 375 px wide and with the keyboard alone, with labels on controls.
+- No em dashes or en dashes in any text, comment or test. Plain, short English, for a learner who may read English as a second language.
+
+## Tests
+
+- Server: `cd server && pnpm exec vitest run tests/unit/shared/games` (pure engine tests: every scenario is solvable by its stated solution, wrong submissions fail, the daily rotation is deterministic and varies by day, `parseSubmission` rejects junk).
+- Type checks: `cd server && pnpm exec tsc -p tsconfig.json --noEmit` and `cd frontend && pnpm exec tsc --noEmit -p .`.
+- Look at it: `node <scratchpad>/gameshot.mjs <path> <out.png> [width]` logs in as a learner and saves a screenshot of the page (dev stack: web http://localhost:3100, API http://localhost:4100).

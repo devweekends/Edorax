@@ -12,6 +12,8 @@ export const XP_SOURCES = [
   "course_completed",
   "weekly_goal_met",
   "daily_goal_met",
+  "game_round",
+  "game_set",
 ] as const;
 export type XpSource = (typeof XP_SOURCES)[number];
 
@@ -30,6 +32,10 @@ export const XP_AMOUNTS = {
   weekly_goal_met: 25,
   /** Brand daily-goal reward; no streak freeze (freezes stay on the weekly goal). */
   daily_goal_met: 10,
+  /** A daily game round solved for the first time that day. Small on purpose: nine rounds a day. */
+  game_round: 3,
+  /** All three rounds of one daily game solved in the same day. */
+  game_set: 2,
 } as const satisfies Record<XpSource, number>;
 
 /** XP for passing a quiz chapter on a given try. Retakes after passing earn nothing (one key per chapter). */
@@ -45,6 +51,9 @@ export function quizPassedXp(attempt: number): number {
  */
 export const XP_DAILY_CAPS: Partial<Record<XpSource, number>> = {
   light_chapter_completed: 5,
+  // 3 games x 3 rounds. The key already makes each round once-a-day; this bounds a bug or a bad client.
+  game_round: 9,
+  game_set: 3,
 };
 
 /** Award keys: one per moment, so retries, two tabs or a progress recompute award once. */
@@ -56,4 +65,6 @@ export const xpKeys = {
   course: (courseId: string) => `course:${courseId}`,
   weeklyGoal: (weekStartDayKey: string) => `weekly_goal:${weekStartDayKey}`,
   dailyGoal: (dayKey: string) => `daily_goal:${dayKey}`,
+  gameRound: (dayKey: string, game: string, roundIndex: number) => `game_round:${dayKey}:${game}:${roundIndex}`,
+  gameSet: (dayKey: string, game: string) => `game_set:${dayKey}:${game}`,
 };

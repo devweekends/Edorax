@@ -21,7 +21,7 @@ area section is written so one work session can pick it up on its own.
 | Audiobooks | `/audiobooks`, `/audiobooks/[course]` | Open | Every narrated course as an audiobook, with a player that follows you across pages. |
 | Labs | `/labs` | Partly open | Visual and guided labs open; shell labs planned. |
 | Bite-sized practice | `/practice` | Coming soon | One topic a few minutes a day, led by questions. |
-| Puzzles | `/puzzles` | Coming soon | Several kinds of daily puzzle. |
+| Puzzles | `/puzzles` | Live | Three daily games: System Design Runner, Linux Command Explorer, Docker Commands ([`17-daily-games.mdx`](17-daily-games.mdx)). |
 | On-call tutors | `/voice` | Coming soon | A voice tutor per topic that tracks progress across its modules. |
 
 Lab kinds, under `/labs`:
@@ -56,7 +56,7 @@ frontend/src/app/(learn)/(catalog)/
     guided/                Guided labs (the Dev Weekends tracks, from `lib/guided-labs.ts`)
     shell/                 Shell labs and the desktop app docs (coming soon page)
   practice/                Bite-sized practice (coming soon page)
-  puzzles/                 Puzzles (coming soon page)
+  puzzles/                 Daily games hub and one page per game
   voice/                   On-call tutors (coming soon page)
 ```
 
@@ -203,18 +203,9 @@ spaced review queue (wrong answers come back after a few days, then less often).
   [`05-review-queue.mdx`](05-review-queue.mdx).
 - Rewards: XP and streak credit through [`14-gamification.mdx`](14-gamification.mdx).
 
-## Puzzles (planned)
+## Puzzles (live)
 
-Several kinds of daily puzzle that use course ideas, one a day, the same for everyone.
-
-- Kinds to start with: find the bottleneck, trace the request (order the steps), fix the diagram,
-  odd one out. Each kind is a small client component with a server-checked answer.
-- Model: `Puzzle { id, kind, date, data, answer (server only), clues[] }` and
-  `PuzzleAttempt { userId, puzzleId, tries, solvedAt }`. A wrong try reveals the next clue.
-- The diagram kinds can reuse the lab board model in `packages/learning-ui/src/labs/` for drawing
-  and checking.
-- Leaderboard: the mobile app adds a daily leaderboard later. It must be opt-in, like the weekly
-  leaderboards.
+The puzzles area is now the daily games: three browser games with three rounds each, the same for everyone, each solved round earning a little XP. How they are built, how XP works and how to add a game is in [`17-daily-games.mdx`](17-daily-games.mdx). The earlier plan for four puzzle kinds (find the bottleneck, trace the request, fix the diagram, odd one out) can become a fourth game on the same framework. A daily leaderboard stays an opt-in later step, like the weekly ones.
 
 ## On-call tutors (planned)
 

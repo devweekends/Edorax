@@ -73,10 +73,10 @@ export const LEARN_AREAS: readonly LearnArea[] = [
     name: "Puzzles",
     short: "Puzzles",
     href: "/puzzles",
-    status: "coming-soon",
-    tagline: "One new puzzle a day. Solve it, then climb the daily leaderboard.",
+    status: "live",
+    tagline: "Three short games a day. Fix a system, explore a server, repair a container.",
     summary:
-      "Several kinds of daily puzzles that use what you learn. One a day, the same for everyone, so you can compete with everyone on today's leaderboard.",
+      "Three playable games, new every day: fix a broken system design, explore a Linux server with real commands, and repair a Docker container. Each round you solve earns a little XP.",
     matches: ["/puzzles"],
   },
   {
