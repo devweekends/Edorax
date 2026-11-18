@@ -1,14 +1,16 @@
 import Link from "next/link";
 import { ChoiceGroup } from "./choice-group";
 import { Dot } from "@/components/brand/dot";
-import { HeroQuestion } from "./hero-question";
+import { RotatingHeadline } from "./try-it/rotating-headline";
+import { TryIt } from "./try-it/try-it";
+import { DesktopApp, HandsOnLabs } from "./labs-and-desktop";
 import { AreaShowcase } from "./area-showcase";
 import { Wordmark } from "@/components/brand/wordmark";
 import s from "./edorax-landing.module.css";
 
 // The Edorax home page. Static markup with inline brand values so it matches the
-// approved design one to one; only the hero question and the leaderboard choice
-// are interactive. Font variables (--font-unbounded, --font-dm-sans) are defined
+// approved design one to one; only the hero's try-it panel and the leaderboard
+// choice are interactive. Font variables (--font-unbounded, --font-dm-sans) are defined
 // globally in layout.tsx.
 
 function AccountLink({ dashboardHref }: { dashboardHref: string | null }) {
@@ -39,26 +41,27 @@ export function EdoraxLanding({ dashboardHref = null }: { dashboardHref?: string
           <nav aria-label="Main" className={s.nav} style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 28px", fontSize: "16px" }}>
             <a href="#areas" className={s.navLink} style={{ color: "#0A0F2C", textDecoration: "none", padding: "12px 0" }}>Ways to learn</a>
             <a href="#how" className={s.navLink} style={{ color: "#0A0F2C", textDecoration: "none", padding: "12px 0" }}>How it works</a>
+            <a href="#desktop" className={s.navLink} style={{ color: "#0A0F2C", textDecoration: "none", padding: "12px 0" }}>Desktop app</a>
             <a href="#dot" className={s.navLink} style={{ color: "#0A0F2C", textDecoration: "none", padding: "12px 0" }}>Meet Dot</a>
             <a href="#topics" className={s.navLink} style={{ color: "#0A0F2C", textDecoration: "none", padding: "12px 0" }}>What you can learn</a>
             <CoursesNavLink />
             <LabsNavLink />
             <AccountLink dashboardHref={dashboardHref} />
-            <a href="#top" className={`${s.navCta} ${s.hideSm}`} style={{ background: "#2434E0", color: "#F6F7FB", textDecoration: "none", fontWeight: "700", padding: "12px 22px" }}>Try a question</a>
+            <a href="#try" className={`${s.navCta} ${s.hideSm}`} style={{ background: "#2434E0", color: "#F6F7FB", textDecoration: "none", fontWeight: "700", padding: "12px 22px" }}>Try it now</a>
           </nav>
         </div>
       </header>
       <section id="top" style={{ width: "100%" }}>
         <div className={s.hero} style={{ maxWidth: "1200px", margin: "0 auto", padding: "40px 24px 96px", boxSizing: "border-box", display: "flex", flexWrap: "wrap", alignItems: "center", gap: "56px" }}>
           <div style={{ flex: "1 1 480px", minWidth: "0" }}>
-            <h1 className={s.h1} style={{ margin: "0", fontFamily: "var(--font-unbounded), sans-serif", fontWeight: "700", fontSize: "54px", lineHeight: "1.1", letterSpacing: "-0.035em" }}>Every lesson starts with a question you already wonder about.</h1>
-            <p style={{ margin: "24px 0 0", fontSize: "20px", color: "#46507A", maxWidth: "520px" }}>Then you play with it, listen to it and prove it. Short chapters that work on a phone, on a slow connection, in your second language.</p>
+            <RotatingHeadline className={s.h1} style={{ margin: "0", fontFamily: "var(--font-unbounded), sans-serif", fontWeight: "700", fontSize: "54px", lineHeight: "1.1", letterSpacing: "-0.035em" }} />
+            <p style={{ margin: "24px 0 0", fontSize: "20px", color: "#46507A", maxWidth: "520px" }}>Courses you read, play, hear and prove. Labs you build and break. Try each kind right here in two minutes, no account needed.</p>
             <div className={s.hideSm} style={{ marginTop: "36px", display: "flex", flexWrap: "wrap", gap: "14px" }}>
-              <a href="#top" style={{ background: "#2434E0", color: "#F6F7FB", textDecoration: "none", fontWeight: "700", padding: "15px 28px" }}>Answer the question</a>
-              <a href="#how" style={{ color: "#0A0F2C", textDecoration: "none", fontWeight: "700", padding: "13px 26px", border: "2px solid #0A0F2C" }}>See how a chapter works</a>
+              <a href="#try" style={{ background: "#2434E0", color: "#F6F7FB", textDecoration: "none", fontWeight: "700", padding: "15px 28px" }}>Start trying</a>
+              <a href="#labs" style={{ color: "#0A0F2C", textDecoration: "none", fontWeight: "700", padding: "13px 26px", border: "2px solid #0A0F2C" }}>See the labs</a>
             </div>
           </div>
-          <HeroQuestion />
+          <TryIt />
         </div>
       </section>
       <section id="how" style={{ width: "100%", background: "#FFFFFF", borderTop: "1px solid #DCE0F2", borderBottom: "1px solid #DCE0F2" }}>
@@ -134,6 +137,8 @@ export function EdoraxLanding({ dashboardHref = null }: { dashboardHref?: string
           </div>
         </div>
       </section>
+      <HandsOnLabs />
+      <DesktopApp />
       <AreaShowcase />
       <section id="dot" style={{ width: "100%", borderTop: "1px solid #DCE0F2" }}>
         <div className={s.pad} style={{ maxWidth: "1200px", margin: "0 auto", padding: "88px 24px", boxSizing: "border-box" }}>
@@ -312,7 +317,7 @@ export function EdoraxLanding({ dashboardHref = null }: { dashboardHref?: string
             <h2 className={s.h2} style={{ margin: "0", fontFamily: "var(--font-unbounded), sans-serif", fontWeight: "700", fontSize: "40px", lineHeight: "1.12", letterSpacing: "-0.03em" }}>Answer one question. See where it takes you.</h2>
             <p style={{ margin: "16px 0 0", fontSize: "19px", color: "#EEF0FF", maxWidth: "480px" }}>Make an account only when you want to keep your progress.</p>
             <div style={{ marginTop: "32px", display: "flex", flexWrap: "wrap", gap: "14px" }}>
-              <a href="#top" style={{ display: "inline-block", background: "#FFC933", color: "#0A0F2C", textDecoration: "none", fontWeight: "700", padding: "16px 30px" }}>Try the first question</a>
+              <a href="#try" style={{ display: "inline-block", background: "#FFC933", color: "#0A0F2C", textDecoration: "none", fontWeight: "700", padding: "16px 30px" }}>Try it now</a>
               <CatalogLink />
             </div>
           </div>
@@ -329,6 +334,8 @@ export function EdoraxLanding({ dashboardHref = null }: { dashboardHref?: string
           <nav aria-label="Footer" style={{ display: "flex", flexWrap: "wrap", gap: "4px 28px", fontSize: "15px" }}>
             <a href="#areas" style={{ color: "#C9CFF0", textDecoration: "none", padding: "10px 0" }}>Ways to learn</a>
             <a href="#how" style={{ color: "#C9CFF0", textDecoration: "none", padding: "10px 0" }}>How it works</a>
+            <a href="#labs" style={{ color: "#C9CFF0", textDecoration: "none", padding: "10px 0" }}>Hands-on labs</a>
+            <a href="#desktop" style={{ color: "#C9CFF0", textDecoration: "none", padding: "10px 0" }}>Desktop app</a>
             <a href="#dot" style={{ color: "#C9CFF0", textDecoration: "none", padding: "10px 0" }}>Meet Dot</a>
             <a href="#topics" style={{ color: "#C9CFF0", textDecoration: "none", padding: "10px 0" }}>What you can learn</a>
             <Link href="/catalog" style={{ color: "#C9CFF0", textDecoration: "none", padding: "10px 0" }}>Courses</Link>

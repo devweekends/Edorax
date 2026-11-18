@@ -34,6 +34,11 @@
 
 /* Inline styles carry the desktop design; these reshape it for phones. */
 @media (max-width: 640px) {
+  /* The drawn desktop app stacks its task panel over its terminal. */
+  .appBody {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
   .h1 {
     font-size: 32px !important;
   }
