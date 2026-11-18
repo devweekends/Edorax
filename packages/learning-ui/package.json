@@ -23,6 +23,7 @@
     "./components/learn/chapter-link-context": "./src/components/learn/chapter-link-context.tsx",
     "./components/learn/chapter-refs": "./src/components/learn/chapter-refs.tsx",
     "./labs/Lab": "./src/labs/Lab.tsx",
+    "./labs/HldBoard": "./src/labs/HldBoard.tsx",
     "./labs/catalog": "./src/labs/catalog.ts",
     "./labs/types": "./src/labs/types.ts",
     "./labs/registry": "./src/labs/registry.ts",

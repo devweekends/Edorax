@@ -248,6 +248,13 @@ function NamesToggle() {
   );
 }
 
+/** The outcome of one finished run, for hosts that react to it (the Edorax landing page). */
+export interface RunScore {
+  passed: number;
+  total: number;
+  allPass: boolean;
+}
+
 interface EditorProps {
   spec: HldLabSpec;
   onReset: () => void;
@@ -255,6 +262,8 @@ interface EditorProps {
   solutionMode?: boolean;
   /** Called when the learner presses Run. */
   onRun?: () => void;
+  /** Called when a run finishes, with how many checks passed. */
+  onRunDone?: (score: RunScore) => void;
   /** Reports the learner's design as it changes, for the comparison. */
   onSnapshot?: (board: Board, load: number) => void;
   canOpenSolution?: boolean;
@@ -268,7 +277,7 @@ interface EditorProps {
   onToggleFullscreen?: () => void;
 }
 
-function Editor({ spec, onReset, solutionMode = false, onRun, onSnapshot, canOpenSolution = false, onOpenSolution, onBack, onCopy, onCompare, compare, onHideCompare, isFullscreen = false, onToggleFullscreen }: EditorProps) {
+function Editor({ spec, onReset, solutionMode = false, onRun, onRunDone, onSnapshot, canOpenSolution = false, onOpenSolution, onBack, onCopy, onCompare, compare, onHideCompare, isFullscreen = false, onToggleFullscreen }: EditorProps) {
   const readOnly = solutionMode;
   const [confirm, setConfirm] = useState<"solution" | "copy" | null>(null);
   const start: Board = spec.startingBoard ?? { nodes: [], edges: [] };
@@ -328,8 +337,13 @@ function Editor({ spec, onReset, solutionMode = false, onRun, onSnapshot, canOpe
   const previousRunState = useRef<RunState>("idle");
 
   useEffect(() => {
-    if (runState === "done" && previousRunState.current !== "done") setResultsOpen(true);
+    if (runState === "done" && previousRunState.current !== "done") {
+      setResultsOpen(true);
+      onRunDone?.({ passed: report.passed, total: report.total, allPass: report.allPass });
+    }
     previousRunState.current = runState;
+    // Only a change of run state should report; the report is read at that moment.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runState]);
 
   useEffect(() => { onSnapshot?.(board, load); }, [board, load, onSnapshot]);
@@ -1063,6 +1077,7 @@ export function HldBoard({
   fullscreenActive,
   hideWhenInline = false,
   onExitFullscreen,
+  onRunDone,
 }: {
   spec: HldLabSpec;
   initialFullscreen?: boolean;
@@ -1072,6 +1087,8 @@ export function HldBoard({
   hideWhenInline?: boolean;
   /** Course launchers close the workspace when the learner exits full screen. */
   onExitFullscreen?: () => void;
+  /** Called when a run of the learner's own board finishes. */
+  onRunDone?: (score: RunScore) => void;
 }) {
   const [generation, setGeneration] = useState(0);
   const [mode, setMode] = useState<"mine" | "solution">("mine");
@@ -1155,6 +1172,7 @@ export function HldBoard({
               spec={mineSpec}
               onReset={() => { setSeed(null); setGeneration((g) => g + 1); }}
               onRun={() => setEverRan(true)}
+              onRunDone={onRunDone}
               onSnapshot={onSnapshot}
               canOpenSolution={everRan}
               onOpenSolution={() => { setCompare(null); setMode("solution"); }}
