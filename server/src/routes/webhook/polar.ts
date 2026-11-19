@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import { webhooks } from "@polar-sh/sdk/2026-10";
 import { env } from "../../config/env.js";
-import { fulfillPolarOrderPaid } from "../../services/payments/fulfill-polar-order.js";
+import { fulfillPolarOrderPaid, recordPolarOrderRefunded } from "../../services/payments/fulfill-polar-order.js";
 import { logger } from "../../utils/logger.js";
 
 const router = Router();
@@ -55,8 +55,9 @@ router.post("/", async (req: Request, res: Response) => {
         metadata,
       });
     } else if (event.type === "order.refunded") {
-      // Product is non-refundable; keep access and log for ops visibility.
-      logger.info({ orderId: event.data.id, type: event.type }, "polar refund event ignored (non-refundable product)");
+      const order = event.data;
+      const updated = await recordPolarOrderRefunded({ orderId: order.id, checkoutId: order.checkout_id });
+      logger.info({ orderId: order.id, updated, type: event.type }, "polar refund recorded");
     }
     res.status(200).json({ received: true });
   } catch (error) {
