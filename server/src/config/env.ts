@@ -28,9 +28,13 @@ const optionalSemver = (name: string) =>
   );
 
 const schema = z.object({
-  NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+  NODE_ENV: z
+    .enum(["development", "test", "production"])
+    .default("development"),
   PORT: z.coerce.number().int().positive().default(4000),
-  LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
+  LOG_LEVEL: z
+    .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
+    .default("info"),
 
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
 
@@ -50,16 +54,31 @@ const schema = z.object({
     .string()
     .optional()
     .transform((value) => value !== "false"),
-  WEEKLY_GOAL_REMINDER_HOUR_UTC: z.coerce.number().int().min(0).max(23).default(9),
+  WEEKLY_GOAL_REMINDER_HOUR_UTC: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(23)
+    .default(9),
   /** Daily job that deletes quiz camera stills older than 30 days. */
-  INTEGRITY_RETENTION_HOUR_UTC: z.coerce.number().int().min(0).max(23).default(3),
+  INTEGRITY_RETENTION_HOUR_UTC: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(23)
+    .default(3),
 
   /** Background worker that sends queued notification email and pushes live notifications. */
   NOTIFICATION_WORKER_ENABLED: z
     .string()
     .optional()
     .transform((value) => value !== "false"),
-  NOTIFICATION_WORKER_INTERVAL_MS: z.coerce.number().int().min(1_000).max(300_000).default(5_000),
+  NOTIFICATION_WORKER_INTERVAL_MS: z.coerce
+    .number()
+    .int()
+    .min(1_000)
+    .max(300_000)
+    .default(5_000),
   /** Most routine study reminders one user can get in 24 hours, across all their courses. 0 turns them off. */
   REMINDER_DAILY_LIMIT: z.coerce.number().int().min(0).max(5).default(1),
   /**
@@ -78,8 +97,11 @@ const schema = z.object({
    * Without it the AI interview feature reports that it is not set up.
    */
   AI_KEY_ENCRYPTION_KEY: optionalString.refine(
-    (value) => value === undefined || (/^[A-Za-z0-9+/]+={0,2}$/.test(value) && Buffer.from(value, "base64").length === 32),
-    "AI_KEY_ENCRYPTION_KEY must be 32 bytes encoded as base64 (for example: openssl rand -base64 32)"
+    (value) =>
+      value === undefined ||
+      (/^[A-Za-z0-9+/]+={0,2}$/.test(value) &&
+        Buffer.from(value, "base64").length === 32),
+    "AI_KEY_ENCRYPTION_KEY must be 32 bytes encoded as base64 (for example: openssl rand -base64 32)",
   ),
 
   /**
@@ -145,6 +167,22 @@ const schema = z.object({
    * than one API replica runs; otherwise each process makes its own at boot.
    */
   INTEGRITY_MEDIA_SECRET: optionalString,
+
+  /**
+   * Key the desktop app signs its Secure-exam reports with (system check, heartbeat, finish).
+   * The same value is built into the app when it is packaged (EDORAX_SECURE_APP_KEY). Without
+   * it, production refuses Secure exams. Outside production a built-in development key is used.
+   */
+  SECURE_APP_SIGNING_KEY: optionalString.refine(
+    (value) => value === undefined || value.length >= 32,
+    "SECURE_APP_SIGNING_KEY must be at least 32 characters (for example: openssl rand -base64 32)",
+  ),
+
+  /**
+   * Our own sentence-transformers service (backend-src/similarity-service) used to compare written
+   * answers. Optional: without it the check falls back to word overlap.
+   */
+  SIMILARITY_SERVICE_URL: optionalString,
 
   /**
    * Gamification switches (docs/14-gamification.mdx), each on unless set to "false". Levels and

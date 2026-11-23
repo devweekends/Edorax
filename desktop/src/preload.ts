@@ -1,5 +1,5 @@
-import { contextBridge, ipcRenderer } from 'electron';
-import type { DesktopAPI } from './domain/catalog';
+import { contextBridge, ipcRenderer } from "electron";
+import type { DesktopAPI } from "./domain/catalog";
 
 const api: DesktopAPI = {
   ide: {
@@ -15,46 +15,80 @@ const api: DesktopAPI = {
     selectTheme: () => ipcRenderer.invoke('ide:select-theme'),
     openExtensions: () => ipcRenderer.invoke('ide:open-extensions'),
     openWithMenu: (position) =>
-      ipcRenderer.invoke('ide:open-with-menu', position),
+      ipcRenderer.invoke("ide:open-with-menu", position),
   },
   labs: {
     prepareTerminal: (course) =>
       ipcRenderer.invoke('labs:prepare-terminal', course),
     configure: (blockId, mode, createProject) =>
-      ipcRenderer.invoke('labs:configure', blockId, mode, createProject),
-    listFiles: (blockId) => ipcRenderer.invoke('labs:files', blockId),
+      ipcRenderer.invoke("labs:configure", blockId, mode, createProject),
+    listFiles: (blockId) => ipcRenderer.invoke("labs:files", blockId),
     readProjectFile: (blockId, path) =>
-      ipcRenderer.invoke('labs:file-read', blockId, path),
+      ipcRenderer.invoke("labs:file-read", blockId, path),
     saveProjectFile: (blockId, path, content) =>
-      ipcRenderer.invoke('labs:file-save', blockId, path, content),
+      ipcRenderer.invoke("labs:file-save", blockId, path, content),
     createEntry: (blockId, path, kind) =>
-      ipcRenderer.invoke('labs:file-create', blockId, path, kind),
-    status: (blockId) => ipcRenderer.invoke('labs:status', blockId),
-    start: (blockId) => ipcRenderer.invoke('labs:start', blockId),
-    stop: (blockId) => ipcRenderer.invoke('labs:stop', blockId),
-    reset: (blockId) => ipcRenderer.invoke('labs:reset', blockId),
-    readFile: (blockId) => ipcRenderer.invoke('labs:read-file', blockId),
+      ipcRenderer.invoke("labs:file-create", blockId, path, kind),
+    status: (blockId) => ipcRenderer.invoke("labs:status", blockId),
+    start: (blockId) => ipcRenderer.invoke("labs:start", blockId),
+    stop: (blockId) => ipcRenderer.invoke("labs:stop", blockId),
+    reset: (blockId) => ipcRenderer.invoke("labs:reset", blockId),
+    readFile: (blockId) => ipcRenderer.invoke("labs:read-file", blockId),
     saveFile: (blockId, content) =>
-      ipcRenderer.invoke('labs:save-file', blockId, content),
+      ipcRenderer.invoke("labs:save-file", blockId, content),
     openTerminal: (blockId, id) =>
-      ipcRenderer.invoke('labs:terminal-open', blockId, id),
+      ipcRenderer.invoke("labs:terminal-open", blockId, id),
     closeTerminal: (blockId, id) =>
-      ipcRenderer.invoke('labs:terminal-close', blockId, id),
+      ipcRenderer.invoke("labs:terminal-close", blockId, id),
     terminalInput: (blockId, id, data) =>
-      ipcRenderer.invoke('labs:terminal-input', blockId, id, data),
+      ipcRenderer.invoke("labs:terminal-input", blockId, id, data),
     resizeTerminal: (blockId, id, cols, rows) =>
-      ipcRenderer.invoke('labs:terminal-resize', blockId, id, cols, rows),
+      ipcRenderer.invoke("labs:terminal-resize", blockId, id, cols, rows),
     onTerminalData: (listener) => {
       const receive = (
         _event: Electron.IpcRendererEvent,
         data: { id: string; data: string },
       ) => listener(data);
-      ipcRenderer.on('labs:terminal-data', receive);
+      ipcRenderer.on("labs:terminal-data", receive);
       return () => {
-        ipcRenderer.removeListener('labs:terminal-data', receive);
+        ipcRenderer.removeListener("labs:terminal-data", receive);
       };
     },
   },
+  secure: {
+    pendingLaunch: () => ipcRenderer.invoke("secure:pending"),
+    onLaunch: (listener) => {
+      const receive = (
+        _event: Electron.IpcRendererEvent,
+        launch: Parameters<typeof listener>[0],
+      ) => listener(launch);
+      ipcRenderer.on("secure:launch", receive);
+      return () => {
+        ipcRenderer.removeListener("secure:launch", receive);
+      };
+    },
+    // The main process keeps the one-time exam token and the session. The window only gets what it needs to draw.
+    prepare: (chapterId) => ipcRenderer.invoke("secure:prepare", chapterId),
+    protect: (chapterId) => ipcRenderer.invoke("secure:protect", chapterId),
+    camera: () => ipcRenderer.invoke("secure:camera"),
+    server: () => ipcRenderer.invoke("secure:server"),
+    precheck: (camera) => ipcRenderer.invoke("secure:precheck", camera),
+    begin: (consent) => ipcRenderer.invoke("secure:begin", consent),
+    report: (type, meta, blockId) =>
+      ipcRenderer.invoke("secure:report", type, meta, blockId),
+    end: () => ipcRenderer.invoke("secure:end"),
+    onNotice: (listener) => {
+      const receive = (
+        _event: Electron.IpcRendererEvent,
+        notice: Parameters<typeof listener>[0],
+      ) => listener(notice);
+      ipcRenderer.on("secure:notice", receive);
+      return () => {
+        ipcRenderer.removeListener("secure:notice", receive);
+      };
+    },
+  },
+
   shellLabs: {
     dockerState: () => ipcRenderer.invoke('shell-labs:docker-state'),
     startDocker: () => ipcRenderer.invoke('shell-labs:docker-start'),
@@ -140,13 +174,13 @@ const api: DesktopAPI = {
   },
   webOrigin: () => ipcRenderer.invoke('app:web-origin'),
   integrityRequest: (path, method, body) =>
-    ipcRenderer.invoke('learning:integrity', path, method, body),
+    ipcRenderer.invoke("learning:integrity", path, method, body),
   learning: {
     updateTrack: (course, kind, slug) =>
-      ipcRenderer.invoke('learning:update-track', course, kind, slug),
-    quiz: (id) => ipcRenderer.invoke('learning:quiz', id),
+      ipcRenderer.invoke("learning:update-track", course, kind, slug),
+    quiz: (id) => ipcRenderer.invoke("learning:quiz", id),
     submitQuiz: (id, answers) =>
-      ipcRenderer.invoke('learning:submit-quiz', id, answers),
+      ipcRenderer.invoke("learning:submit-quiz", id, answers),
     lesson: (course, chapter) =>
       ipcRenderer.invoke('learning:lesson', course, chapter),
     overview: (course) => ipcRenderer.invoke('learning:overview', course),
@@ -154,11 +188,11 @@ const api: DesktopAPI = {
       ipcRenderer.invoke('learning:upgrade-curriculum', course),
     block: (id) => ipcRenderer.invoke('learning:block', id),
     aiInterview: (id, action, payload) =>
-      ipcRenderer.invoke('learning:ai-interview', id, action, payload),
-    answer: (id, payload) => ipcRenderer.invoke('learning:answer', id, payload),
-    complete: (id) => ipcRenderer.invoke('learning:complete', id),
+      ipcRenderer.invoke("learning:ai-interview", id, action, payload),
+    answer: (id, payload) => ipcRenderer.invoke("learning:answer", id, payload),
+    complete: (id) => ipcRenderer.invoke("learning:complete", id),
     saveLog: (id, answers) =>
-      ipcRenderer.invoke('learning:save-log', id, answers),
+      ipcRenderer.invoke("learning:save-log", id, answers),
     checklist: (id, item, checked) =>
       ipcRenderer.invoke('learning:checklist', id, item, checked),
     highlights: {
@@ -194,4 +228,4 @@ const api: DesktopAPI = {
   cancelSignIn: () => ipcRenderer.invoke('auth:cancel-sign-in'),
   signOut: () => ipcRenderer.invoke('auth:sign-out'),
 };
-contextBridge.exposeInMainWorld('buildment', api);
+contextBridge.exposeInMainWorld("buildment", api);

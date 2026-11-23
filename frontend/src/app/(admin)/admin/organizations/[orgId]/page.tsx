@@ -72,8 +72,12 @@ export default async function AdminOrganizationDetailPage({
   const { organization: org, credentials, allocations, couponPools, creditTransactions, pendingRequests, publishedCourses } =
     await serverApiFetchOrNotFound<AdminOrganizationDetail>(`/api/v1/admin/organizations/${encodeURIComponent(orgId)}`);
 
-  const allocationByCourseId = new Map(allocations.map((row) => [row.course.id, row]));
-  const pendingRequestCourseIds = new Set(pendingRequests.map((r) => r.courseId));
+  const allocationByCourseId = new Map(
+    allocations.map((row) => [row.course.id, row]),
+  );
+  const pendingRequestCourseIds = new Set(
+    pendingRequests.map((r) => r.courseId),
+  );
   const mapCourseForBulk = (course: (typeof publishedCourses)[number]) => {
     const allocation = allocationByCourseId.get(course.id);
     return {
@@ -126,7 +130,9 @@ export default async function AdminOrganizationDetailPage({
 
   return (
     <div className="space-y-8 pb-12">
-      <AdminBackLink href="/admin/organizations">← Back to organizations</AdminBackLink>
+      <AdminBackLink href="/admin/organizations">
+        ← Back to organizations
+      </AdminBackLink>
 
       <AdminPageHeader
         eyebrow="Organization"
@@ -183,9 +189,14 @@ export default async function AdminOrganizationDetailPage({
           </div>
           <ul className="divide-y divide-border border-t border-border">
             {pendingRequests.map((r) => (
-              <li key={r.id} className="flex items-center justify-between gap-4 px-5 py-3 text-sm sm:px-6">
+              <li
+                key={r.id}
+                className="flex items-center justify-between gap-4 px-5 py-3 text-sm sm:px-6"
+              >
                 <span className="font-medium">{r.courseTitle}</span>
-                <span className="text-xs text-muted-foreground">Awaiting review</span>
+                <span className="text-xs text-muted-foreground">
+                  Awaiting review
+                </span>
               </li>
             ))}
           </ul>

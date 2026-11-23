@@ -41,6 +41,7 @@ export async function loadChapterReader(courseSlug: string, chapterSlug: string,
       slug: true,
       title: true,
       projectGoal: true,
+      integrityMode: true,
       sequential: true,
       familySlug: true,
       variantFamily: true,
@@ -63,7 +64,10 @@ export async function loadChapterReader(courseSlug: string, chapterSlug: string,
               isMilestone: true,
               estimatedMinutes: true,
               readerMode: true,
-              blocks: { where: { archivedAt: null }, select: { type: true, required: true, archivedAt: true } },
+              blocks: {
+                where: { archivedAt: null },
+                select: { type: true, required: true, archivedAt: true },
+              },
             },
           },
         },
@@ -153,7 +157,13 @@ export async function loadChapterReader(courseSlug: string, chapterSlug: string,
   const { modules } = syllabus;
 
   const base = {
-    course: { id: course.id, slug: course.slug, title: course.title, projectGoal: course.projectGoal },
+    course: {
+      id: course.id,
+      slug: course.slug,
+      title: course.title,
+      projectGoal: course.projectGoal,
+      integrityMode: course.integrityMode,
+    },
     chapter: {
       id: chapter.id,
       slug: chapter.slug,
@@ -167,7 +177,12 @@ export async function loadChapterReader(courseSlug: string, chapterSlug: string,
     prev: link(prev),
     next: link(next),
     modules,
-    track: buildCourseTrack(course.variantFamily ? resolveCourseFamily(course.familySlug, course.variantFamily) : course.familySlug, enrollment),
+    track: buildCourseTrack(
+      course.variantFamily
+        ? resolveCourseFamily(course.familySlug, course.variantFamily)
+        : course.familySlug,
+      enrollment,
+    ),
   };
 
   const locked = !bypassLocking && (gate?.lockedIds.has(chapter.id) ?? false);

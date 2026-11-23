@@ -47,7 +47,13 @@ export type ChapterReaderContent = {
 };
 
 export type ChapterReaderView = {
-  course: { id: string; slug: string; title: string; projectGoal: string | null };
+  course: {
+    id: string;
+    slug: string;
+    title: string;
+    projectGoal: string | null;
+    integrityMode: "STANDARD" | "SECURE";
+  };
   chapter: {
     id: string;
     slug: string;

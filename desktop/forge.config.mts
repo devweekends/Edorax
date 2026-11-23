@@ -37,6 +37,13 @@ const config: ForgeConfig = {
       // Staged by scripts/stage-ide.mjs; still lands at resources/ide.
       './.ide-bundle/ide',
     ],
+     // Lets the website open an exam in the app with an edorax:// link.
+    protocols: [
+      {
+        name: 'Edorax exam',
+        schemes: ['edorax'],
+      },
+    ],
   },
   // TEMPORARY: node-pty's Electron rebuild needs a working Visual Studio install, which this machine
   // does not have yet. An empty onlyModules list skips native rebuilds so the app can start.

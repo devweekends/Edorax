@@ -30,7 +30,7 @@ export function createPreviewClient(
   let expiresAt: string | null = null;
   async function call(
     path: string,
-    method = 'GET',
+    method = "GET",
     body?: unknown,
     session = token,
   ): Promise<Result<unknown>> {
@@ -39,12 +39,12 @@ export function createPreviewClient(
       if (session) headers.Authorization = 'Bearer ' + session;
       const snapshot = body instanceof Uint8Array;
       if (body !== undefined)
-        headers['Content-Type'] = snapshot ? 'image/jpeg' : 'application/json';
+        headers["Content-Type"] = snapshot ? "image/jpeg" : "application/json";
 
       const options: RequestInit = {
         method,
         headers,
-        redirect: 'error',
+        redirect: "error",
         signal: AbortSignal.timeout(15_000),
       };
       if (snapshot) options.body = new Uint8Array(body).buffer;
@@ -68,23 +68,23 @@ export function createPreviewClient(
         };
       }
       if (!response.ok || !record(payload) || payload.success !== true) {
-        let code = 'REQUEST_FAILED';
-        let message = 'The request could not be completed. Please try again.';
+        let code = "REQUEST_FAILED";
+        let message = "The request could not be completed. Please try again.";
         if (record(payload)) {
-          if (typeof payload.code === 'string') code = payload.code;
-          if (typeof payload.message === 'string')
+          if (typeof payload.code === "string") code = payload.code;
+          if (typeof payload.message === "string")
             message = payload.message.slice(0, 500);
         }
-        if (response.status === 401) code = 'AUTH_REQUIRED';
+        if (response.status === 401) code = "AUTH_REQUIRED";
         return { ok: false, code, message };
       }
       return { ok: true, data: payload.data };
     } catch {
       return {
         ok: false,
-        code: 'CONNECTION_ERROR',
+        code: "CONNECTION_ERROR",
         message:
-          'Could not reach the course service. Check your connection and try again.',
+          "Could not reach the course service. Check your connection and try again.",
       };
     }
   }
@@ -106,28 +106,28 @@ export function createPreviewClient(
       if (!token)
         return {
           ok: false,
-          code: 'AUTH_REQUIRED',
-          message: 'Sign in to continue.',
+          code: "AUTH_REQUIRED",
+          message: "Sign in to continue.",
         };
       // Only the integrity endpoints are available through this bridge.
       const opening =
         /^\/api\/v1\/chapters\/[a-zA-Z0-9_-]+\/integrity$/.test(path) &&
-        method === 'POST';
+        method === "POST";
       const events =
         /^\/api\/v1\/integrity\/attempts\/[a-zA-Z0-9_-]+\/events$/.test(path) &&
-        method === 'POST';
+        method === "POST";
       const camera =
         /^\/api\/v1\/integrity\/attempts\/[a-zA-Z0-9_-]+\/camera$/.test(path) &&
-        method === 'PUT';
+        method === "PUT";
       const snapshot =
         /^\/api\/v1\/integrity\/attempts\/[a-zA-Z0-9_-]+\/snapshots$/.test(
           path,
-        ) && method === 'POST';
+        ) && method === "POST";
       if (!opening && !events && !camera && !snapshot)
         return {
           ok: false,
-          code: 'INVALID_INPUT',
-          message: 'Invalid integrity request.',
+          code: "INVALID_INPUT",
+          message: "Invalid integrity request.",
         };
       if (
         snapshot &&
@@ -135,17 +135,55 @@ export function createPreviewClient(
       )
         return {
           ok: false,
-          code: 'INVALID_INPUT',
-          message: 'Invalid quiz snapshot.',
+          code: "INVALID_INPUT",
+          message: "Invalid quiz snapshot.",
         };
       return call(path, method, body);
     },
+    // Secure exam calls. Unlike `integrityRequest` this is never exposed to the window over IPC:
+    // only the secure controller in the main process can use it.
+    async secureRequest(
+      path: string,
+      method: string,
+      body?: unknown,
+    ): Promise<Result<unknown>> {
+      if (!token)
+        return {
+          ok: false,
+          code: "AUTH_REQUIRED",
+          message: "Sign in to take the exam.",
+        };
+      const id = "[a-zA-Z0-9_-]+";
+      const allowed = [
+        ["POST", new RegExp(`^/api/v1/chapters/${id}/secure-launch$`)],
+        ["POST", /^\/api\/v1\/integrity\/secure\/exchange$/],
+        ["POST", new RegExp(`^/api/v1/chapters/${id}/integrity$`)],
+        [
+          "POST",
+          new RegExp(
+            `^/api/v1/integrity/attempts/${id}/(secure/start|secure/finish|heartbeat|ping|events)$`,
+          ),
+        ],
+      ] as const;
+      if (
+        !allowed.some(
+          ([verb, pattern]) => verb === method && pattern.test(path),
+        )
+      )
+        return {
+          ok: false,
+          code: "INVALID_INPUT",
+          message: "Invalid exam request.",
+        };
+      return call(path, method, body);
+    },
+
     learning: createLearningClient(async (path, method, body) => {
       if (!token)
         return {
           ok: false,
-          code: 'AUTH_REQUIRED',
-          message: 'Sign in to study this course.',
+          code: "AUTH_REQUIRED",
+          message: "Sign in to study this course.",
         };
       return call(path, method, body);
     }),
@@ -164,21 +202,21 @@ export function createPreviewClient(
       )
         return {
           ok: false,
-          message: 'The backend returned an unexpected course response.',
+          message: "The backend returned an unexpected course response.",
         };
       return { ok: true, courses: result.data.courses };
     },
     async courseDetail(slug: string): Promise<Result<CourseDetail>> {
-      if (typeof slug !== 'string' || !slug || slug.length > 200)
-        return { ok: false, code: 'INVALID_INPUT', message: 'Invalid course.' };
+      if (typeof slug !== "string" || !slug || slug.length > 200)
+        return { ok: false, code: "INVALID_INPUT", message: "Invalid course." };
       const result = await call(`/api/v1/catalog/${encodeURIComponent(slug)}`);
       if (!result.ok) return result;
       if (!isDetail(result.data))
         return {
           ok: false,
-          code: 'INVALID_RESPONSE',
+          code: "INVALID_RESPONSE",
           message:
-            'The course service returned an unexpected curriculum. Please try again.',
+            "The course service returned an unexpected curriculum. Please try again.",
         };
       return { ok: true, data: result.data };
     },
@@ -186,16 +224,16 @@ export function createPreviewClient(
       if (!token)
         return {
           ok: false,
-          code: 'AUTH_REQUIRED',
-          message: 'Sign in to view your profile.',
+          code: "AUTH_REQUIRED",
+          message: "Sign in to view your profile.",
         };
-      const result = await call('/api/v1/learner/profile');
+      const result = await call("/api/v1/learner/profile");
       if (!result.ok) return result;
-      if (!record(result.data) || typeof result.data.email !== 'string')
+      if (!record(result.data) || typeof result.data.email !== "string")
         return {
           ok: false,
-          code: 'INVALID_RESPONSE',
-          message: 'Could not read your profile.',
+          code: "INVALID_RESPONSE",
+          message: "Could not read your profile.",
         };
       return { ok: true, data: result.data as LearnerProfile };
     },
@@ -358,62 +396,62 @@ export function createPreviewClient(
       return { ok: true, data: { ...(progress.data as Omit<ProgressData, 'streak' | 'timezone'>), streak, timezone } };
     },
     async enroll(courseId: string): Promise<Result<EnrollmentResult>> {
-      if (typeof courseId !== 'string' || !courseId || courseId.length > 200)
-        return { ok: false, code: 'INVALID_INPUT', message: 'Invalid course.' };
+      if (typeof courseId !== "string" || !courseId || courseId.length > 200)
+        return { ok: false, code: "INVALID_INPUT", message: "Invalid course." };
       if (!token)
         return {
           ok: false,
-          code: 'AUTH_REQUIRED',
-          message: 'Sign in to enroll in this course.',
+          code: "AUTH_REQUIRED",
+          message: "Sign in to enroll in this course.",
         };
-      const result = await call('/api/v1/enrollments', 'POST', { courseId });
+      const result = await call("/api/v1/enrollments", "POST", { courseId });
       if (!result.ok) return result;
       if (
         !record(result.data) ||
-        (result.data.lifecycle !== 'ACTIVE' &&
-          result.data.lifecycle !== 'PAYMENT_REQUIRED')
+        (result.data.lifecycle !== "ACTIVE" &&
+          result.data.lifecycle !== "PAYMENT_REQUIRED")
       )
         return {
           ok: false,
-          code: 'INVALID_RESPONSE',
+          code: "INVALID_RESPONSE",
           message:
-            'Could not confirm enrollment. Refresh the course before trying again.',
+            "Could not confirm enrollment. Refresh the course before trying again.",
         };
       return { ok: true, data: { lifecycle: result.data.lifecycle } };
     },
     // Ask the server which lesson this enrollment can open next.
     async nextLesson(slug: string): Promise<Result<{ href: string | null }>> {
-      if (typeof slug !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(slug))
-        return { ok: false, code: 'INVALID_INPUT', message: 'Invalid course.' };
+      if (typeof slug !== "string" || !/^[a-zA-Z0-9_-]+$/.test(slug))
+        return { ok: false, code: "INVALID_INPUT", message: "Invalid course." };
       if (!token)
         return {
           ok: false,
-          code: 'AUTH_REQUIRED',
-          message: 'Sign in to start learning.',
+          code: "AUTH_REQUIRED",
+          message: "Sign in to start learning.",
         };
       const result = await call(
-        '/api/v1/courses/' + encodeURIComponent(slug) + '/continue',
+        "/api/v1/courses/" + encodeURIComponent(slug) + "/continue",
       );
       if (!result.ok) return result;
       if (!record(result.data))
         return {
           ok: false,
-          code: 'INVALID_RESPONSE',
-          message: 'Could not find the next lesson.',
+          code: "INVALID_RESPONSE",
+          message: "Could not find the next lesson.",
         };
       const href = result.data.href;
       if (href === null) return { ok: true, data: { href: null } };
       // Only accept lesson paths belonging to this course.
-      const prefix = '/courses/' + encodeURIComponent(slug) + '/';
+      const prefix = "/courses/" + encodeURIComponent(slug) + "/";
       if (
-        typeof href !== 'string' ||
+        typeof href !== "string" ||
         !href.startsWith(prefix) ||
         !/^[a-zA-Z0-9_-]+$/.test(href.slice(prefix.length))
       )
         return {
           ok: false,
-          code: 'INVALID_RESPONSE',
-          message: 'The service returned an invalid lesson address.',
+          code: "INVALID_RESPONSE",
+          message: "The service returned an invalid lesson address.",
         };
       return { ok: true, data: { href } };
     },
@@ -427,9 +465,9 @@ export function createPreviewClient(
         expiresAt = null;
       }
       if (!token) return { ok: true, data: { signedIn: false } };
-      const result = await call('/api/v1/auth/me');
+      const result = await call("/api/v1/auth/me");
       if (result.ok && record(result.data) && record(result.data.user)) {
-        if (typeof result.data.user.id === 'string')
+        if (typeof result.data.user.id === "string")
           userId = result.data.user.id;
         return { ok: true, data: { signedIn: true } };
       }
@@ -440,17 +478,17 @@ export function createPreviewClient(
       if (!token) return null;
       if (userId) return userId;
       const session = token;
-      const result = await call('/api/v1/auth/me', 'GET', undefined, session);
+      const result = await call("/api/v1/auth/me", "GET", undefined, session);
       if (session !== token)
-        throw new Error('Your session changed. Reopen the workspace.');
+        throw new Error("Your session changed. Reopen the workspace.");
       if (!result.ok) throw new Error(result.message);
       if (
         !record(result.data) ||
         !record(result.data.user) ||
-        typeof result.data.user.id !== 'string'
+        typeof result.data.user.id !== "string"
       )
         throw new Error(
-          'Could not identify your account. Please sign in again.',
+          "Could not identify your account. Please sign in again.",
         );
       userId = result.data.user.id;
       return userId;
@@ -468,13 +506,13 @@ export function createPreviewClient(
       )
         return {
           ok: false,
-          code: 'INVALID_INPUT',
-          message: 'Invalid browser sign-in response.',
+          code: "INVALID_INPUT",
+          message: "Invalid browser sign-in response.",
         };
       const version = ++authVersion;
       const result = await call(
-        '/api/v1/auth/desktop/exchange',
-        'POST',
+        "/api/v1/auth/desktop/exchange",
+        "POST",
         { code, verifier },
         null,
       );
@@ -482,27 +520,27 @@ export function createPreviewClient(
       if (
         !record(result.data) ||
         !record(result.data.session) ||
-        typeof result.data.session.token !== 'string' ||
+        typeof result.data.session.token !== "string" ||
         !result.data.session.token
       ) {
         return {
           ok: false,
-          code: 'INVALID_RESPONSE',
+          code: "INVALID_RESPONSE",
           message:
-            'The service did not return a valid session. Please try again.',
+            "The service did not return a valid session. Please try again.",
         };
       }
       if (version !== authVersion)
         return {
           ok: false,
-          code: 'CANCELLED',
-          message: 'Sign-in was cancelled. Please try again.',
+          code: "CANCELLED",
+          message: "Sign-in was cancelled. Please try again.",
         };
       token = result.data.session.token;
       expiresAt = typeof result.data.session.expiresAt === 'string'
         ? result.data.session.expiresAt : null;
       userId =
-        record(result.data.user) && typeof result.data.user.id === 'string'
+        record(result.data.user) && typeof result.data.user.id === "string"
           ? result.data.user.id
           : null;
       return { ok: true, data: { signedIn: true } };
@@ -515,17 +553,17 @@ export function createPreviewClient(
       authVersion++;
       if (previous) {
         const result = await call(
-          '/api/v1/auth/logout',
-          'POST',
+          "/api/v1/auth/logout",
+          "POST",
           undefined,
           previous,
         );
         if (!result.ok)
           return {
             ok: false,
-            code: 'LOCAL_SIGN_OUT',
+            code: "LOCAL_SIGN_OUT",
             message:
-              'Signed out on this device. The service could not confirm session revocation.',
+              "Signed out on this device. The service could not confirm session revocation.",
           };
       }
       return { ok: true, data: { signedIn: false } };

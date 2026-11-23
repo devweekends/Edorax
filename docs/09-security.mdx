@@ -45,6 +45,39 @@ status: draft v1
   course text is delimited and treated as untrusted, and replies that repeat the rubric or the system prompt
   are discarded. See [`13-ai-interview.mdx`](13-ai-interview.mdx).
 
+## Quiz integrity and Secure exams (desktop app)
+
+- **Signals, not verdicts.** Integrity notes (focus loss, blocked apps, faces, typing bursts) are flags
+  for a mentor. Nothing fails a learner on its own, and the mentor's review is the final call.
+- **The server does not take the app's word for it.** In Secure mode the desktop app signs its system
+  check (`secure/start`), every heartbeat and its finish message with HMAC-SHA256
+  (`services/integrity/app-proof.ts`). The signature covers the attempt, the action, the time and,
+  for the system check, every field the server trusts (matched apps, virtual machine, displays,
+  camera). The server refuses a missing, wrong or old (about 90 seconds) signature, so a browser
+  that copies the request by hand is turned away (`SECURE_APP_REQUIRED`). The key is
+  `SECURE_APP_SIGNING_KEY` on the API and `EDORAX_SECURE_APP_KEY` when the app is built.
+  Production refuses Secure exams without it.
+- **The time limit is checked on the server** for Secure exams: first consent plus the chapter's
+  minutes (plus a short grace for the automatic save). Standard mode keeps its limit in the app.
+- **Data is kept small.** Only the names of blocked programs that matched leave the learner's
+  computer, never the full process list, files or screen. Face checks run on the learner's own
+  computer, and camera stills are deleted by the retention job.
+
+### Honest limits
+
+No desktop check is 100% safe. The point is to discourage, detect and document, with a person
+deciding.
+
+- The signing key ships inside the app, so a determined person can extract it and sign reports
+  themselves. Signing stops the easy bypass, not every bypass.
+- A copied report can be replayed for about 90 seconds. Rejecting a used signature needs a stored
+  nonce or "last proof time" column.
+- While a desktop sitting is alive, answers are accepted from any signed-in session. Tying each
+  answer to the app (for example a per-sitting token returned only after a signed start) is not
+  done yet.
+- A second phone or a helper in the room cannot be seen by any of these checks.
+- The consent screen says this to learners in plain words, before the exam starts.
+
 ## The sanitizer contract (required test)
 
 `mdx/sanitize.ts` is the single choke point between `Block.config` (server) and what the reader

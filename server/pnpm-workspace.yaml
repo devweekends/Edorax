@@ -3,7 +3,9 @@
 allowBuilds:
   '@prisma/engines': true
   esbuild: true
+  onnxruntime-node: true
   prisma: true
+  protobufjs: true
 
 # pnpm 10 delays brand-new package versions by default (minimumReleaseAge). A fresh install
 # (CI, Docker, Vercel, Heroku) then fails whenever a transitive dependency released in the last

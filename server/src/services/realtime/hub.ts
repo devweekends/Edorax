@@ -1,5 +1,8 @@
 import type { Response } from "express";
-import type { RealtimeEventMap, RealtimeEventName } from "../../shared/api/realtime.js";
+import type {
+  RealtimeEventMap,
+  RealtimeEventName,
+} from "../../shared/api/realtime.js";
 
 // In-memory registry of open Server-Sent-Event connections, keyed by user. A user can
 // have several (tabs, devices). Like the rate limiter, this is per API process — fine
@@ -24,6 +27,11 @@ export function isOnline(userId: string): boolean {
   return (connections.get(userId)?.size ?? 0) > 0;
 }
 
+/** How many streams (browser tabs) the user has open right now. */
+export function openConnectionCount(userId: string): number {
+  return connections.get(userId)?.size ?? 0;
+}
+
 export function sendFrame(res: Response, event: string, data: unknown): void {
   try {
     res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
@@ -33,7 +41,11 @@ export function sendFrame(res: Response, event: string, data: unknown): void {
 }
 
 /** Push one event to every open stream of one user. A no-op when they are offline. */
-export function publish<K extends RealtimeEventName>(userId: string, event: K, data: RealtimeEventMap[K]): void {
+export function publish<K extends RealtimeEventName>(
+  userId: string,
+  event: K,
+  data: RealtimeEventMap[K],
+): void {
   const set = connections.get(userId);
   if (!set) return;
   for (const res of set) sendFrame(res, event, data);

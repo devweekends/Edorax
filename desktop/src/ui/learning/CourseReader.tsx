@@ -14,19 +14,20 @@ import type { QuizChapterState } from '../../../../server/src/shared/api/blocks'
 import { LessonContent } from './LessonContent';
 import { Exercise } from './Exercise';
 import { QuizSession } from './quiz/QuizSession';
+import { SecureExamGate } from './quiz/secure/SecureExamGate';
 import { AccountMenu } from '../auth/AccountMenu';
 import type { Session } from '../auth/useSession';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Clock } from 'lucide-react';
 import { ResizeDivider, loadPaneWidth } from '../labs/ResizeDivider';
 import {
   ChapterSidebar,
   SidebarToggle,
-} from '@buildment/learning-ui/components/learn/chapter-sidebar';
+} from "@buildment/learning-ui/components/learn/chapter-sidebar";
 import {
   ChapterToc,
   TocToggle,
-} from '@buildment/learning-ui/components/learn/chapter-toc';
-import { CourseNavigationProvider } from '@buildment/learning-ui/components/learn/course-navigation';
+} from "@buildment/learning-ui/components/learn/chapter-toc";
+import { CourseNavigationProvider } from "@buildment/learning-ui/components/learn/course-navigation";
 import {
   VariantThemeScope,
   variantForTrack,
@@ -64,7 +65,7 @@ function CourseReaderBody({
   const ide = useCourseIDE();
   const [lesson, setLesson] = useState<Lesson | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [queuedChapter, setQueuedChapter] = useState<string | null>(null);
   const toast = useToast();
@@ -88,6 +89,8 @@ function CourseReaderBody({
     }
   };
   const [tocClosed, setTocClosed] = useState(false);
+  // True while a protected quiz runs. The menus are hidden so nothing pulls the learner away.
+  const [quizLocked, setQuizLocked] = useState(false);
   const [smallWindow, setSmallWindow] = useState(() => window.innerWidth < 768);
   const [idePaneWidth, setIdePaneWidth] = useState(loadPaneWidth);
   const handleResize = useCallback(
@@ -100,18 +103,18 @@ function CourseReaderBody({
   );
   const variant = variantForTrack(lesson?.track ?? null);
   const showHeadings =
-    lesson?.chapter.readerMode !== 'QUIZ' &&
+    lesson?.chapter.readerMode !== "QUIZ" &&
     !(lesson?.content?.predictGate && !lesson.content.predictRevealed);
   useEffect(() => {
-    const media = matchMedia('(max-width: 767px)');
+    const media = matchMedia("(max-width: 767px)");
     const update = () => {
       setSmallWindow(media.matches);
       setSidebarClosed(media.matches);
       setTocClosed(media.matches);
     };
     update();
-    media.addEventListener('change', update);
-    return () => media.removeEventListener('change', update);
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
   }, []);
   function navigate(href: string) {
     if (href === `/courses/${courseSlug}`) return onBack();
@@ -127,7 +130,7 @@ function CourseReaderBody({
 
   function fail(result: { code: string; message: string }) {
     setError(result.message);
-    if (result.code === 'AUTH_REQUIRED') onSignedOut();
+    if (result.code === "AUTH_REQUIRED") onSignedOut();
   }
   // Errors that happen while a lesson is open show as a toast with a retry action.
   useEffect(() => {
@@ -146,7 +149,7 @@ function CourseReaderBody({
       setLesson(null);
       setQuiz(null);
     }
-    setError('');
+    setError("");
     try {
       const result = await window.buildment.learning.lesson(
         courseSlug,
@@ -158,7 +161,7 @@ function CourseReaderBody({
         return;
       }
       setLesson(result.data);
-      if (!result.data.locked && result.data.chapter.readerMode === 'QUIZ') {
+      if (!result.data.locked && result.data.chapter.readerMode === "QUIZ") {
         const quizResult = await window.buildment.learning.quiz(
           result.data.chapter.id,
         );
@@ -171,7 +174,7 @@ function CourseReaderBody({
       }
     } catch {
       if (request === generation.current)
-        setError('Could not load the lesson. Please try again.');
+        setError("Could not load the lesson. Please try again.");
     } finally {
       if (request === generation.current) setLoading(false);
     }
@@ -179,7 +182,7 @@ function CourseReaderBody({
   async function start() {
     const request = ++generation.current;
     setLoading(true);
-    setError('');
+    setError("");
     try {
       const next = await window.buildment.startLearning(courseSlug);
       if (request !== generation.current) return;
@@ -189,7 +192,7 @@ function CourseReaderBody({
         return;
       }
       if (next.data.href) {
-        await load(next.data.href.split('/').pop()!);
+        await load(next.data.href.split("/").pop()!);
         return;
       }
       const overview = await window.buildment.learning.overview(courseSlug);
@@ -207,12 +210,12 @@ function CourseReaderBody({
       )[0];
       if (first) await load(first.slug);
       else {
-        setError('No lessons are available for this course yet.');
+        setError("No lessons are available for this course yet.");
         setLoading(false);
       }
     } catch {
       if (request === generation.current) {
-        setError('Could not open this course. Please try again.');
+        setError("Could not open this course. Please try again.");
         setLoading(false);
       }
     }
@@ -231,7 +234,7 @@ function CourseReaderBody({
   async function complete() {
     if (!lesson || busy) return;
     setBusy(true);
-    setError('');
+    setError("");
     try {
       const result = await window.buildment.learning.complete(lesson.chapter.id);
       if (!result.ok) {
@@ -261,7 +264,7 @@ function CourseReaderBody({
     <CourseNavigationProvider onNavigate={navigate}>
       <VariantThemeScope variant={variantForTrack(lesson?.track ?? null)}>
         <div className="course-overview-surface flex h-full flex-col overflow-hidden bg-background">
-          {!quiz && (
+          {!ide.focused && !quiz && (
           <DesktopToolbar>
             <div className="flex min-w-0 items-center gap-2">
               <SidebarToggle
@@ -335,7 +338,7 @@ function CourseReaderBody({
                 )}
               </div>
               <div
-                className={`${ide.open && (ide.focused || smallWindow) ? 'hidden' : ''} min-w-0 flex-1 overflow-y-auto`}
+                className={`${ide.open && (ide.focused || smallWindow) ? "hidden" : ""} min-w-0 flex-1 overflow-y-auto`}
                 key={lesson.chapter.id}
               >
                 <article ref={articleRef} className="mx-auto w-full min-w-0 max-w-[860px] px-7 py-10 lg:px-12 lg:py-14">
@@ -352,6 +355,14 @@ function CourseReaderBody({
                   >
                     {lesson.chapter.title}
                   </h1>
+                  {/* Secure exam notice */}
+                  {lesson.chapter.readerMode === "QUIZ" &&
+                    quiz?.integrityMode === "SECURE" && (
+                      <p className="mt-2 text-xs font-medium text-muted-foreground">
+                        Secure exam. It opens in lockdown after a system check.
+                      </p>
+                    )}
+
                   {lesson.course.projectGoal &&
                     lesson.chapter.readerMode !== 'QUIZ' && (
                       <div className="mt-4 rounded-xl border border-border bg-card px-4 py-3 text-sm leading-relaxed text-muted-foreground">
@@ -373,8 +384,8 @@ function CourseReaderBody({
                   {lesson.locked ? (
                     <div className="mt-6">
                       <p>
-                        This lesson is locked. Finish{' '}
-                        {lesson.previous?.title || 'the previous lesson'} first.
+                        This lesson is locked. Finish{" "}
+                        {lesson.previous?.title || "the previous lesson"} first.
                       </p>
                       {lesson.previous && (
                         <button
@@ -388,16 +399,54 @@ function CourseReaderBody({
                   ) : (
                     lesson.content && (
                       <>
-                        {lesson.chapter.readerMode === 'QUIZ' ? (
+                        {lesson.chapter.readerMode === "QUIZ" ? (
                           quiz ? (
-                            <QuizSession
-                              key={lesson.chapter.id}
-                              chapterId={lesson.chapter.id}
-                              state={quiz}
-                              complete={lesson.content.chapterComplete}
-                              onSaved={refresh}
-                              onExit={onBack}
-                            />
+                            quiz.steps.length === 0 ? (
+                              // Nothing to take, so nothing is locked. The rules, the camera check and the
+                              // server name still show, so the setup can be checked before there are questions.
+                              <SecureExamGate
+                                key={lesson.chapter.id}
+                                chapterId={lesson.chapter.id}
+                                mode={quiz.integrityMode ?? "STANDARD"}
+                                cameraOption={quiz.integrityCamera}
+                                blockedReason="This quiz isn't ready yet. Please let your mentor know so they can add the questions."
+                                currentBlockId={null}
+                                complete={false}
+                                onExit={onBack}
+                              >
+                                {null}
+                              </SecureExamGate>
+                            ) : !lesson.content.chapterComplete ? (
+                              <SecureExamGate
+                                key={lesson.chapter.id}
+                                chapterId={lesson.chapter.id}
+                                mode={quiz.integrityMode ?? "STANDARD"}
+                                cameraOption={quiz.integrityCamera}
+                                timeLimitMinutes={lesson.chapter.estimatedMinutes}
+                                onActiveChange={setQuizLocked}
+                                currentBlockId={null}
+                                complete={lesson.content.chapterComplete}
+                                onExit={onBack}
+                              >
+                                <QuizSession
+                                  gated
+                                  chapterId={lesson.chapter.id}
+                                  state={quiz}
+                                  complete={lesson.content.chapterComplete}
+                                  onSaved={refresh}
+                                  onExit={onBack}
+                                />
+                              </SecureExamGate>
+                            ) : (
+                              <QuizSession
+                                key={lesson.chapter.id}
+                                chapterId={lesson.chapter.id}
+                                state={quiz}
+                                complete={lesson.content.chapterComplete}
+                                onSaved={refresh}
+                                onExit={onBack}
+                              />
+                            )
                           ) : (
                             <p role="status">Loading quiz…</p>
                           )
@@ -429,7 +478,7 @@ function CourseReaderBody({
                         )}
                         <footer className="mt-10 space-y-4 border-t border-border pt-6">
                           <p className="text-sm text-muted-foreground">
-                            {lesson.content.checkpointsCompleted} /{' '}
+                            {lesson.content.checkpointsCompleted} /{" "}
                             {lesson.content.checkpointsTotal} checkpoints
                             complete
                           </p>
@@ -491,7 +540,7 @@ function CourseReaderBody({
                     />
                   )}
               </div>
-              {showHeadings && !ide.open && (
+              {showHeadings && !ide.open && !quizLocked && (
                 <ChapterToc
                   headings={annotated?.headings || []}
                   collapsed={tocClosed}
@@ -519,11 +568,11 @@ function PredictionContent({
   node,
   onSaved,
 }: {
-  node: import('../../domain/learning').LessonNode;
+  node: import("../../domain/learning").LessonNode;
   onSaved: () => void;
 }) {
   const id = node.attributes?.id || node.attributes?.blockId;
-  if (node.name === 'Predict' && typeof id === 'string')
+  if (node.name === "Predict" && typeof id === "string")
     return <Exercise id={id} onSaved={onSaved} />;
   return (
     <>

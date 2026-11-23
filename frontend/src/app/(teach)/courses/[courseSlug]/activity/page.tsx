@@ -1,5 +1,11 @@
 import Link from "next/link";
-import { Activity, CalendarDays, Clock3, Users, type LucideIcon } from "lucide-react";
+import {
+  Activity,
+  CalendarDays,
+  Clock3,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
 import type { CourseActivityView } from "@/shared/api/teach";
 import { CourseInsightsTabs } from "@/components/teach/course-insights-tabs";
 import { buttonVariants } from "@/components/ui/button";
@@ -15,9 +21,10 @@ export default async function CourseActivityPage({
 }) {
   const { courseSlug } = await params;
   await requireTeachSurface();
-  const { course, days, rows, metrics, hasActivity } = await serverApiFetchOrNotFound<CourseActivityView>(
-    `/api/v1/teach/courses/${encodeURIComponent(courseSlug)}/activity`
-  );
+  const { course, days, rows, metrics, hasActivity } =
+    await serverApiFetchOrNotFound<CourseActivityView>(
+      `/api/v1/teach/courses/${encodeURIComponent(courseSlug)}/activity`,
+    );
 
   return (
     <div className="space-y-7 pb-12">
@@ -25,9 +32,12 @@ export default async function CourseActivityPage({
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
           {course.title} · Insights
         </p>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight">Daily activity</h1>
+        <h1 className="mt-2 text-3xl font-semibold tracking-tight">
+          Daily activity
+        </h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-          A 14-day estimate of learner study time. Treat it as an activity signal; course progress is based on completed work.
+          A 14-day estimate of learner study time. Treat it as an activity
+          signal. Course progress is based on completed work.
         </p>
       </header>
 
@@ -38,9 +48,12 @@ export default async function CourseActivityPage({
           <span className="grid size-12 place-items-center rounded-2xl border bg-background">
             <Activity className="size-5 text-muted-foreground" />
           </span>
-          <h2 className="mt-4 text-base font-semibold">No learners to track yet</h2>
+          <h2 className="mt-4 text-base font-semibold">
+            No learners to track yet
+          </h2>
           <p className="mt-1 max-w-sm text-sm leading-6 text-muted-foreground">
-            Activity appears after learners enroll and begin working through the course.
+            Activity appears after learners enroll and begin working through the
+            course.
           </p>
           <Link
             href={`/courses/${course.slug}/mentees`}
@@ -52,10 +65,30 @@ export default async function CourseActivityPage({
       ) : (
         <>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <ActivityMetric icon={Users} label="Active learners" value={`${metrics.activeLearners}/${metrics.learnerCount}`} detail="Active in the last 7 days" />
-            <ActivityMetric icon={Clock3} label="Estimated study time" value={formatStudyHours(metrics.totalSeconds)} detail="Across the last 14 days" />
-            <ActivityMetric icon={Activity} label="Estimated average per learner" value={formatStudyHours(metrics.averageSeconds)} detail="Across this period" />
-            <ActivityMetric icon={CalendarDays} label="Estimated today" value={formatStudyHours(metrics.todaySeconds)} detail="Recorded in UTC" />
+            <ActivityMetric
+              icon={Users}
+              label="Active learners"
+              value={`${metrics.activeLearners}/${metrics.learnerCount}`}
+              detail="Active in the last 7 days"
+            />
+            <ActivityMetric
+              icon={Clock3}
+              label="Estimated study time"
+              value={formatStudyHours(metrics.totalSeconds)}
+              detail="Across the last 14 days"
+            />
+            <ActivityMetric
+              icon={Activity}
+              label="Estimated average per learner"
+              value={formatStudyHours(metrics.averageSeconds)}
+              detail="Across this period"
+            />
+            <ActivityMetric
+              icon={CalendarDays}
+              label="Estimated today"
+              value={formatStudyHours(metrics.todaySeconds)}
+              detail="Recorded in UTC"
+            />
           </div>
 
           <section className="overflow-hidden rounded-2xl border bg-card shadow-sm">
@@ -76,12 +109,21 @@ export default async function CourseActivityPage({
                       Learner
                     </th>
                     {days.map((day) => (
-                      <th key={day} className="px-1.5 py-3 text-center font-normal">
+                      <th
+                        key={day}
+                        className="px-1.5 py-3 text-center font-normal"
+                      >
                         <span className="block text-[10px] uppercase tracking-wide">
-                          {new Date(`${day}T12:00:00Z`).toLocaleDateString(undefined, { weekday: "short" })}
+                          {new Date(`${day}T12:00:00Z`).toLocaleDateString(
+                            undefined,
+                            { weekday: "short" },
+                          )}
                         </span>
                         <span className="mt-0.5 block font-medium text-foreground">
-                          {new Date(`${day}T12:00:00Z`).toLocaleDateString(undefined, { month: "numeric", day: "numeric" })}
+                          {new Date(`${day}T12:00:00Z`).toLocaleDateString(
+                            undefined,
+                            { month: "numeric", day: "numeric" },
+                          )}
                         </span>
                       </th>
                     ))}
@@ -92,7 +134,10 @@ export default async function CourseActivityPage({
                 </thead>
                 <tbody className="divide-y">
                   {rows.map((row) => (
-                    <tr key={row.enrollmentId} className="group transition-colors hover:bg-muted/30">
+                    <tr
+                      key={row.enrollmentId}
+                      className="group transition-colors hover:bg-muted/30"
+                    >
                       <td className="sticky left-0 z-10 bg-card px-4 py-3 transition-colors group-hover:bg-muted/30 sm:px-6">
                         <Link
                           href={`/courses/${course.slug}/mentees/${row.enrollmentId}`}
@@ -101,7 +146,9 @@ export default async function CourseActivityPage({
                           {row.label}
                         </Link>
                         {row.email && row.email !== row.label ? (
-                          <span className="block max-w-44 truncate text-xs text-muted-foreground">{row.email}</span>
+                          <span className="block max-w-44 truncate text-xs text-muted-foreground">
+                            {row.email}
+                          </span>
                         ) : null}
                       </td>
                       {days.map((day, index) => {
@@ -112,7 +159,7 @@ export default async function CourseActivityPage({
                             <span
                               className={cn(
                                 "inline-grid size-9 place-items-center rounded-lg text-[11px] font-medium tabular-nums",
-                                activityCellClass(seconds)
+                                activityCellClass(seconds),
                               )}
                               title={`${day}: ${formatStudyHours(seconds)}`}
                               aria-label={`${day}, ${formatStudyHours(seconds)}`}
@@ -134,7 +181,8 @@ export default async function CourseActivityPage({
 
           {!hasActivity ? (
             <div className="rounded-xl border border-dashed bg-muted/20 p-6 text-center text-sm text-muted-foreground">
-              No study sessions were recorded in this 14-day window. The enrolled learners remain visible so you can follow up directly.
+              No study sessions were recorded in this 14-day window. The
+              enrolled learners remain visible so you can follow up directly.
             </div>
           ) : null}
         </>
@@ -159,7 +207,9 @@ function ActivityMetric({
       <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
         <Icon className="size-4" /> {label}
       </div>
-      <p className="mt-3 text-2xl font-semibold tracking-tight tabular-nums">{value}</p>
+      <p className="mt-3 text-2xl font-semibold tracking-tight tabular-nums">
+        {value}
+      </p>
       <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
     </div>
   );
@@ -167,7 +217,10 @@ function ActivityMetric({
 
 function ActivityLegend() {
   return (
-    <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground" aria-label="Activity intensity legend">
+    <div
+      className="flex items-center gap-1.5 text-[11px] text-muted-foreground"
+      aria-label="Activity intensity legend"
+    >
       <span>Less</span>
       <span className="size-3 rounded-sm bg-muted" />
       <span className="size-3 rounded-sm bg-foreground/10" />

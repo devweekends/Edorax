@@ -1,9 +1,22 @@
-import { resolveCourseFamily, summarizeLearnerTrack } from "../../../shared/lib/course-tracks.js";
-import { releaseForEnrollment, releaseModulesWithBlocks } from "../../courses/releases.js";
+import {
+  resolveCourseFamily,
+  summarizeLearnerTrack,
+} from "../../../shared/lib/course-tracks.js";
+import {
+  releaseForEnrollment,
+  releaseModulesWithBlocks,
+} from "../../courses/releases.js";
 import { prisma } from "../../../db/prisma.js";
-import { OpenQuestionConfigSchema, openQuestionUrlPresentation } from "../../../shared/blocks/open-question/schema.js";
+import {
+  OpenQuestionConfigSchema,
+  openQuestionUrlPresentation,
+} from "../../../shared/blocks/open-question/schema.js";
 import { submissionPreview } from "../../progress/submission-preview.js";
-import { isCompletableBlock, flattenChapterIds, lockedChapterIds } from "../../progress/rules.js";
+import {
+  isCompletableBlock,
+  flattenChapterIds,
+  lockedChapterIds,
+} from "../../progress/rules.js";
 import { loadStudyWeek } from "../../progress/study-summary.js";
 import { classifyProjectEvidence, evidenceUrlParts } from "./evidence.js";
 import { isEnrollmentScopedToCourse, latestByBlock } from "./helpers.js";
@@ -19,6 +32,7 @@ import type {
 import { helpUiCopy as copy } from "../../../shared/lib/help-ui-copy.js";
 import { isConfirmedEnrollment } from "../../enrollment/lifecycle.js";
 import { loadIntegritySummaries } from "../../integrity/review.js";
+import { NotFoundError } from "../../../utils/errors.js";
 
 const RESPONSE_LIMIT = 240;
 const INACTIVE_DAYS = 7;
@@ -38,105 +52,146 @@ export async function loadMenteeEvaluation(args: {
   if (!isConfirmedEnrollment(enrollment)) return null;
   if (!enrollment.userId || !enrollment.user) return null;
 
-  const [courseStructure, progressRows, responseRows, helpRows, sessionRows, study, integrity] =
-    await Promise.all([
-      prisma.course.findUnique({
-        where: { id: args.course.id },
-        select: {
-          sequential: true,
-          familySlug: true,
-          variantFamily: true,
-          modules: {
-            where: { archivedAt: null },
-            orderBy: { order: "asc" },
-            select: {
-              id: true,
-              order: true,
-              title: true,
-              chapters: {
-                where: { archivedAt: null },
-                orderBy: { order: "asc" },
-                select: {
-                  id: true,
-                  slug: true,
-                  title: true,
-                  order: true,
-                  estimatedMinutes: true,
-                  blocks: {
-                    where: { archivedAt: null },
-                    select: { id: true, type: true, required: true, archivedAt: true },
+  const [
+    courseStructure,
+    progressRows,
+    responseRows,
+    helpRows,
+    sessionRows,
+    study,
+    integrity,
+  ] = await Promise.all([
+    prisma.course.findUnique({
+      where: { id: args.course.id },
+      select: {
+        sequential: true,
+        familySlug: true,
+        variantFamily: true,
+        modules: {
+          where: { archivedAt: null },
+          orderBy: { order: "asc" },
+          select: {
+            id: true,
+            order: true,
+            title: true,
+            chapters: {
+              where: { archivedAt: null },
+              orderBy: { order: "asc" },
+              select: {
+                id: true,
+                slug: true,
+                title: true,
+                order: true,
+                estimatedMinutes: true,
+                blocks: {
+                  where: { archivedAt: null },
+                  select: {
+                    id: true,
+                    type: true,
+                    required: true,
+                    archivedAt: true,
                   },
                 },
               },
             },
           },
         },
-      }),
-      prisma.chapterProgress.findMany({
-        where: { enrollmentId: enrollment.id },
-        select: {
-          chapterId: true,
-          status: true,
-          blocksCompleted: true,
-          blocksTotal: true,
-          score: true,
-          maxScore: true,
-          timeSpentSeconds: true,
-          startedAt: true,
-          completedAt: true,
-          learningLog: true,
+      },
+    }),
+    prisma.chapterProgress.findMany({
+      where: { enrollmentId: enrollment.id },
+      select: {
+        chapterId: true,
+        status: true,
+        blocksCompleted: true,
+        blocksTotal: true,
+        score: true,
+        maxScore: true,
+        timeSpentSeconds: true,
+        startedAt: true,
+        completedAt: true,
+        learningLog: true,
+      },
+    }),
+    prisma.response.findMany({
+      where: { enrollmentId: enrollment.id, status: { not: "DRAFT" } },
+      orderBy: { submittedAt: "desc" },
+      take: RESPONSE_LIMIT,
+      include: {
+        review: {
+          select: {
+            verdict: true,
+            feedback: true,
+            score: true,
+            createdAt: true,
+          },
         },
-      }),
-      prisma.response.findMany({
-        where: { enrollmentId: enrollment.id, status: { not: "DRAFT" } },
-        orderBy: { submittedAt: "desc" },
-        take: RESPONSE_LIMIT,
-        include: {
-          review: { select: { verdict: true, feedback: true, score: true, createdAt: true } },
-          block: {
-            select: {
-              id: true,
-              type: true,
-              config: true,
-              chapterId: true,
-              chapter: {
-                select: {
-                  title: true,
-                  slug: true,
-                  module: { select: { id: true, title: true, order: true } },
-                },
+        block: {
+          select: {
+            id: true,
+            type: true,
+            config: true,
+            chapterId: true,
+            chapter: {
+              select: {
+                title: true,
+                slug: true,
+                module: { select: { id: true, title: true, order: true } },
               },
             },
           },
         },
-      }),
-      prisma.helpThread.findMany({
-        where: { courseId: args.course.id, menteeId: enrollment.userId },
-        orderBy: { updatedAt: "desc" },
-        take: 20,
-        include: {
-          chapter: { select: { title: true } },
-          messages: { orderBy: { createdAt: "desc" }, take: 1, select: { body: true } },
+      },
+    }),
+    prisma.helpThread.findMany({
+      where: { courseId: args.course.id, menteeId: enrollment.userId },
+      orderBy: { updatedAt: "desc" },
+      take: 20,
+      include: {
+        chapter: { select: { title: true } },
+        messages: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: { body: true },
         },
-      }),
-      prisma.studySession.findMany({
-        where: { enrollmentId: enrollment.id },
-        orderBy: { startedAt: "desc" },
-        take: 12,
-        include: { chapter: { select: { title: true } } },
-      }),
-      loadStudyWeek([enrollment.id]),
-      loadIntegritySummaries(enrollment.id),
-    ]);
+      },
+    }),
+    prisma.studySession.findMany({
+      where: { enrollmentId: enrollment.id },
+      orderBy: { startedAt: "desc" },
+      take: 12,
+      include: { chapter: { select: { title: true } } },
+    }),
+    loadStudyWeek([enrollment.id]),
+    loadIntegritySummaries(enrollment.id),
+  ]);
 
   if (!courseStructure) return null;
-  const selectedRelease = await releaseForEnrollment(args.course.id, enrollment, courseStructure.familySlug);
-  if (selectedRelease) courseStructure.modules = await releaseModulesWithBlocks(selectedRelease.modules);
+  let selectedRelease: Awaited<ReturnType<typeof releaseForEnrollment>> = null;
+  try {
+    selectedRelease = await releaseForEnrollment(
+      args.course.id,
+      enrollment,
+      courseStructure.familySlug,
+    );
+  } catch (error) {
+    // Enrollment points at a stale release/variant: fall back to the live course structure
+    if (!(error instanceof NotFoundError)) throw error;
+  }
+  if (selectedRelease)
+    courseStructure.modules = await releaseModulesWithBlocks(
+      selectedRelease.modules,
+    );
 
-  const progressByChapter = new Map(progressRows.map((row) => [row.chapterId, row]));
+  const progressByChapter = new Map(
+    progressRows.map((row) => [row.chapterId, row]),
+  );
   const attemptsByBlock = new Map<string, number>();
   for (const row of responseRows) {
-    attemptsByBlock.set(row.blockId, (attemptsByBlock.get(row.blockId) ?? 0) + 1);
+    attemptsByBlock.set(
+      row.blockId,
+      (attemptsByBlock.get(row.blockId) ?? 0) + 1,
+    );
   }
   const latestResponses = latestByBlock(responseRows);
   const latestByChapter = new Map<string, typeof latestResponses>();
@@ -147,33 +202,39 @@ export async function loadMenteeEvaluation(args: {
   }
 
   const orderedChapterIds = flattenChapterIds(courseStructure.modules);
-  const statusByChapter = new Map(progressRows.map((row) => [row.chapterId, row.status]));
+  const statusByChapter = new Map(
+    progressRows.map((row) => [row.chapterId, row.status]),
+  );
   const lockedIds = lockedChapterIds(
     orderedChapterIds,
     statusByChapter,
-    courseStructure.sequential
+    courseStructure.sequential,
   );
   const currentProgress =
     progressRows.find((row) => row.status === "IN_PROGRESS") ??
     [...progressRows].sort(
-      (a, b) => (b.startedAt?.getTime() ?? 0) - (a.startedAt?.getTime() ?? 0)
+      (a, b) => (b.startedAt?.getTime() ?? 0) - (a.startedAt?.getTime() ?? 0),
     )[0] ??
     null;
   const currentChapterRow = courseStructure.modules
-    .flatMap((module) => module.chapters.map((chapter) => ({ module, chapter })))
+    .flatMap((module) =>
+      module.chapters.map((chapter) => ({ module, chapter })),
+    )
     .find(({ chapter }) => chapter.id === currentProgress?.chapterId);
 
   const pendingChapterIds = new Set(
     latestResponses
       .filter((response) => response.status === "PENDING_REVIEW")
-      .map((response) => response.block.chapterId)
+      .map((response) => response.block.chapterId),
   );
 
   const modules: EvaluationModule[] = courseStructure.modules.map((module) => {
     const chapters = module.chapters.map((chapter) => {
       const progress = progressByChapter.get(chapter.id);
       const chapterResponses = latestByChapter.get(chapter.id) ?? [];
-      const blockTotal = chapter.blocks.filter((block) => isCompletableBlock(block)).length;
+      const blockTotal = chapter.blocks.filter((block) =>
+        isCompletableBlock(block),
+      ).length;
       return {
         id: chapter.id,
         slug: chapter.slug,
@@ -188,15 +249,21 @@ export async function loadMenteeEvaluation(args: {
         timeSpentSeconds: progress?.timeSpentSeconds ?? 0,
         startedAt: progress?.startedAt?.toISOString() ?? null,
         completedAt: progress?.completedAt?.toISOString() ?? null,
-        requiresReview: chapter.blocks.some((block) => block.type === "OPEN_QUESTION"),
-        pendingReviews: chapterResponses.filter((response) => response.status === "PENDING_REVIEW").length,
+        requiresReview: chapter.blocks.some(
+          (block) => block.type === "OPEN_QUESTION",
+        ),
+        pendingReviews: chapterResponses.filter(
+          (response) => response.status === "PENDING_REVIEW",
+        ).length,
       };
     });
     return {
       id: module.id,
       order: module.order,
       title: module.title,
-      completedCount: chapters.filter((chapter) => chapter.status === "COMPLETED").length,
+      completedCount: chapters.filter(
+        (chapter) => chapter.status === "COMPLETED",
+      ).length,
       openByDefault:
         module.id === currentChapterRow?.module.id ||
         module.chapters.some((chapter) => pendingChapterIds.has(chapter.id)),
@@ -208,7 +275,7 @@ export async function loadMenteeEvaluation(args: {
     const preview = submissionPreview(
       response.block.type,
       response.block.config,
-      response.payload
+      response.payload,
     );
     return {
       id: response.id,
@@ -225,7 +292,10 @@ export async function loadMenteeEvaluation(args: {
       attempt: response.attempt,
       submittedAt: response.submittedAt.toISOString(),
       feedback: response.review?.feedback?.trim() || null,
-      reviewHref: response.block.type === "OPEN_QUESTION" ? `/review/${response.id}` : null,
+      reviewHref:
+        response.block.type === "OPEN_QUESTION"
+          ? `/review/${response.id}`
+          : null,
       historyCount: attemptsByBlock.get(response.blockId) ?? 1,
     };
   });
@@ -239,28 +309,30 @@ export async function loadMenteeEvaluation(args: {
     const url = evidenceUrlParts(payload.url);
     if (!url) return [];
     const presentation = openQuestionUrlPresentation(config.data);
-    return [{
-      id: response.id,
-      type: classifyProjectEvidence({
+    return [
+      {
+        id: response.id,
+        type: classifyProjectEvidence({
+          prompt: config.data.prompt,
+          label: presentation.urlLabel,
+          hint: presentation.urlHint,
+          submissionMode: config.data.submissionMode,
+          url: url.url,
+        }),
+        chapterTitle: response.block.chapter.title,
         prompt: config.data.prompt,
         label: presentation.urlLabel,
-        hint: presentation.urlHint,
-        submissionMode: config.data.submissionMode,
         url: url.url,
-      }),
-      chapterTitle: response.block.chapter.title,
-      prompt: config.data.prompt,
-      label: presentation.urlLabel,
-      url: url.url,
-      hostname: url.hostname,
-      displayPath: url.displayPath,
-      explanation: payload.text || null,
-      attempt: response.attempt,
-      submittedAt: response.submittedAt.toISOString(),
-      status: response.status,
-      feedback: response.review?.feedback?.trim() || null,
-      reviewHref: `/review/${response.id}`,
-    }];
+        hostname: url.hostname,
+        displayPath: url.displayPath,
+        explanation: payload.text || null,
+        attempt: response.attempt,
+        submittedAt: response.submittedAt.toISOString(),
+        status: response.status,
+        feedback: response.review?.feedback?.trim() || null,
+        reviewHref: `/review/${response.id}`,
+      },
+    ];
   });
 
   const help = helpRows.map((thread) => ({
@@ -281,11 +353,16 @@ export async function loadMenteeEvaluation(args: {
   });
 
   const timeline = buildTimeline(responseRows);
-  const totalSeconds = progressRows.reduce((sum, row) => sum + row.timeSpentSeconds, 0);
+  const totalSeconds = progressRows.reduce(
+    (sum, row) => sum + row.timeSpentSeconds,
+    0,
+  );
   const currentChapter = currentChapterRow?.chapter ?? null;
   const currentModule = currentChapterRow?.module ?? null;
   const lastActiveLabel = formatActivity(enrollment.lastActiveAt);
-  const firstPending = latestResponses.find((response) => response.status === "PENDING_REVIEW");
+  const firstPending = latestResponses.find(
+    (response) => response.status === "PENDING_REVIEW",
+  );
 
   return {
     course: args.course,
@@ -294,7 +371,13 @@ export async function loadMenteeEvaluation(args: {
       name: enrollment.user.name ?? enrollment.user.email ?? "Mentee",
       email: enrollment.user.email,
     },
-    track: summarizeLearnerTrack(resolveCourseFamily(courseStructure?.familySlug, courseStructure?.variantFamily), enrollment),
+    track: summarizeLearnerTrack(
+      resolveCourseFamily(
+        courseStructure?.familySlug,
+        courseStructure?.variantFamily,
+      ),
+      enrollment,
+    ),
     enrollment: {
       id: enrollment.id,
       status: enrollment.status,
@@ -336,36 +419,52 @@ export async function loadMenteeEvaluation(args: {
 function buildReflections(
   progressRows: Array<{ chapterId: string; learningLog: unknown }>,
   courseStructure: {
-    modules: Array<{ title: string; chapters: Array<{ id: string; title: string }> }>;
-  } | null
+    modules: Array<{
+      title: string;
+      chapters: Array<{ id: string; title: string }>;
+    }>;
+  } | null,
 ): EvaluationReflection[] {
   const chapterMeta = new Map(
     (courseStructure?.modules ?? []).flatMap((module) =>
-      module.chapters.map((chapter) => [chapter.id, { title: chapter.title, moduleTitle: module.title }] as const)
-    )
+      module.chapters.map(
+        (chapter) =>
+          [
+            chapter.id,
+            { title: chapter.title, moduleTitle: module.title },
+          ] as const,
+      ),
+    ),
   );
   return progressRows.flatMap((row) => {
     const log = parseLearningLog(row.learningLog);
-    const checklist = Object.entries(log.checklist ?? {}).map(([id, entry]) => ({
-      id,
-      checked: entry.checked,
-    }));
+    const checklist = Object.entries(log.checklist ?? {}).map(
+      ([id, entry]) => ({
+        id,
+        checked: entry.checked,
+      }),
+    );
     const answers = Object.entries(log.answers)
       .map(([id, entry]) => ({ id, text: entry.text.trim() }))
       .filter((item) => item.text.length > 0);
     if (checklist.length === 0 && answers.length === 0) return [];
     const meta = chapterMeta.get(row.chapterId);
-    return [{
-      chapterId: row.chapterId,
-      chapterTitle: meta?.title ?? "Chapter",
-      moduleTitle: meta?.moduleTitle ?? "Course",
-      checklist,
-      answers,
-    }];
+    return [
+      {
+        chapterId: row.chapterId,
+        chapterTitle: meta?.title ?? "Chapter",
+        moduleTitle: meta?.moduleTitle ?? "Course",
+        checklist,
+        answers,
+      },
+    ];
   });
 }
 
-function readOpenQuestionPayload(payload: unknown): { text: string; url: string } {
+function readOpenQuestionPayload(payload: unknown): {
+  text: string;
+  url: string;
+} {
   if (!payload || typeof payload !== "object") return { text: "", url: "" };
   const row = payload as Record<string, unknown>;
   return {
@@ -381,7 +480,12 @@ function buildAttention(args: {
     isCorrect: boolean | null;
     block: { chapterId: string; chapter: { title: string } };
   }>;
-  help: Array<{ id: string; status: string; chapterTitle: string; href: string }>;
+  help: Array<{
+    id: string;
+    status: string;
+    chapterTitle: string;
+    href: string;
+  }>;
   progressRows: Array<{
     chapterId: string;
     status: string;
@@ -389,35 +493,95 @@ function buildAttention(args: {
     startedAt: Date | null;
   }>;
   courseStructure: {
-    modules: Array<{ chapters: Array<{ id: string; title: string; estimatedMinutes: number | null }> }>;
+    modules: Array<{
+      chapters: Array<{
+        id: string;
+        title: string;
+        estimatedMinutes: number | null;
+      }>;
+    }>;
   };
   lastActiveAt: Date | null;
 }): EvaluationAttention[] {
   const items: EvaluationAttention[] = [];
   for (const response of args.latestResponses) {
     if (response.status === "PENDING_REVIEW") {
-      items.push({ id: `review-${response.id}`, kind: "review", title: "Submission waiting for review", detail: response.block.chapter.title, href: `/review/${response.id}`, action: "Review" });
+      items.push({
+        id: `review-${response.id}`,
+        kind: "review",
+        title: "Submission waiting for review",
+        detail: response.block.chapter.title,
+        href: `/review/${response.id}`,
+        action: "Review",
+      });
     } else if (response.status === "NEEDS_REVISION") {
-      items.push({ id: `revision-${response.id}`, kind: "revision", title: "Revision requested; no newer attempt yet", detail: response.block.chapter.title, href: `/review/${response.id}`, action: "View feedback" });
-    } else if (response.status === "AUTO_GRADED" && response.isCorrect === false) {
-      items.push({ id: `incorrect-${response.id}`, kind: "incorrect", title: "Recent answer was incorrect", detail: response.block.chapter.title, href: "#submissions", action: "Inspect answer" });
+      items.push({
+        id: `revision-${response.id}`,
+        kind: "revision",
+        title: "Revision requested. No newer attempt yet",
+        detail: response.block.chapter.title,
+        href: `/review/${response.id}`,
+        action: "View feedback",
+      });
+    } else if (
+      response.status === "AUTO_GRADED" &&
+      response.isCorrect === false
+    ) {
+      items.push({
+        id: `incorrect-${response.id}`,
+        kind: "incorrect",
+        title: "Recent answer was incorrect",
+        detail: response.block.chapter.title,
+        href: "#submissions",
+        action: "Inspect answer",
+      });
     }
   }
   for (const thread of args.help.filter((item) => item.status === "OPEN")) {
-    items.push({ id: `help-${thread.id}`, kind: "help", title: copy.evaluationOpenItem, detail: thread.chapterTitle, href: thread.href, action: "Reply" });
+    items.push({
+      id: `help-${thread.id}`,
+      kind: "help",
+      title: copy.evaluationOpenItem,
+      detail: thread.chapterTitle,
+      href: thread.href,
+      action: "Reply",
+    });
   }
   const chapterById = new Map(
-    args.courseStructure.modules.flatMap((module) => module.chapters.map((chapter) => [chapter.id, chapter] as const))
+    args.courseStructure.modules.flatMap((module) =>
+      module.chapters.map((chapter) => [chapter.id, chapter] as const),
+    ),
   );
   for (const progress of args.progressRows) {
     const chapter = chapterById.get(progress.chapterId);
     const expected = (chapter?.estimatedMinutes ?? 0) * 60;
-    if (progress.status === "IN_PROGRESS" && expected > 0 && progress.timeSpentSeconds > Math.max(7200, expected * 3)) {
-      items.push({ id: `stalled-${progress.chapterId}`, kind: "stalled", title: "Chapter is taking longer than expected", detail: `${chapter?.title ?? "Chapter"} · recorded time is over 3× the estimate`, href: "#progress", action: "View progress" });
+    if (
+      progress.status === "IN_PROGRESS" &&
+      expected > 0 &&
+      progress.timeSpentSeconds > Math.max(7200, expected * 3)
+    ) {
+      items.push({
+        id: `stalled-${progress.chapterId}`,
+        kind: "stalled",
+        title: "Chapter is taking longer than expected",
+        detail: `${chapter?.title ?? "Chapter"} · recorded time is over 3× the estimate`,
+        href: "#progress",
+        action: "View progress",
+      });
     }
   }
-  if (args.lastActiveAt && Date.now() - args.lastActiveAt.getTime() > INACTIVE_DAYS * 86400000) {
-    items.push({ id: "inactive", kind: "inactive", title: "No recent activity", detail: `Last active ${args.lastActiveAt.toLocaleDateString()}`, href: "#activity", action: "View activity" });
+  if (
+    args.lastActiveAt &&
+    Date.now() - args.lastActiveAt.getTime() > INACTIVE_DAYS * 86400000
+  ) {
+    items.push({
+      id: "inactive",
+      kind: "inactive",
+      title: "No recent activity",
+      detail: `Last active ${args.lastActiveAt.toLocaleDateString()}`,
+      href: "#activity",
+      action: "View activity",
+    });
   }
   return items.slice(0, 20);
 }
@@ -430,23 +594,32 @@ function buildTimeline(
     score: number | null;
     maxScore: number | null;
     block: { type: string; chapter: { title: string } };
-    review: { verdict: string; feedback: string; score: number | null; createdAt: Date } | null;
-  }>
+    review: {
+      verdict: string;
+      feedback: string;
+      score: number | null;
+      createdAt: Date;
+    } | null;
+  }>,
 ): FeedbackEvent[] {
   return responses
     .flatMap<FeedbackEvent>((response) => {
-      const events: FeedbackEvent[] = [{
-        id: `submitted-${response.id}`,
-        occurredAt: response.submittedAt.toISOString(),
-        chapterTitle: response.block.chapter.title,
-        attempt: response.attempt,
-        kind: "submission",
-        title: `${response.block.type.toLowerCase().replace(/_/g, " ")} submitted`,
-        detail: null,
-        verdict: null,
-        score: response.maxScore ? `${response.score ?? 0}/${response.maxScore}` : null,
-        href: `/review/${response.id}`,
-      }];
+      const events: FeedbackEvent[] = [
+        {
+          id: `submitted-${response.id}`,
+          occurredAt: response.submittedAt.toISOString(),
+          chapterTitle: response.block.chapter.title,
+          attempt: response.attempt,
+          kind: "submission",
+          title: `${response.block.type.toLowerCase().replace(/_/g, " ")} submitted`,
+          detail: null,
+          verdict: null,
+          score: response.maxScore
+            ? `${response.score ?? 0}/${response.maxScore}`
+            : null,
+          href: `/review/${response.id}`,
+        },
+      ];
       if (response.review) {
         events.push({
           id: `review-${response.id}`,
@@ -454,10 +627,16 @@ function buildTimeline(
           chapterTitle: response.block.chapter.title,
           attempt: response.attempt,
           kind: "review",
-          title: response.review.verdict === "NEEDS_REVISION" ? "Revision requested" : "Submission approved",
+          title:
+            response.review.verdict === "NEEDS_REVISION"
+              ? "Revision requested"
+              : "Submission approved",
           detail: response.review.feedback,
           verdict: response.review.verdict,
-          score: response.review.score == null ? null : String(response.review.score),
+          score:
+            response.review.score == null
+              ? null
+              : String(response.review.score),
           href: `/review/${response.id}`,
         });
       }

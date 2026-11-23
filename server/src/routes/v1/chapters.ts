@@ -36,6 +36,19 @@ router.post(
 const learner = [authenticate, requireVerified] as const;
 router.get("/:chapterId/quiz", ...learner, validateParams(chapterParams), chapters.quizState);
 router.post("/:chapterId/integrity", ...learner, validateParams(chapterParams), integrity.openAttempt);
+router.post(
+  "/:chapterId/secure-launch",
+  ...learner,
+  validateParams(chapterParams),
+  userRateLimit({
+    scope: "secure-launch",
+    max: 10,
+    keyFrom: (req) => req.params.chapterId as string,
+    message: "Too many exam launches. Wait a moment.",
+  }),
+  integrity.secureLaunch,
+);
+
 router.post("/:chapterId/complete", ...learner, validateParams(chapterParams), chapters.complete);
 router.put("/:chapterId/checklist/:itemId", ...learner, validate({ params: checklistItemParams, body: checklistItemBody }), chapters.putChecklistItem);
 router.put("/:chapterId/learning-log", ...learner, validate({ params: chapterParams, body: learningLogBody }), chapters.putLearningLog);

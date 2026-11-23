@@ -147,7 +147,10 @@ describe("camera snapshots", () => {
     const denied = await request(app).put(`/api/v1/teach/courses/${fx.course.id}/integrity`).set(learner()).send({ integritySnapshots: true });
     expect(denied.status).toBe(403);
     const res = await request(app).put(`/api/v1/teach/courses/${fx.course.id}/integrity`).set(mentor()).send({ integritySnapshots: true });
-    expect(res.body.data).toEqual({ integritySnapshots: true });
+    expect(res.body.data).toEqual({
+      integritySnapshots: true,
+      integrityMode: "STANDARD",
+    });
   });
 
   it("stores a small JPEG after consent and throttles the next one", async () => {

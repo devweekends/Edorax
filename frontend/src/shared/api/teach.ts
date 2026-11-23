@@ -135,6 +135,7 @@ export type CourseBuilderCourse = {
   pricingType: CoursePricingType;
   priceCents: number;
   currency: string;
+  integrityMode: "STANDARD" | "SECURE";
   enrollmentCount: number;
   modules: CourseBuilderModule[];
 };
@@ -145,10 +146,25 @@ export type CourseBuilderView = {
   looseChapters: CourseBuilderChapter[];
 };
 
-export type CourseSettingsView = Pick<CourseBuilderCourse,
-  "id" | "slug" | "title" | "description" | "projectGoal" | "difficulty" |
-  "estimatedHours" | "category" | "subcategory" | "tags" | "sequential" | "coverUrl" | "status" | "pricingType" |
-  "priceCents" | "currency"
+export type CourseSettingsView = Pick<
+  CourseBuilderCourse,
+  | "id"
+  | "slug"
+  | "title"
+  | "description"
+  | "projectGoal"
+  | "difficulty"
+  | "estimatedHours"
+  | "category"
+  | "subcategory"
+  | "tags"
+  | "sequential"
+  | "coverUrl"
+  | "status"
+  | "pricingType"
+  | "priceCents"
+  | "currency"
+  | "integrityMode"
 > & {
   autoGradeOpenQuestions: boolean;
   enrollmentCount: number;

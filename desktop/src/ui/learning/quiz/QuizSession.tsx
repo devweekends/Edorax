@@ -6,24 +6,28 @@ import { integrityTransport } from './integrity-transport';
 import { IntegrityNotice } from './IntegrityNotice';
 import { useDotVoice } from '../../mascot/DotVoice';
 import { Exercise } from '../Exercise';
+import { QUIZ_TIME_UP_DONE_EVENT, QUIZ_TIME_UP_EVENT } from './secure/quiz-timer';
 
 export function QuizSession({
   chapterId,
   state,
   complete,
   onSaved,
+  gated = false,
   onExit,
 }: {
   chapterId: string;
   state: QuizChapterState;
   complete: boolean;
   onSaved: () => void;
+  /** True when the protected-mode gate already showed the rules. */
+  gated?: boolean;
   onExit: () => void;
 }) {
   const [screens, setScreens] = useState(1);
   const steps = state.steps.length
     ? state.steps
-    : state.blockIds.map((id) => ({ id, type: 'QUIZ' as const }));
+    : state.blockIds.map((id) => ({ id, type: "QUIZ" as const }));
   const [answers, setAnswers] = useState(state.initialAnswers);
   const [score, setScore] = useState(state.initialScoreSummary);
   const [grades, setGrades] = useState(state.initialBlockGrades);
@@ -35,16 +39,16 @@ export function QuizSession({
     ),
   );
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
   const changed = useRef(new Set<string>());
   const root = useRef<HTMLElement>(null);
   const perfect = Boolean(
     score && score.maxScore > 0 && score.score === score.maxScore,
   );
-  const individualCount = steps.filter((step) => step.type !== 'QUIZ').length;
+  const individualCount = steps.filter((step) => step.type !== "QUIZ").length;
   const missed = steps.filter(
-    (step) => step.type === 'QUIZ' && grades[step.id]?.isCorrect !== true,
+    (step) => step.type === "QUIZ" && grades[step.id]?.isCorrect !== true,
   );
   const visible = retryMissed && !perfect && missed.length ? missed : steps;
   const position = Math.min(index, visible.length - 1);
@@ -59,21 +63,28 @@ export function QuizSession({
   });
   useEffect(() => {
     const fullscreen = () => {
+      // The app's lockdown already makes the window full screen. A request without a recent
+      // click is refused and logged, so only ask when there was a real click.
+      if (document.fullscreenElement) return;
+      if (navigator.userActivation && !navigator.userActivation.isActive) return;
       void document.documentElement
         .requestFullscreen?.()
         .catch(() => undefined);
     };
-    window.addEventListener('buildment:quiz-focus', fullscreen);
+    window.addEventListener("buildment:quiz-focus", fullscreen);
     return () => {
-      window.removeEventListener('buildment:quiz-focus', fullscreen);
+      window.removeEventListener("buildment:quiz-focus", fullscreen);
       if (document.fullscreenElement)
         void document.exitFullscreen().catch(() => undefined);
     };
   }, []);
   const { track: trackDot, setQuiet } = useDotVoice();
   useEffect(() => {
-    // Quiz mode: full screen, on top, no screenshots, copy blocked, and one screen only.
+    // The mascot stays quiet during any quiz.
     setQuiet(true);
+    // Inside the gate, the gate's own lockdown owns the window. Only a quiz shown on its own locks it
+    // here: full screen, on top, no screenshots, copy blocked, and one screen only.
+    if (gated) return () => setQuiet(false);
     void window.buildment.quizLockdown(true).then((result) => setScreens(result.screens));
     const unsubscribe = window.buildment.onQuizScreens((result) => setScreens(result.screens));
     void document.documentElement.requestFullscreen?.().catch(() => undefined);
@@ -85,13 +96,31 @@ export function QuizSession({
       document.body.style.userSelect = previous;
       void window.buildment.quizLockdown(false);
     };
-  }, []);
+  }, [gated]);
   async function exitQuiz() {
     if (document.fullscreenElement) await document.exitFullscreen().catch(() => undefined);
     await window.buildment.quizLockdown(false);
     onExit();
   }
-  async function submit() {
+  // At time-up the gate asks for a save. The ref keeps the latest answers for the listener.
+  const submitRef = useRef(submit);
+  useEffect(() => {
+    submitRef.current = submit;
+  });
+  const timeUpHandled = useRef(false);
+  useEffect(() => {
+    const onTimeUp = () => {
+      if (timeUpHandled.current) return;
+      timeUpHandled.current = true;
+      void submitRef.current({ auto: true }).finally(() => {
+        window.dispatchEvent(new Event(QUIZ_TIME_UP_DONE_EVENT));
+      });
+    };
+    window.addEventListener(QUIZ_TIME_UP_EVENT, onTimeUp);
+    return () => window.removeEventListener(QUIZ_TIME_UP_EVENT, onTimeUp);
+  }, []);
+
+  async function submit(options: { auto?: boolean } = {}) {
     if (busy || perfect) return;
     const payload = state.blockIds.map((blockId) => ({
       blockId,
@@ -103,18 +132,20 @@ export function QuizSession({
     const unanswered = payload.filter(
       (answer) => !answer.selected.length,
     ).length;
+    // A time-up save never asks. Unanswered questions are marked incorrect.
     if (
       unanswered &&
+      !options.auto &&
       !integrity.withoutFlags(() =>
         window.confirm(
           unanswered +
-            ' questions are unanswered. Submit anyway? Unanswered questions will be marked incorrect.',
+            " questions are unanswered. Submit anyway? Unanswered questions will be marked incorrect.",
         ),
       )
     )
       return;
     setBusy(true);
-    setError('');
+    setError("");
     integrity.checkPace(score ? [...changed.current] : state.blockIds);
     try {
       const result = await window.buildment.learning.submitQuiz(
@@ -122,7 +153,7 @@ export function QuizSession({
         payload,
       );
       if (!result.ok) {
-        playFeedback('error');
+        playFeedback("error");
         setError(result.message);
         return;
       }
@@ -142,8 +173,8 @@ export function QuizSession({
         data.assessment?.passed ||
         (data.maxScore > 0 && data.score === data.maxScore)
       )
-        playFeedback('celebration');
-      else if (data.score <= 0) playFeedback('error');
+        playFeedback("celebration");
+      else if (data.score <= 0) playFeedback("error");
       setScore({
         score: data.score,
         maxScore: data.maxScore,
@@ -172,9 +203,9 @@ export function QuizSession({
       else if (!allCorrect) void integrity.nextAttempt();
       onSaved();
     } catch {
-      playFeedback('error');
+      playFeedback("error");
       setError(
-        'Could not submit your quiz. Your answers are still here. Please retry.',
+        "Could not submit your quiz. Your answers are still here. Please retry.",
       );
     } finally {
       setBusy(false);
@@ -186,7 +217,7 @@ export function QuizSession({
       <div className="mb-5 flex items-center justify-between text-sm">
         <span className="font-medium">
           Question {position + 1} of {visible.length}
-          {retryMissed && !perfect ? ' to retry' : ''}
+          {retryMissed && !perfect ? " to retry" : ""}
         </span>
         <span className="text-muted-foreground">
           {Math.round(((position + 1) / visible.length) * 100)}%
@@ -202,10 +233,10 @@ export function QuizSession({
       >
         <div
           className="h-full rounded-full bg-primary transition-all"
-          style={{ width: ((position + 1) / visible.length) * 100 + '%' }}
+          style={{ width: ((position + 1) / visible.length) * 100 + "%" }}
         />
       </div>
-      {screens > 1 && (
+      {!gated && screens > 1 && (
         <div
           role="alertdialog"
           aria-modal="true"
@@ -220,14 +251,16 @@ export function QuizSession({
           </div>
         </div>
       )}
-      <button
-        type="button"
-        onClick={() => void exitQuiz()}
-        className="fixed right-4 top-4 z-[75] rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium shadow-sm hover:bg-muted"
-      >
-        Exit quiz
-      </button>
-      <IntegrityNotice integrity={integrity} />
+      {!gated && (
+        <button
+          type="button"
+          onClick={() => void exitQuiz()}
+          className="fixed right-4 top-4 z-[75] rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium shadow-sm hover:bg-muted"
+        >
+          Exit quiz
+        </button>
+      )}
+      <IntegrityNotice integrity={integrity} autoStart={gated} />
       {individualCount > 0 && (
         <p className="text-sm leading-6 text-muted-foreground">
           Written answers, predictions, and code exercises are submitted
@@ -238,7 +271,7 @@ export function QuizSession({
         <div
           hidden={step.id !== current?.id}
           data-integrity-step={step.id}
-          key={step.id + ':' + revision}
+          key={step.id + ":" + revision}
         >
           <Exercise
             id={step.id}
@@ -261,9 +294,9 @@ export function QuizSession({
           </p>
           <p className="mt-1 text-sm">
             {perfect
-              ? 'All multiple-choice answers are correct.'
+              ? "All multiple-choice answers are correct."
               : missed.length +
-                ' questions to retry. Correct answers are kept.'}
+                " questions to retry. Correct answers are kept."}
           </p>
           {!perfect && (
             <button
@@ -273,7 +306,7 @@ export function QuizSession({
                 setIndex(0);
               }}
             >
-              {retryMissed ? 'Review all questions' : 'Retry missed questions'}
+              {retryMissed ? "Review all questions" : "Retry missed questions"}
             </button>
           )}
         </div>
@@ -306,12 +339,12 @@ export function QuizSession({
             className="rounded-lg bg-primary px-5 py-2.5 text-sm text-primary-foreground disabled:opacity-50"
           >
             {busy
-              ? 'Submitting…'
+              ? "Submitting…"
               : perfect
-                ? 'Quiz complete'
+                ? "Quiz complete"
                 : score
-                  ? 'Submit again'
-                  : 'Submit quiz'}
+                  ? "Submit again"
+                  : "Submit quiz"}
           </button>
         ) : (
           <p className="text-sm">Submit each activity above.</p>

@@ -24,13 +24,25 @@ import type { CapstoneCheckState } from "../blocks/capstone-check/report";
 export type QuizBlockState = {
   type: "QUIZ";
   config: SanitizedQuizConfig;
-  initialState: { selected: string[]; isCorrect: boolean | null; score: number | null; maxScore: number | null; explanation?: string } | null;
+  initialState: {
+    selected: string[];
+    isCorrect: boolean | null;
+    score: number | null;
+    maxScore: number | null;
+    explanation?: string;
+  } | null;
 };
 
 export type PredictBlockState = {
   type: "PREDICT";
   config: SanitizedPredictConfig;
-  initialState: { selected: string; isCorrect: boolean | null; score: number | null; maxScore: number | null; explanation?: string } | null;
+  initialState: {
+    selected: string;
+    isCorrect: boolean | null;
+    score: number | null;
+    maxScore: number | null;
+    explanation?: string;
+  } | null;
 };
 
 export type CodeBlockState = {
@@ -65,7 +77,13 @@ export type OpenQuestionBlockState = {
 
 export type MustReadBlockState = {
   type: "MUST_READ";
-  config: { title: string; url: string; description: string; source?: string; readMinutes?: number };
+  config: {
+    title: string;
+    url: string;
+    description: string;
+    source?: string;
+    readMinutes?: number;
+  };
   /** False for an optional read: it never gates the chapter, so the card says so. */
   required: boolean;
   initialRead: boolean;
@@ -107,7 +125,18 @@ export type BlockState =
 
 /** Quiz-mode chapter: every question's last answer, for the wizard's initial state. */
 export type QuizChapterState = {
-  steps: Array<{ id: string; type: "QUIZ" | "OPEN_QUESTION" | "PREDICT" | "CODE" }>;
+  /** SECURE means the quiz opens only from a live Edorax desktop sitting. Absent on older servers. */
+  integrityMode?: "STANDARD" | "SECURE";
+  /** The course takes optional camera photos during this quiz. */
+  integrityCamera?: boolean;
+  /** Set when the camera is not offered. Says why, so it can be fixed. */
+  integrityCameraReason?: string;
+  /** Set only when there are no questions. Says why, from what this server holds. */
+  emptyReason?: string;
+  steps: Array<{
+    id: string;
+    type: "QUIZ" | "OPEN_QUESTION" | "PREDICT" | "CODE";
+  }>;
   blockIds: string[];
   initialAnswers: Record<string, string[]>;
   initialBlockGrades: Record<string, { selected: string[]; isCorrect: boolean | null; explanation?: string; correctOptionIds?: string[] }>;
@@ -118,7 +147,17 @@ export type QuizChapterState = {
     passingScore: number;
     passed: boolean;
     allAttempted: boolean;
-    deterministic: { score: number; weight: number; attempted: number; total: number } | null;
-    ai: { score: number; weight: number; attempted: number; total: number } | null;
+    deterministic: {
+      score: number;
+      weight: number;
+      attempted: number;
+      total: number;
+    } | null;
+    ai: {
+      score: number;
+      weight: number;
+      attempted: number;
+      total: number;
+    } | null;
   } | null;
 };

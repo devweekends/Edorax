@@ -480,6 +480,8 @@ model Course {
   releases       CourseRelease[]
   /// Quiz camera photos are opt-in per course and never required; quiz integrity signals are always on.
   integritySnapshots Boolean  @default(false)
+    /// Instructor's choice for quiz chapters: browser (STANDARD) or the desktop app (SECURE).
+  integrityMode IntegrityMode @default(STANDARD)
   mentorId       String
   mentor         User         @relation("CourseMentor", fields: [mentorId], references: [id])
   instructors    CourseInstructor[]
@@ -1543,6 +1545,27 @@ enum IntegrityEventType {
   FAST_ANSWER
   CAMERA_OFF
   CAMERA_ON
+    // Secure mode (desktop app) signals.
+  BLOCKED_APP
+  VIRTUAL_MACHINE
+  HEARTBEAT_GAP
+  TYPING_BURST
+  FACE_MISSING
+  FACE_MULTIPLE
+}
+
+/// STANDARD runs in the browser. SECURE needs the Edorax desktop app.
+enum IntegrityMode {
+  STANDARD
+  SECURE
+}
+
+/// Only a person picks one of these; nothing in the system fails a learner on its own.
+enum IntegrityReviewDecision {
+  CLEARED
+  NEEDS_FOLLOWUP
+  CONFIRMED_VIOLATION
+
 }
 
 enum IntegrityCameraStatus {
@@ -1565,13 +1588,43 @@ model IntegrityAttempt {
   eventCount    Int                   @default(0)
   droppedEvents Int                   @default(0)
   snapshotCount Int                   @default(0)
+  /// Mode the sitting ran in, copied from the course when it opened.
+  mode          IntegrityMode         @default(STANDARD)
   startedAt     DateTime              @default(now())
   lastSeenAt    DateTime              @default(now())
   events        IntegrityEvent[]
   snapshots     IntegritySnapshot[]
+  secureSession SecureExamSession?
+  review        IntegrityReview?
 
   @@unique([enrollmentId, chapterId, attempt])
   @@index([chapterId])
+}
+/// Consent, pre-check result and heartbeat of one sitting in the desktop app.
+model SecureExamSession {
+  id              String           @id @default(cuid())
+  attemptId       String           @unique
+  attempt         IntegrityAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  consentedAt     DateTime
+  platform        String           @db.VarChar(16)
+  appVersion      String           @db.VarChar(32)
+  /// Matched apps, display count, VM and camera result only. The full process list is never sent.
+  precheck        Json
+  heartbeatCount  Int              @default(0)
+  lastHeartbeatAt DateTime         @default(now())
+  endedAt         DateTime?
+}
+
+/// The mentor's final call on a flagged attempt. The reviewer is a snapshot, like AdminAuditLog.
+model IntegrityReview {
+  id           String                  @id @default(cuid())
+  attemptId    String                  @unique
+  attempt      IntegrityAttempt        @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  decision     IntegrityReviewDecision
+  note         String?                 @db.VarChar(1000)
+  reviewerId   String
+  reviewerName String                  @db.VarChar(120)
+  reviewedAt   DateTime                @default(now())
 }
 
 model IntegrityEvent {

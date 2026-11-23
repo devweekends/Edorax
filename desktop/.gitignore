@@ -147,6 +147,8 @@ out/
 test-results/
 playwright-report/
 
+mediapipe/
+
 # Shell labs are copied from Edorax Core by `pnpm sync:labs`; Core owns them.
 /labs/
 

@@ -2,7 +2,11 @@ import { createOrganizationAction } from "@/server/actions/admin/organizations";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AdminActionForm } from "@/components/admin/admin-action-form";
-import { AdminBackLink, AdminPageHeader, AdminPanel } from "@/components/admin/admin-ui";
+import {
+  AdminBackLink,
+  AdminPageHeader,
+  AdminPanel,
+} from "@/components/admin/admin-ui";
 
 export default function NewOrganizationPage() {
   return (
@@ -24,13 +28,19 @@ export default function NewOrganizationPage() {
         >
           <div className="space-y-1.5">
             <Label htmlFor="name">Display name</Label>
-            <Input id="name" name="name" required minLength={2} placeholder="Acme Learning" />
+            <Input
+              id="name"
+              name="name"
+              required
+              minLength={2}
+              placeholder="Acme Learning"
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="slug">Slug (optional)</Label>
             <Input id="slug" name="slug" placeholder="acme-learning" />
             <p className="text-xs text-muted-foreground">
-              Used in URLs and logs; generated from the name if empty.
+              Used in URLs and logs. Generated from the name if empty.
             </p>
           </div>
         </AdminActionForm>

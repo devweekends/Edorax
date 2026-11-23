@@ -1,4 +1,5 @@
 import type { IDEAPI } from './ide';
+import type { SecureAPI } from "./secure";
 import type {
   CatalogCourseSummary,
   CatalogCourseDetail,
@@ -19,6 +20,7 @@ export interface DesktopAPI {
   labs: import('./labs').LabsAPI;
   shellLabs: import('./shell-labs').ShellLabsAPI;
   update: import('./app-update').AppUpdateAPI;
+  secure: SecureAPI;
   readonly platform?: string;
   offline: {
     status(slug: string): Promise<{ available: boolean; downloadedAt: string | null; chapters: number; pending: number }>;
