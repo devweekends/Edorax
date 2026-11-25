@@ -3,7 +3,8 @@ import request from "supertest";
 import { createApp } from "../../src/app.js";
 import { prisma } from "../../src/db/prisma.js";
 import { earnCredits } from "../../src/services/gamification/credits.js";
-import { createCourseFixture } from "../helpers/fixtures.js";
+import { recordCareerTierUp } from "../../src/services/engagement/events.js";
+import { completeChapter, createCourseFixture } from "../helpers/fixtures.js";
 
 const app = createApp();
 let fx: Awaited<ReturnType<typeof createCourseFixture>>;
@@ -79,5 +80,45 @@ describe("rewards marketplace & public career identity", () => {
       learningInPublic: true,
       cosmetic: "sparkle",
     });
+    // The quiz average is owner-only; the public card never carries it.
+    expect(pub.body.data).not.toHaveProperty("career");
+
+    const own = await request(app).get("/api/v1/learner/my-profile").set(auth());
+    expect(own.status).toBe(200);
+    expect(own.body.data.career).toMatchObject({ tier: "INTERN", nextTier: "JUNIOR", requiredForNext: { courses: 2, minScore: 70 } });
+    expect(own.body.data.careerTier).toBe(own.body.data.career.tier);
+    expect(own.body.data.careerPromotion).toBeNull();
+  });
+
+  it("waits for the learner to claim achievement credits, and pays each tier once", async () => {
+    await completeChapter(fx.enrollment.id, fx.chapterA.id);
+
+    const before = await request(app).get("/api/v1/learner/my-profile").set(auth());
+    expect(before.status).toBe(200);
+    expect(before.body.data.achievementClaims).toContainEqual({ id: "chapters", tiers: [0], credits: 20 });
+    const balance = before.body.data.creditsBalance as number;
+
+    // Opening the profile no longer pays on its own.
+    const again = await request(app).get("/api/v1/learner/my-profile").set(auth());
+    expect(again.body.data.creditsBalance).toBe(balance);
+
+    const claim = await request(app).post("/api/v1/learner/achievements/chapters/claim").set(auth());
+    expect(claim.status).toBe(200);
+    expect(claim.body.data).toMatchObject({ id: "chapters", tiers: [0], credits: 20, balance: balance + 20 });
+
+    const repeat = await request(app).post("/api/v1/learner/achievements/chapters/claim").set(auth());
+    expect(repeat.status).toBe(400);
+    const unknown = await request(app).post("/api/v1/learner/achievements/not-a-thing/claim").set(auth());
+    expect(unknown.status).toBe(404);
+
+    const after = await request(app).get("/api/v1/learner/my-profile").set(auth());
+    expect(after.body.data.achievementClaims.some((c: { id: string }) => c.id === "chapters")).toBe(false);
+  });
+
+  it("celebrates a career tier once, and never the starting tier", async () => {
+    expect(await recordCareerTierUp(fx.learner.id, "web", "INTERN")).toBeNull();
+    const first = await recordCareerTierUp(fx.learner.id, "web", "JUNIOR");
+    expect(first).toMatchObject({ type: "career_tier_up", payload: { tier: "JUNIOR" }, isNew: true });
+    expect(await recordCareerTierUp(fx.learner.id, "web", "JUNIOR")).toBeNull();
   });
 });

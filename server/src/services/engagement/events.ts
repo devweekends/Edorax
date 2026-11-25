@@ -16,6 +16,8 @@ import { xpKeys } from "../../shared/gamification/xp.js";
 import type { TrackEventBody } from "../../validations/engagement.js";
 import { gamificationFeatures } from "../gamification/flags.js";
 import { settleWeeklyGoal } from "../gamification/habit.js";
+import { loadCareerProgress } from "../gamification/career.js";
+import type { CareerTier } from "../../shared/api/gamification.js";
 import { utcDateOnly } from "../progress/heartbeat.js";
 import { loadLearnerHabit } from "../progress/learner-habit.js";
 import { latestQuizAttempt } from "./quiz-facts.js";
@@ -195,6 +197,26 @@ const courseCompleted = (courseId: string): Draft => ({
 });
 
 /**
+ * Records the first time the learner is seen at a career tier above Intern. Keyed by tier, so the
+ * profile page and a course completion can both check without celebrating twice.
+ */
+export async function recordCareerTierUp(
+  userId: string,
+  platform: EngagementPlatform,
+  tier: CareerTier
+): Promise<RecordedEngagementEvent | null> {
+  if (tier === "INTERN") return null;
+  const event = await record(userId, platform, {
+    type: "career_tier_up",
+    courseId: null,
+    chapterId: null,
+    payload: { tier },
+    dedupeKey: `career_tier_up:${tier}`,
+  });
+  return event.isNew ? event : null;
+}
+
+/**
  * Checks one reported moment against the database, stores it, and returns it with what it caused:
  * the events it led to (a weekly goal met, a new level) and the XP it earned.
  */
@@ -273,6 +295,13 @@ async function addGamification(
       dedupeKey: `level_up:${level}`,
     });
     if (levelUp.isNew) events.push(levelUp);
+  }
+
+  // Only a finished course can move the career tier, so only then is it worth the extra reads.
+  if (features.career && reported.some((event) => event.isNew && event.type === "course_completed")) {
+    const career = await loadCareerProgress(userId);
+    const promoted = await recordCareerTierUp(userId, platform, career.tier);
+    if (promoted) events.push(promoted);
   }
 
   const xp = Math.max(0, earned?._sum.amount ?? 0);

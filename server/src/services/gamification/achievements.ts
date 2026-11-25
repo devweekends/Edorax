@@ -2,9 +2,11 @@ import { prisma } from "../../db/prisma.js";
 import { ACHIEVEMENTS, achievementProgress, rewardForTier } from "../../shared/gamification/achievements.js";
 import { LEAGUE_TIER_ORDER } from "../../shared/gamification/leagues.js";
 import { dateToDayKey, dayKeyToDate } from "../../shared/lib/local-date.js";
-import type { AchievementView } from "../../shared/api/public-profile.js";
+import type { AchievementClaim, AchievementClaimResult, AchievementView } from "../../shared/api/public-profile.js";
+import { BadRequestError, NotFoundError } from "../../utils/errors.js";
 import { loadRecords } from "./records.js";
-import { earnCredits } from "./credits.js";
+import { creditBalance, earnCredits } from "./credits.js";
+import { gamificationFeatures } from "./flags.js";
 
 // Computes achievement-card progress from existing data. Pure reads; reuses the records service for
 // streak/perfect/league so there is one source of truth for those bests.
@@ -78,15 +80,9 @@ export async function loadAchievements(userId: string): Promise<AchievementView[
   });
 }
 
-/**
- * Grants credits for every reached achievement tier, once each, idempotently through the credit
- * ledger (`achievement:<id>:<tier>` source keys). Returns what was newly paid this call.
- */
-export async function grantAchievementRewards(
-  userId: string,
-  achievements: AchievementView[]
-): Promise<{ count: number; credits: number }> {
-  const existing = new Set(
+/** Reached tiers whose credits are still waiting to be claimed, per achievement. */
+export async function pendingAchievementClaims(userId: string, achievements: AchievementView[]): Promise<AchievementClaim[]> {
+  const paid = new Set(
     (
       await prisma.creditEntry.findMany({
         where: { userId, sourceKey: { startsWith: "achievement:" } },
@@ -94,26 +90,41 @@ export async function grantAchievementRewards(
       })
     ).map((row) => row.sourceKey)
   );
-
-  const pending: Array<{ key: string; amount: number }> = [];
+  const claims: AchievementClaim[] = [];
   for (const a of achievements) {
-    for (let i = 0; i <= a.tier; i++) {
-      const key = `achievement:${a.id}:${i}`;
-      if (!existing.has(key)) pending.push({ key, amount: rewardForTier(i) });
-    }
+    const tiers: number[] = [];
+    for (let i = 0; i <= a.tier; i++) if (!paid.has(achievementCreditKey(a.id, i))) tiers.push(i);
+    if (tiers.length > 0) claims.push({ id: a.id, tiers, credits: tiers.reduce((sum, i) => sum + rewardForTier(i), 0) });
   }
-  if (pending.length === 0) return { count: 0, credits: 0 };
+  return claims;
+}
 
-  let count = 0;
+/**
+ * Pays every reached, unpaid tier of one achievement. Idempotent through the credit ledger
+ * (`achievement:<id>:<tier>` source keys), so a double click pays once.
+ */
+export async function claimAchievement(userId: string, achievementId: string): Promise<AchievementClaimResult> {
+  if (!ACHIEVEMENTS.some((def) => def.id === achievementId)) throw new NotFoundError("Achievement not found");
+  if (!gamificationFeatures().credits) throw new BadRequestError("Build Credits are turned off.");
+  const achievement = (await loadAchievements(userId)).find((a) => a.id === achievementId)!;
+  const [pending] = await pendingAchievementClaims(userId, [achievement]);
+  if (!pending) throw new BadRequestError("Nothing to claim for this achievement yet.");
+
   let credits = 0;
+  const tiers: number[] = [];
   await prisma.$transaction(async (tx) => {
-    for (const p of pending) {
-      const paid = await earnCredits(tx, userId, p.key, p.amount);
-      if (paid) {
-        count += 1;
-        credits += p.amount;
+    for (const tier of pending.tiers) {
+      const amount = rewardForTier(tier);
+      if (await earnCredits(tx, userId, achievementCreditKey(achievementId, tier), amount)) {
+        credits += amount;
+        tiers.push(tier);
       }
     }
   });
-  return { count, credits };
+  const label = achievement.tiers[Math.max(...pending.tiers)]?.label ?? null;
+  return { id: achievementId, title: achievement.title, tierLabel: label, tiers, credits, balance: await creditBalance(userId) };
+}
+
+function achievementCreditKey(id: string, tier: number): string {
+  return `achievement:${id}:${tier}`;
 }

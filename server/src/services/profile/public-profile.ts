@@ -9,9 +9,11 @@ import { REWARD_BY_ID, type RewardId } from "../../shared/gamification/rewards.j
 import { BadRequestError, NotFoundError } from "../../utils/errors.js";
 import { loadLearnerHabit } from "../progress/learner-habit.js";
 import { loadRecords } from "../gamification/records.js";
-import { loadAchievements, grantAchievementRewards } from "../gamification/achievements.js";
+import { loadAchievements, pendingAchievementClaims } from "../gamification/achievements.js";
 import { creditBalance } from "../gamification/credits.js";
 import { gamificationFeatures } from "../gamification/flags.js";
+import { loadCareerProgress } from "../gamification/career.js";
+import { recordCareerTierUp } from "../engagement/events.js";
 
 // The public Career Identity page. A learner opts in (profilePublic) and gets a unique handle; an
 // unauthenticated GET /api/v1/public/profiles/:slug returns the curated card. Only safe fields are
@@ -104,16 +106,22 @@ export async function loadOwnProfile(userId: string): Promise<OwnerProfileView> 
     await prisma.user.update({ where: { id: user.id }, data: { publicSlug: slug } });
   }
 
-  const view = await buildProfileView(user, slug);
+  // Career progress runs first: it can raise the stored tier, and the view below should show that tier.
+  const career = gamificationFeatures().career ? await loadCareerProgress(userId) : null;
+  const view = await buildProfileView(career ? { ...user, careerTier: career.tier } : user, slug);
   const creditsOn = gamificationFeatures().credits;
-  const achievementRewards =
-    creditsOn && view.achievements ? await grantAchievementRewards(userId, view.achievements) : { count: 0, credits: 0 };
+  const [achievementClaims, promoted] = await Promise.all([
+    creditsOn && view.achievements ? pendingAchievementClaims(userId, view.achievements) : Promise.resolve([]),
+    career && !view.hidden ? recordCareerTierUp(userId, "web", career.tier) : Promise.resolve(null),
+  ]);
   return {
     ...view,
     isOwner: true,
     profilePublic: user.profilePublic,
     creditsBalance: creditsOn ? await creditBalance(userId) : null,
-    achievementRewards,
+    achievementClaims,
+    careerPromotion: promoted ? { tier: career!.tier } : null,
+    career,
   };
 }
 

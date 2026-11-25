@@ -162,6 +162,15 @@ export const ENGAGEMENT_RULES: readonly EngagementRule[] = [
     action: () => ({ label: "Ask a mentor", intent: "ask-help" }),
   },
   {
+    id: "career-tier-up",
+    priority: 95,
+    role: "celebrator",
+    state: "graduation",
+    messages: lines("career-tier-up"),
+    matches: (event) => event.type === "career_tier_up",
+    action: () => ({ label: "See your path", href: "/profile" }),
+  },
+  {
     id: "level-up",
     priority: 90,
     role: "celebrator",

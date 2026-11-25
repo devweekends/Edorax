@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 import { Shield, Sparkles, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { toast } from "@/components/ui/app-toast";
+import { celebrate } from "@/lib/celebrate";
+import { RewardCelebrationDialog, type RewardCelebration } from "@/components/rewards/reward-celebration-dialog";
 import { CosmeticDot } from "./cosmetic-dot";
 
 type RewardItem = {
@@ -35,6 +38,7 @@ export default function RewardsMarketplace() {
   const [state, setState] = useState<RewardsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [unlocked, setUnlocked] = useState<RewardCelebration | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -50,20 +54,32 @@ export default function RewardsMarketplace() {
     void refresh();
   }, [refresh]);
 
-  async function act(kind: "buy" | "equip" | "unequip" | "use", id?: string) {
+  async function act(kind: "buy" | "equip" | "unequip" | "use", id: string | undefined, anchor: HTMLElement) {
+    const item = id ? state?.rewards.find((reward) => reward.id === id) : undefined;
     setBusy(id ?? "active");
-    setError(null);
     try {
       if (kind === "buy" && id) {
         const res = await fetch(`/api/v1/learner/rewards/${id}/purchase`, { method: "POST" });
         const json = await res.json().catch(() => null);
         if (!res.ok) {
-          setError(json?.message ?? "Purchase failed");
+          toast(json?.message ?? "Purchase failed", "error");
           return;
         }
         // The purchase endpoint returns a PurchaseResult ({ balance, owned, quantity }), not the
         // full rewards view: re-fetch rather than dropping that partial object into `state`,
         // which would have no `rewards` array and collapse the page to its empty fallback.
+        if (item?.kind === "cosmetic") {
+          setUnlocked({
+            size: "medium",
+            icon: Sparkles,
+            kicker: "Reward unlocked",
+            title: item.label,
+            description: "It's yours to keep. Equip it to dress your mascot.",
+          });
+        } else {
+          celebrate("small", anchor);
+          toast(item ? `${item.label} added to your pocket` : "Purchase complete", "success");
+        }
         await refresh();
         router.refresh();
         return;
@@ -72,9 +88,11 @@ export default function RewardsMarketplace() {
         const res = await fetch(`/api/v1/learner/rewards/${id}/use`, { method: "POST" });
         const json = await res.json().catch(() => null);
         if (!res.ok) {
-          setError(json?.message ?? "Could not use this item");
+          toast(json?.message ?? "Could not use this item", "error");
           return;
         }
+        celebrate("small", anchor);
+        toast("×2 XP boost is active", "success");
         await refresh();
         router.refresh();
         return;
@@ -86,13 +104,19 @@ export default function RewardsMarketplace() {
       });
       const json = await res.json().catch(() => null);
       if (!res.ok) {
-        setError(json?.message ?? "Could not update the equipped reward");
+        toast(json?.message ?? "Could not update the equipped reward", "error");
         return;
+      }
+      if (kind === "equip") {
+        celebrate("small", anchor);
+        toast(item ? `${item.label} equipped` : "Equipped", "success");
+      } else {
+        toast("Cosmetic removed", "success");
       }
       await refresh();
       router.refresh();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Something went wrong");
+      toast(reason instanceof Error ? reason.message : "Something went wrong", "error");
     } finally {
       setBusy(null);
     }
@@ -127,27 +151,27 @@ export default function RewardsMarketplace() {
           <p className={cn("mt-1 text-sm", reward.owned ? "text-ok" : "text-muted-foreground")}>{status}</p>
           <div className="mt-3 flex flex-wrap gap-2">
             {isCosmetic && !reward.owned ? (
-              <Button type="button" size="sm" disabled={busy === reward.id} loading={busy === reward.id} loadingLabel="Buying…" onClick={() => void act("buy", reward.id)}>
+              <Button type="button" size="sm" disabled={busy === reward.id} loading={busy === reward.id} loadingLabel="Buying…" onClick={(event) => void act("buy", reward.id, event.currentTarget)}>
                 Buy
               </Button>
             ) : isCosmetic && equipped ? (
-              <Button type="button" size="sm" variant="outline" disabled={busy === "active"} onClick={() => void act("unequip")}>
+              <Button type="button" size="sm" variant="outline" disabled={busy === "active"} onClick={(event) => void act("unequip", undefined, event.currentTarget)}>
                 Unequip
               </Button>
             ) : isCosmetic ? (
-              <Button type="button" size="sm" variant="outline" disabled={busy === reward.id} onClick={() => void act("equip", reward.id)}>
+              <Button type="button" size="sm" variant="outline" disabled={busy === reward.id} onClick={(event) => void act("equip", reward.id, event.currentTarget)}>
                 Equip
               </Button>
             ) : !reward.owned ? (
-              <Button type="button" size="sm" disabled={busy === reward.id} onClick={() => void act("buy", reward.id)}>
+              <Button type="button" size="sm" disabled={busy === reward.id} onClick={(event) => void act("buy", reward.id, event.currentTarget)}>
                 Buy
               </Button>
             ) : reward.effect === "xp_boost" ? (
-              <Button type="button" size="sm" disabled={busy === reward.id} loading={busy === reward.id} loadingLabel="Activating…" onClick={() => void act("use", reward.id)}>
+              <Button type="button" size="sm" disabled={busy === reward.id} loading={busy === reward.id} loadingLabel="Activating…" onClick={(event) => void act("use", reward.id, event.currentTarget)}>
                 Activate boost
               </Button>
             ) : (
-              <Button type="button" size="sm" disabled={busy === reward.id} onClick={() => void act("buy", reward.id)}>
+              <Button type="button" size="sm" disabled={busy === reward.id} onClick={(event) => void act("buy", reward.id, event.currentTarget)}>
                 Buy another
               </Button>
             )}
@@ -201,9 +225,8 @@ export default function RewardsMarketplace() {
         </div>
       ) : null}
 
-      {error ? <p className="mb-4 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}</p> : null}
-
       {section("Cosmetics", "One-time unlocks that dress your mascot. Equip one as the active look.", cosmetics)}
+      <RewardCelebrationDialog reward={unlocked} onClose={() => setUnlocked(null)} />
       {section("Utility", "Consumables held in your pocket for a temporary edge; they never grant permanent XP or career progress.", consumables)}
     </div>
   );

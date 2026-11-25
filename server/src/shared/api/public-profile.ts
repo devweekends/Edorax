@@ -1,4 +1,4 @@
-import type { CareerTier, LeagueTier } from "./gamification.js";
+import type { CareerProgress, CareerTier, LeagueTier } from "./gamification.js";
 
 // The public Career Identity page (Phase 5). A learner opts in with a unique handle and the server
 // exposes only safe, curated fields at /u/<handle>. XP/league/streak are hidden when the learner has
@@ -80,6 +80,24 @@ export type OwnerProfileView = PublicProfileView & {
   isOwner: true;
   profilePublic: boolean;
   creditsBalance: number | null;
-  /** Credits granted this visit from newly reached achievement tiers. */
-  achievementRewards: { count: number; credits: number };
+  /** Reached achievement tiers whose credits wait for the learner to claim them; empty when credits are off. */
+  achievementClaims: AchievementClaim[];
+  /** Set the first time the owner is seen at a new career tier, so the page can celebrate it once. */
+  careerPromotion: { tier: CareerTier } | null;
+  /** Progress toward the next career tier, including the average score. Owner-only; null when career levels are off. */
+  career: CareerProgress | null;
+};
+
+/** One achievement with reached tiers that have not been paid yet. */
+export type AchievementClaim = { id: string; tiers: number[]; credits: number };
+
+/** POST /api/v1/learner/achievements/:achievementId/claim */
+export type AchievementClaimResult = {
+  id: string;
+  title: string;
+  /** Label of the highest tier this claim paid, e.g. "Gold". */
+  tierLabel: string | null;
+  tiers: number[];
+  credits: number;
+  balance: number;
 };

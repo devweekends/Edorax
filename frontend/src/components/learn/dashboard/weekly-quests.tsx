@@ -6,7 +6,7 @@ import { CheckCircle2, Gift, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InfoTip } from "@/components/ui/info-tip";
 import { toast } from "@/components/ui/app-toast";
-import { playFeedback } from "@/lib/sound-feedback";
+import { celebrate } from "@/lib/celebrate";
 import type { WeeklyQuestsView } from "@/shared/api/quests";
 
 // Weekly quests: a compact entry at the top of the dashboard; the full mission
@@ -42,7 +42,7 @@ export function WeeklyQuests() {
     if (!open && dialog.open) dialog.close();
   }, [open]);
 
-  async function claim(id: string) {
+  async function claim(id: string, anchor: HTMLElement) {
     setBusy(id);
     try {
       const res = await fetch(`/api/v1/learner/quests/${id}/claim`, { method: "POST" });
@@ -51,8 +51,8 @@ export function WeeklyQuests() {
         toast(json?.message ?? "Could not claim this quest", "error");
         return;
       }
+      celebrate("small", anchor);
       setState(json.data);
-      playFeedback("success");
       toast("Quest reward claimed", "success");
       router.refresh();
     } catch {
@@ -157,7 +157,7 @@ export function WeeklyQuests() {
                         disabled={busy === quest.id}
                         loading={busy === quest.id}
                         loadingLabel="Claiming…"
-                        onClick={() => void claim(quest.id)}
+                        onClick={(event) => void claim(quest.id, event.currentTarget)}
                       >
                         Claim
                       </Button>

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { FEEDBACK_AUDIO, playFeedback } from "../../../src/lib/sound-feedback";
+import { FEEDBACK_AUDIO, isSoundEnabled, playFeedback } from "../../../src/lib/sound-feedback";
 
 describe("sound-feedback", () => {
   beforeEach(() => {
@@ -51,5 +51,10 @@ describe("sound-feedback", () => {
     now += 200;
     playFeedback("tick");
     expect(Audio).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps sound on when the device asks for reduced motion", () => {
+    vi.stubGlobal("window", { matchMedia: () => ({ matches: true }), AudioContext: undefined, webkitAudioContext: undefined });
+    expect(isSoundEnabled()).toBe(true);
   });
 });

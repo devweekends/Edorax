@@ -1,5 +1,6 @@
 "use client";
 
+import { toast } from "@/components/ui/app-toast";
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { ChevronDown, Trophy } from "lucide-react";
@@ -138,17 +139,15 @@ export function LeaderboardPage({
 }) {
   const [selection, setSelection] = useState<HubSelection>(initialSelection);
   const [view, setView] = useState<LeaderboardHubView | null>(initial);
-  const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const confettiRef = useLeaderboardConfetti(view);
 
   function run(work: () => Promise<LeaderboardHubView | null>) {
-    setError(null);
     startTransition(async () => {
       try {
         setView(await work());
       } catch {
-        setError("Something went wrong. Please try again.");
+        toast("Something went wrong. Please try again.", "error");
       }
     });
   }
@@ -401,12 +400,6 @@ export function LeaderboardPage({
             </div>
           </>
         )}
-
-        {error ? (
-          <p className="text-sm text-destructive" role="alert">
-            {error}
-          </p>
-        ) : null}
       </div>
     </div>
   );

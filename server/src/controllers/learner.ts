@@ -19,6 +19,7 @@ import { loadGamificationSummary, updateGamificationPreferences } from "../servi
 import { loadLeaderboard } from "../services/gamification/leaderboard.js";
 import { loadLeaderboardHub } from "../services/gamification/leaderboard-categories.js";
 import { listRewards, purchaseReward as purchaseRewardService, setActiveReward as setActiveRewardService, useReward as useRewardService } from "../services/gamification/rewards.js";
+import { claimAchievement } from "../services/gamification/achievements.js";
 import { claimQuest as claimQuestService, loadWeeklyQuests } from "../services/gamification/quests.js";
 import type { LeaderboardHubQuery } from "../validations/learner.js";
 
@@ -148,6 +149,11 @@ export async function quests(req: Request, res: Response) {
 // POST /api/v1/learner/quests/:questId/claim
 export async function questsClaim(req: Request, res: Response) {
   ok(res, await claimQuestService(req.user!.id, String(req.params.questId)));
+}
+
+// POST /api/v1/learner/achievements/:achievementId/claim
+export async function achievementClaim(req: Request, res: Response) {
+  ok(res, await claimAchievement(req.user!.id, String(req.params.achievementId)));
 }
 
 // GET /api/v1/learner/public-profile

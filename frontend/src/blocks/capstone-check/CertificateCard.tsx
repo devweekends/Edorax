@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { CertificateView, MyCertificateState } from "@/shared/lib/certificates";
+import { RewardCelebrationDialog, type RewardCelebration } from "@/components/rewards/reward-celebration-dialog";
 
 // Shown under an approved capstone. The learner confirms their name once, then gets the
 // verify link, Add to LinkedIn and the share image.
@@ -17,6 +18,7 @@ export function CertificateCard({ courseSlug }: { courseSlug: string }) {
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [claiming, setClaiming] = useState(false);
+  const [celebration, setCelebration] = useState<RewardCelebration | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -44,6 +46,14 @@ export function CertificateCard({ courseSlug }: { courseSlug: string }) {
         json: { recipientName: name },
       });
       setState((current) => (current ? { ...current, certificate: result.certificate } : current));
+      setCelebration({
+        size: "large",
+        icon: Award,
+        kicker: "Certificate issued",
+        title: result.certificate.title,
+        description: `Issued to ${result.certificate.recipientName}. Anyone can check it with code ${result.certificate.code}.`,
+        action: { label: "View certificate", href: `/verify/${result.certificate.code}` },
+      });
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : "Could not issue the certificate. Try again.");
     } finally {
@@ -89,6 +99,7 @@ export function CertificateCard({ courseSlug }: { courseSlug: string }) {
           {state.eligibility.missing.map((item) => <li key={item}>{item}</li>)}
         </ul>
       )}
+      <RewardCelebrationDialog reward={celebration} onClose={() => setCelebration(null)} />
     </section>
   );
 }

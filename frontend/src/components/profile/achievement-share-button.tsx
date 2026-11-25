@@ -11,7 +11,7 @@ export function AchievementShareButton({ title }: { title: string }) {
 
   async function share() {
     const url = typeof window !== "undefined" ? window.location.href : "";
-    const line = `I unlocked "${title}" on Buildment`;
+    const line = `I unlocked "${title}" on Edorax`;
     if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
       try {
         await navigator.share({ title: `${title} · Buildment`, text: line, url });

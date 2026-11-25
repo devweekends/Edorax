@@ -46,11 +46,11 @@ const DEDUPE_MS = 160;
 
 /**
  * Learner gesture feedback. Synthesized by default; optional local files in
- * FEEDBACK_AUDIO. Opt out with localStorage `buildment:sound=off`.
+ * FEEDBACK_AUDIO. Opt out with localStorage `buildment:sound=off`. Reduced motion is about
+ * animation, so it turns off confetti but not sound.
  */
 export function isSoundEnabled(): boolean {
   if (typeof window === "undefined") return false;
-  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return false;
   try { return localStorage.getItem("buildment:sound") !== "off"; } catch { return true; }
 }
 

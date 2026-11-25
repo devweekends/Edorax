@@ -1,5 +1,6 @@
 "use client";
 
+import { toast } from "@/components/ui/app-toast";
 import { useState, useTransition } from "react";
 import { ChevronDown, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -111,18 +112,16 @@ export function LeaderboardCard({
 }) {
   const [view, setView] = useState(initial);
   const [courseId, setCourseId] = useState(initialCourseId);
-  const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   if (!view || view.status === "disabled") return null;
 
   function run(work: () => Promise<LeaderboardView | null>) {
-    setError(null);
     startTransition(async () => {
       try {
         setView(await work());
       } catch {
-        setError("Something went wrong. Please try again.");
+        toast("Something went wrong. Please try again.", "error");
       }
     });
   }
@@ -235,11 +234,6 @@ export function LeaderboardCard({
             </div>
           </div>
         )}
-        {error ? (
-          <p className="mt-3 text-xs text-destructive" role="alert">
-            {error}
-          </p>
-        ) : null}
       </div>
     </section>
   );

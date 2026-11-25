@@ -1,4 +1,6 @@
 // GENERATED from server/src/shared — do not edit here. Run `pnpm sync-shared` in server/.
+import type { CareerTier } from "./gamification";
+
 // Wire contract for engagement events (POST /api/v1/events): the learning moments the app reacts
 // to, mascot reactions today. The client only names what happened and where; the server checks it
 // against the database and fills in the facts (quiz attempt and score, days away, first time), so
@@ -32,6 +34,8 @@ export const ENGAGEMENT_SERVER_EVENT_TYPES = [
   "course_first_chapter",
   "course_halfway",
   "course_one_left",
+  /** The learner reached a new career tier (shared/gamification/career.ts) for the first time. */
+  "career_tier_up",
 ] as const;
 export type EngagementServerEventType = (typeof ENGAGEMENT_SERVER_EVENT_TYPES)[number];
 
@@ -80,6 +84,8 @@ export type QuizSubmittedFacts = {
 
 export type LevelUpFacts = { level: number };
 
+export type CareerTierUpFacts = { tier: CareerTier };
+
 export type WeeklyGoalMetFacts = {
   /** A streak freeze came with it (the learner had room for one and freezes are on). */
   freezeEarned: boolean;
@@ -122,6 +128,7 @@ export type RecordedEngagementEvent = RecordedBase &
     | { type: "session_start"; payload: SessionStartFacts }
     | { type: "quiz_submitted"; payload: QuizSubmittedFacts }
     | { type: "level_up"; payload: LevelUpFacts }
+    | { type: "career_tier_up"; payload: CareerTierUpFacts }
     | { type: "weekly_goal_met"; payload: WeeklyGoalMetFacts }
     | { type: "daily_goal_met"; payload: DailyGoalMetFacts }
     | { type: "course_first_chapter" | "course_halfway" | "course_one_left"; payload: CourseMilestoneFacts }

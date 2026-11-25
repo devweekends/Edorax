@@ -41,6 +41,7 @@ router.post("/rewards/:rewardId/purchase", learner.purchaseReward);
 router.post("/rewards/:rewardId/use", learner.rewardsUse);
 router.get("/quests", learner.quests);
 router.post("/quests/:questId/claim", learner.questsClaim);
+router.post("/achievements/:achievementId/claim", learner.achievementClaim);
 router.patch("/rewards/active", validateBody(rewardsActiveBody), learner.rewardsActive);
 router.get("/profile", learner.profile);
 router.get("/public-profile", learner.publicProfileGet);
