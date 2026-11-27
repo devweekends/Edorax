@@ -131,7 +131,7 @@ export function AskAiFloating({ focusMode = false }: { focusMode?: boolean }) {
                   <h2 id={TITLE_ID} className="text-base font-bold leading-tight text-foreground">
                     Ask AI
                   </h2>
-                  <p className="truncate text-[13px] text-muted-foreground">Quick questions about this chapter</p>
+                  <p className="truncate text-[13px] text-muted-foreground">Quick questions &amp; practice quizzes</p>
                 </div>
                 <button
                   type="button"

@@ -44,3 +44,30 @@ export const askChapterBody = z.object({
   previous: z.object({ question: z.string().trim().min(1).max(500), answer: z.string().trim().min(1).max(6000) }).optional(),
 });
 export type AskChapterBody = z.infer<typeof askChapterBody>;
+
+export const practiceQuizGenerateBody = z.object({
+  count: z.number().int().min(1).max(5).optional(),
+  focus: z
+    .string()
+    .trim()
+    .max(300)
+    .optional()
+    .transform((value) => (value && value.length > 0 ? value : undefined)),
+  excludePrompts: z.array(z.string().trim().min(1).max(300)).max(15).optional(),
+});
+export type PracticeQuizGenerateBody = z.infer<typeof practiceQuizGenerateBody>;
+
+export const practiceQuizCheckBody = z.object({
+  answerToken: z.string().trim().min(1).max(16_000),
+  answers: z
+    .array(
+      z.object({
+        id: z.string().trim().min(1).max(40),
+        selected: z.array(z.string().trim().min(1).max(40)).max(10),
+      })
+    )
+    .min(1)
+    .max(5),
+});
+export type PracticeQuizCheckBody = z.infer<typeof practiceQuizCheckBody>;
+

@@ -111,6 +111,7 @@ export function useChapterAsk(chapterId: string, headings: { text: string }[], e
 
   return {
     status,
+    setStatus,
     available,
     starters,
     question,

@@ -14,6 +14,8 @@ import {
   headingNoteParams,
   highlightCreateBody,
   learningLogBody,
+  practiceQuizCheckBody,
+  practiceQuizGenerateBody,
   quizSubmitBody,
 } from "../../validations/chapters.js";
 
@@ -61,6 +63,20 @@ router.post(
   validate({ params: chapterParams, body: askChapterBody }),
   userRateLimit({ scope: "chapter-ask", max: 10, message: "You are asking quickly. Wait a minute and try again." }),
   chapters.ask
+);
+router.post(
+  "/:chapterId/practice-quiz",
+  ...learner,
+  validate({ params: chapterParams, body: practiceQuizGenerateBody }),
+  userRateLimit({ scope: "chapter-practice-quiz", max: 10, message: "You are generating quizzes quickly. Wait a minute and try again." }),
+  chapters.generatePracticeQuizHandler
+);
+router.post(
+  "/:chapterId/practice-quiz/check",
+  ...learner,
+  validate({ params: chapterParams, body: practiceQuizCheckBody }),
+  userRateLimit({ scope: "chapter-practice-quiz-check", max: 30, message: "Too many checks. Wait a moment and try again." }),
+  chapters.checkPracticeQuizHandler
 );
 
 export default router;

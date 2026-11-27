@@ -2,9 +2,15 @@
 
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
 import { useChapterAsk, type ChapterAsk } from "@/lib/use-chapter-ask";
+import { usePracticeQuiz, type PracticeQuizState } from "@/lib/use-practice-quiz";
+
+export type AskChapterTab = "ask" | "quiz";
 
 type AskChapterValue = {
   ask: ChapterAsk;
+  practiceQuiz: PracticeQuizState;
+  tab: AskChapterTab;
+  setTab: (tab: AskChapterTab) => void;
   windowOpen: boolean;
   /** Opens the floating window. The element that asked gets focus back when the window closes. */
   openWindow: (opener?: HTMLElement | null) => void;
@@ -36,6 +42,15 @@ export function AskChapterProvider({
   children: ReactNode;
 }) {
   const ask = useChapterAsk(chapterId, headings, enabled);
+  const { setStatus } = ask;
+  const onQuotaUpdate = useCallback(
+    (next: { remaining: number; dailyLimit: number }) => {
+      setStatus((current) => (current ? { ...current, remaining: next.remaining, dailyLimit: next.dailyLimit } : current));
+    },
+    [setStatus]
+  );
+  const practiceQuiz = usePracticeQuiz({ chapterId, headings, status: ask.status, onQuotaUpdate });
+  const [tab, setTab] = useState<AskChapterTab>("ask");
   const [windowOpen, setWindowOpen] = useState(false);
   const opener = useRef<HTMLElement | null>(null);
 
@@ -56,8 +71,8 @@ export function AskChapterProvider({
   }, []);
 
   const value = useMemo(
-    () => ({ ask, windowOpen, openWindow, closeWindow, askMentor, takeOpener }),
-    [ask, windowOpen, openWindow, closeWindow, askMentor, takeOpener]
+    () => ({ ask, practiceQuiz, tab, setTab, windowOpen, openWindow, closeWindow, askMentor, takeOpener }),
+    [ask, practiceQuiz, tab, windowOpen, openWindow, closeWindow, askMentor, takeOpener]
   );
   return <AskChapterContext.Provider value={value}>{children}</AskChapterContext.Provider>;
 }

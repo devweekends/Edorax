@@ -5,6 +5,7 @@ import { Check, ChevronDown, Copy, CornerDownRight, HandHelping, Loader2, Sparkl
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { SafeMarkdown } from "@/components/learn/safe-markdown";
+import { PracticeQuizPanel } from "@/components/learn/practice-quiz-panel";
 import { useAskChapter } from "@/components/learn/ask-chapter-context";
 import { QUESTION_MAX, isAskable, remainingLabel, showCounter } from "@/lib/chapter-question";
 import { markdownToPlainText } from "@/lib/safe-markdown";
@@ -15,7 +16,7 @@ import { cn } from "@/lib/utils";
  * questions. The inline card and the floating window both render this, so they behave the same.
  */
 export function AskChapterBody({ className }: { className?: string }) {
-  const { ask: chapter } = useAskChapter();
+  const { ask: chapter, tab, setTab } = useAskChapter();
   const ids = useId();
   const box = useRef<HTMLTextAreaElement>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -27,8 +28,47 @@ export function AskChapterBody({ className }: { className?: string }) {
   const counterNear = question.length >= QUESTION_MAX - 20;
   const live = asking ? "Working on your answer." : (error ?? (finished ? `Answer: ${markdownToPlainText(answer)}` : ""));
 
+  const modeTabs = (
+    <div role="tablist" aria-label="AI study mode" className="grid grid-cols-2 gap-1 rounded-lg bg-secondary p-1">
+      <button
+        type="button"
+        role="tab"
+        aria-selected={tab === "ask"}
+        onClick={() => setTab("ask")}
+        className={cn(
+          "min-h-9 rounded-md px-3 text-sm font-semibold transition-colors outline-none focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-brand-yellow",
+          tab === "ask" ? "bg-card text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
+        )}
+      >
+        Ask a question
+      </button>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={tab === "quiz"}
+        onClick={() => setTab("quiz")}
+        className={cn(
+          "min-h-9 rounded-md px-3 text-sm font-semibold transition-colors outline-none focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-brand-yellow",
+          tab === "quiz" ? "bg-card text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
+        )}
+      >
+        Practice quiz
+      </button>
+    </div>
+  );
+
+  if (tab === "quiz") {
+    return (
+      <div className={cn("space-y-4", className)}>
+        {modeTabs}
+        <PracticeQuizPanel />
+      </div>
+    );
+  }
+
   return (
     <div className={cn("space-y-4", className)}>
+      {modeTabs}
       {!asking && !answer && starters.length > 0 ? (
         <div role="group" aria-label="Starter questions" className="flex flex-wrap gap-2">
           {starters.map((starter) => (
@@ -223,7 +263,7 @@ export function AskChapterPanel() {
         <span className="min-w-0 flex-1">
           <span className="block text-base font-bold text-foreground">Ask about this chapter</span>
           <span className="mt-0.5 block text-sm text-muted-foreground">
-            {outOfQuestions ? "You have used today's questions. They come back tomorrow." : "Quick questions, short answers."}
+            {outOfQuestions ? "You have used today's questions. They come back tomorrow." : "Quick questions and practice quizzes."}
           </span>
         </span>
         <ChevronDown className={cn("size-5 shrink-0 text-muted-foreground transition-transform motion-reduce:transition-none", open && "rotate-180")} aria-hidden />

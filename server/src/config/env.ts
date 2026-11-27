@@ -91,16 +91,19 @@ const schema = z.object({
   ),
 
   /**
-   * "Ask about this chapter" for learners, answered by Anthropic with the platform key.
-   * Off unless LEARNER_QA_ENABLED is "true" and ANTHROPIC_API_KEY is set. The limits are
-   * counted in the database, so they hold across restarts and replicas.
+   * "Ask about this chapter" & practice quizzes for learners. Uses ANTHROPIC_API_KEY first, or
+   * falls back to OPENROUTER_API_KEY / GEMINI_API_KEY. Off unless LEARNER_QA_ENABLED is "true"
+   * and at least one provider key is set. Limits are counted in the database.
    */
   ANTHROPIC_API_KEY: optionalString,
+  GEMINI_API_KEY: optionalString,
   LEARNER_QA_ENABLED: z
     .string()
     .optional()
     .transform((value) => value === "true"),
   LEARNER_QA_MODEL: z.string().trim().min(1).default("claude-haiku-5-5"),
+  LEARNER_QA_OPENROUTER_MODEL: optionalString,
+  LEARNER_QA_GEMINI_MODEL: optionalString,
   /** Questions one learner may ask per UTC day. */
   LEARNER_QA_DAILY_LIMIT: z.coerce.number().int().min(1).max(500).default(80),
   /** Questions the whole platform may answer per UTC day, the cap on the Anthropic bill. */
@@ -275,8 +278,9 @@ export const realtimeOrigins = [...new Set([env.APP_URL, ...env.CORS_ORIGINS])];
 export const isProduction = env.NODE_ENV === "production";
 export const rateLimitsEnabled = !(env.DISABLE_RATE_LIMITS && !isProduction);
 export const isTest = env.NODE_ENV === "test";
-/** Chapter questions need both the switch and a key; either missing hides the feature. */
-export const learnerQaAvailable = env.LEARNER_QA_ENABLED && Boolean(env.ANTHROPIC_API_KEY);
+/** Chapter questions & practice quizzes need the switch and at least one platform AI key. */
+export const learnerQaAvailable =
+  env.LEARNER_QA_ENABLED && Boolean(env.ANTHROPIC_API_KEY || env.OPENROUTER_API_KEY || env.GEMINI_API_KEY);
 
 export const homeAiDemoAvailable = env.HOME_AI_DEMO_ENABLED && Boolean(env.ANTHROPIC_API_KEY);
 /** Capstone AI checks need both the switch and the key; automated checks never run without them either. */

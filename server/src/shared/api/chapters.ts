@@ -28,3 +28,37 @@ export const CHAPTER_ERROR_CODES = {
   CHECKPOINTS_INCOMPLETE: "CHECKPOINTS_INCOMPLETE",
   REFLECTION_INCOMPLETE: "REFLECTION_INCOMPLETE",
 } as const;
+
+export type PracticeQuizOption = {
+  id: string;
+  label: string;
+};
+
+export type PracticeQuizQuestion = {
+  id: string;
+  quizType: "single" | "multiple" | "true-false";
+  prompt: string;
+  options: PracticeQuizOption[];
+};
+
+export type PracticeQuizGenerateResponse = {
+  questions: PracticeQuizQuestion[];
+  answerToken: string;
+  remaining: number;
+  dailyLimit: number;
+};
+
+export type PracticeQuizCheckItemResult = {
+  id: string;
+  selected: string[];
+  isCorrect: boolean;
+  correctOptionIds: string[];
+  explanation: string;
+};
+
+export type PracticeQuizCheckResponse = {
+  score: number;
+  maxScore: number;
+  results: PracticeQuizCheckItemResult[];
+};
+

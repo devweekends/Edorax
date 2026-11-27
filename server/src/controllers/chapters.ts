@@ -14,7 +14,13 @@ import {
 import type { HighlightColor } from "../generated/prisma/index.js";
 import { loadQuizChapterState } from "../services/chapters/quiz-state.js";
 import { askAboutChapter, chapterQuestionStatus, streamAnswerAboutChapter } from "../services/ai/chapter-qa/service.js";
-import type { AskChapterBody, QuizSubmitBody } from "../validations/chapters.js";
+import { checkPracticeQuiz, generatePracticeQuiz } from "../services/ai/chapter-qa/practice-quiz.js";
+import type {
+  AskChapterBody,
+  PracticeQuizCheckBody,
+  PracticeQuizGenerateBody,
+  QuizSubmitBody,
+} from "../validations/chapters.js";
 
 // POST /api/v1/chapters/:chapterId/quiz/submit
 export async function submitQuiz(req: Request, res: Response) {
@@ -120,3 +126,33 @@ export async function ask(req: Request, res: Response) {
   await streamed.run((chunk) => res.write(chunk));
   res.end();
 }
+
+// POST /api/v1/chapters/:chapterId/practice-quiz
+export async function generatePracticeQuizHandler(req: Request, res: Response) {
+  const { count, focus, excludePrompts } = req.body as PracticeQuizGenerateBody;
+  ok(
+    res,
+    await generatePracticeQuiz({
+      chapterId: req.params.chapterId as string,
+      user: req.user,
+      count,
+      focus,
+      excludePrompts,
+    })
+  );
+}
+
+// POST /api/v1/chapters/:chapterId/practice-quiz/check
+export async function checkPracticeQuizHandler(req: Request, res: Response) {
+  const { answerToken, answers } = req.body as PracticeQuizCheckBody;
+  ok(
+    res,
+    await checkPracticeQuiz({
+      chapterId: req.params.chapterId as string,
+      user: req.user,
+      answerToken,
+      answers,
+    })
+  );
+}
+

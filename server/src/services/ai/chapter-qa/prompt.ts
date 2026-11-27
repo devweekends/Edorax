@@ -24,7 +24,7 @@ const RULES = [
 ].join("\n");
 
 /** Keep learner or chapter text from closing the tags it sits in. */
-function escapeAngles(text: string): string {
+export function escapeAngles(text: string): string {
   return text.replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
