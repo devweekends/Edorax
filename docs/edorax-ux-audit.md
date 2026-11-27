@@ -8,6 +8,8 @@ Who we design for: second-language learners, mostly on phones, often on weak or 
 
 Ranked by impact on a learner. Each item says where, why it hurts, and the fix.
 
+**Status (2026-11-28).** Items 1, 2 and 3 were fixed in `38246b3c` (new Start gate, result card, unanswered note). Item 4 is partly done: the phone header is now back, title, contents, help and account, each a 44px target, and dark mode is in the account menu. Item 7 is fixed (the error page speaks to the learner, and developer detail shows only in development). The descriptions below are the original findings from before those changes.
+
 ## 1. The quiz Start gate is a wall of text, and closing it starts the quiz
 
 - Where: `frontend/src/components/learn/quiz-integrity-panel.tsx` (`IntegrityDialog`).

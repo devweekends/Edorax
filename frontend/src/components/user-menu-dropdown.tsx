@@ -14,6 +14,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
 import { UserAvatar } from "@/components/user-avatar";
 
 type UserMenuDropdownProps = {
@@ -44,7 +45,11 @@ export function UserMenuDropdown({
         render={
           <button
             type="button"
-            className="rounded-full outline-none ring-offset-2 transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-border"
+            // In a top bar (compact) the avatar is small, so the button around it is a full 44px touch target.
+            className={cn(
+              "rounded-full outline-none ring-offset-2 transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-border",
+              compact && "grid size-11 place-items-center"
+            )}
             aria-label="Open account menu"
             disabled={pending}
             aria-busy={pending || undefined}
