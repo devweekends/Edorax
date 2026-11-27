@@ -17,27 +17,45 @@ function nextMilestone(count: number) {
   return STREAK_MILESTONES.find((milestone) => milestone > count) ?? null;
 }
 
-function WeekDay({ day, today, todayActive }: { day: StreakPopupDayView; today: string; todayActive: boolean }) {
+function WeekDay({
+  day,
+  today,
+  todayActive,
+  frozen,
+}: {
+  day: StreakPopupDayView;
+  today: string;
+  todayActive: boolean;
+  /** A streak freeze covered this day, so the run kept going. */
+  frozen: boolean;
+}) {
   const isToday = day.day === today;
   const done = isToday ? todayActive : day.status === "completed";
+  const covered = !done && !isToday && frozen;
   return (
-    <li className="flex flex-col items-center gap-1" title={streakDaySummary(day, today)}>
+    <li
+      className="flex flex-col items-center gap-1"
+      title={covered ? "Missed, but a streak freeze covered it" : streakDaySummary(day, today)}
+    >
       <span
         className={cn(
           "grid size-8 place-items-center rounded-full",
           done && "bg-orange-500 text-white",
           !done && isToday && "border-2 border-orange-500 text-orange-500",
-          !done && !isToday && "bg-muted text-muted-foreground"
+          covered && "bg-sky-500/15 text-sky-500",
+          !done && !isToday && !covered && "bg-muted text-muted-foreground"
         )}
       >
         {done ? (
           <Check className="size-4" strokeWidth={3} aria-hidden />
         ) : isToday ? (
           <span className="size-1.5 rounded-full bg-orange-500" aria-hidden />
+        ) : covered ? (
+          <Snowflake className="size-4" aria-hidden />
         ) : (
           <X className="size-3.5" aria-hidden />
         )}
-        <span className="sr-only">{done ? "Done" : isToday ? "Not yet" : "Missed"}</span>
+        <span className="sr-only">{done ? "Done" : isToday ? "Not yet" : covered ? "Missed, covered by a streak freeze" : "Missed"}</span>
       </span>
       <span className={cn("text-xs", isToday ? "font-semibold text-foreground" : "text-muted-foreground")}>{day.weekday}</span>
     </li>
@@ -104,7 +122,13 @@ export function StreakPopover({ streak }: { streak: number }) {
             {week ? (
               <ul className="mt-4 grid grid-cols-7 gap-1" aria-label="Last 7 days">
                 {week.week.map((day) => (
-                  <WeekDay key={day.day} day={day} today={week.today} todayActive={week.todayActive} />
+                  <WeekDay
+                    key={day.day}
+                    day={day}
+                    today={week.today}
+                    todayActive={week.todayActive}
+                    frozen={freezes?.recentlyCoveredDays.includes(day.day) ?? false}
+                  />
                 ))}
               </ul>
             ) : failed ? (
