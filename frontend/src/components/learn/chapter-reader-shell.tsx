@@ -373,7 +373,10 @@ export function ChapterReaderShell({
                   collapsed={leftCollapsed}
                   onClick={() => setLeftCollapsed(!leftCollapsed)}
                 />
-                <ReportIssueDialog courseId={courseId} chapterId={chapterId} chapterTitle={chapterTitle} variant="button" />
+                {/* Phones already have the flag next to the lesson heading, so the bar keeps to what a phone needs. */}
+                <div className="hidden sm:block">
+                  <ReportIssueDialog courseId={courseId} chapterId={chapterId} chapterTitle={chapterTitle} variant="button" />
+                </div>
                 {canRateCourse ? (
                   <ReaderRatingButton courseSlug={courseSlug} courseTitle={courseTitle} rating={myCourseRating} />
                 ) : null}
