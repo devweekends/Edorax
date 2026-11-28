@@ -4,6 +4,7 @@ import { dateToDayKey, localDayKey, shiftDayKey, dayKeyToDate } from "../../shar
 import { loadGamificationSummary } from "../gamification/summary.js";
 import { loadLeaderboardHub } from "../gamification/leaderboard-categories.js";
 import { loadLearnerHabit } from "../progress/learner-habit.js";
+import { releaseForEnrollment, releaseModulesWithBlocks } from "../courses/releases.js";
 import { buildMenteeDashboardViewModel } from "./dashboard-model.js";
 import { learnerTimeZone } from "./time-zone.js";
 import { logger } from "../../utils/logger.js";
@@ -52,6 +53,9 @@ export async function loadMenteeDashboard(args: {
     orderBy: [{ lastActiveAt: "desc" }, { createdAt: "asc" }],
     select: {
       id: true,
+      releaseId: true,
+      variantSlug: true,
+      moduleVersions: true,
       lifecycle: true,
       status: true,
       percentComplete: true,
@@ -70,6 +74,7 @@ export async function loadMenteeDashboard(args: {
           slug: true,
           title: true,
           coverUrl: true,
+          familySlug: true,
           sequential: true,
           modules: {
             where: { archivedAt: null },
@@ -205,6 +210,28 @@ export async function loadMenteeDashboard(args: {
     return { day, seconds: byDay.get(day) ?? 0 };
   });
 
+  // Resolve each enrollment's pinned release / variant / module versions (matching overview, reader,
+  // and progress) so chapter counts, checkpoint counts, and the Continue target match the learner's
+  // actual curriculum instead of reading raw unarchived course rows across releases.
+  const enrollmentsWithRelease = await Promise.all(
+    enrollments.map(async (enrollment) => {
+      const selected = await releaseForEnrollment(
+        enrollment.course.id,
+        enrollment,
+        enrollment.course.familySlug
+      );
+      if (!selected) return enrollment;
+      const modules = await releaseModulesWithBlocks(selected.modules);
+      return {
+        ...enrollment,
+        course: {
+          ...enrollment.course,
+          modules,
+        },
+      };
+    })
+  );
+
   // Where each course's Continue button resumes: the chapter of the most recent study session.
   const lastSessions =
     enrollmentIds.length === 0
@@ -220,7 +247,7 @@ export async function loadMenteeDashboard(args: {
   return buildMenteeDashboardViewModel({
     learnerId: args.learnerId,
     learnerName: args.learnerName,
-    enrollments,
+    enrollments: enrollmentsWithRelease,
     responses,
     helpThreads,
     sessions,
