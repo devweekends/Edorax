@@ -66,6 +66,16 @@ describe("pickContinueTarget", () => {
       expect(pickContinueTarget(flat, "gone")?.slug).toBe("a");
       expect(pickContinueTarget(flat, null)?.slug).toBe("a");
     });
+
+    it("matches release-suffixed slugs against cleaned slugs and advances past completed chapters", () => {
+      const flat = [
+        chapter("1-1-set-the-scene", "COMPLETED"),
+        chapter("1-2-gap-between-read-and-write", "COMPLETED"),
+        chapter("1-3-check-inside-update", "NOT_STARTED"),
+      ];
+      expect(pickContinueTarget(flat, "1-1-set-the-scene--01m5w41ba4")?.slug).toBe("1-3-check-inside-update");
+      expect(pickContinueTarget(flat, "1-2-gap-between-read-and-write--01m5w41ba4")?.slug).toBe("1-3-check-inside-update");
+    });
   });
 });
 
