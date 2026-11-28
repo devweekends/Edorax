@@ -18,8 +18,13 @@ describe("shouldShowStreakPopup (once per local day)", () => {
     expect(shouldShowStreakPopup({ seenOn: "2026-11-02", today })).toBe(true);
   });
 
-  it("shows on the first open for everyone, including a learner with no streak", () => {
-    expect(shouldShowStreakPopup({ seenOn: null, today })).toBe(true);
+  it("shows on the first open once the learner has activity on a later day", () => {
+    expect(shouldShowStreakPopup({ seenOn: null, today, hasActivity: true, joinedOn: "2026-11-01" })).toBe(true);
+  });
+
+  it("stays hidden for brand-new learners with no activity yet or on signup day", () => {
+    expect(shouldShowStreakPopup({ seenOn: null, today, hasActivity: false, joinedOn: "2026-11-01" })).toBe(false);
+    expect(shouldShowStreakPopup({ seenOn: null, today, hasActivity: true, joinedOn: today })).toBe(false);
   });
 });
 
@@ -36,6 +41,19 @@ describe("streak week + calculation", () => {
     expect(week[5]).toMatchObject({ status: "completed" });
     expect(week[0]?.status).toBe("missed");
     expect(streakDaySummary(week[5]!, today)).toContain("5 minutes");
+  });
+
+  it("marks days before signup as inactive instead of missed", () => {
+    const today = "2026-11-03";
+    const week = buildStreakWeek({
+      today,
+      activeDays: ["2026-11-02"],
+      joinedOn: "2026-11-02",
+    });
+    expect(week.slice(0, 5).every((d) => d.status === "inactive")).toBe(true);
+    expect(week[5]?.status).toBe("completed");
+    expect(week[6]?.status).toBe("today");
+    expect(streakDaySummary(week[0]!, today)).toContain("before you joined");
   });
 
   it("counts consecutive learning days with computeStreak", () => {

@@ -20,13 +20,15 @@ type AccountSetupUser = {
 
 export function AccountSetupPrompt({ user }: { user: AccountSetupUser }) {
   const needsName = !user.name?.trim();
-  const needsPassword = !user.hasPassword;
+  // Google sign-in users already have a name and a working sign-in method; do not interrupt their
+  // first screen with a password-only modal (they can add a password anytime in Profile settings).
+  const needsPassword = needsName && !user.hasPassword;
   const [open, setOpen] = useState(false);
   const [state, action, pending] = useActionState(completeAccountSetupAction, initial);
   const router = useRouter();
 
   useEffect(() => {
-    if (!needsName && !needsPassword) return;
+    if (!needsName) return;
     // Older API deployments may not return the login ID yet. In that case, show
     // the setup prompt rather than suppressing it under a shared empty key.
     if (!user.loginSessionId) {
@@ -43,7 +45,7 @@ export function AccountSetupPrompt({ user }: { user: AccountSetupUser }) {
     } catch {
       setOpen(true);
     }
-  }, [needsName, needsPassword, user.loginSessionId]);
+  }, [needsName, user.loginSessionId]);
 
   useEffect(() => {
     if (state.ok) {
@@ -53,7 +55,7 @@ export function AccountSetupPrompt({ user }: { user: AccountSetupUser }) {
     }
   }, [router, state]);
 
-  if (!needsName && !needsPassword) return null;
+  if (!needsName) return null;
 
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
@@ -98,6 +100,9 @@ export function AccountSetupPrompt({ user }: { user: AccountSetupUser }) {
             ) : null}
 
             <div className="flex items-center justify-end gap-2 pt-1">
+              <Button type="button" variant="ghost" disabled={pending} onClick={() => setOpen(false)}>
+                Not now
+              </Button>
               <Button type="submit" disabled={pending}>
                 {pending ? "Saving…" : "Save details"}
               </Button>

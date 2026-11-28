@@ -31,7 +31,8 @@ function WeekDay({
 }) {
   const isToday = day.day === today;
   const done = isToday ? todayActive : day.status === "completed";
-  const covered = !done && !isToday && frozen;
+  const inactive = !done && !isToday && day.status === "inactive";
+  const covered = !done && !isToday && !inactive && frozen;
   return (
     <li
       className="flex flex-col items-center gap-1"
@@ -43,7 +44,8 @@ function WeekDay({
           done && "bg-orange-500 text-white",
           !done && isToday && "border-2 border-orange-500 text-orange-500",
           covered && "bg-sky-500/15 text-sky-500",
-          !done && !isToday && !covered && "bg-muted text-muted-foreground"
+          inactive && "border border-dashed border-border bg-muted/30 text-muted-foreground/50",
+          !done && !isToday && !covered && !inactive && "bg-muted text-muted-foreground"
         )}
       >
         {done ? (
@@ -52,10 +54,22 @@ function WeekDay({
           <span className="size-1.5 rounded-full bg-orange-500" aria-hidden />
         ) : covered ? (
           <Snowflake className="size-4" aria-hidden />
+        ) : inactive ? (
+          <span className="size-1 rounded-full bg-muted-foreground/40" aria-hidden />
         ) : (
           <X className="size-3.5" aria-hidden />
         )}
-        <span className="sr-only">{done ? "Done" : isToday ? "Not yet" : covered ? "Missed, covered by a streak freeze" : "Missed"}</span>
+        <span className="sr-only">
+          {done
+            ? "Done"
+            : isToday
+              ? "Not yet"
+              : covered
+                ? "Missed, covered by a streak freeze"
+                : inactive
+                  ? "Before you joined"
+                  : "Missed"}
+        </span>
       </span>
       <span className={cn("text-xs", isToday ? "font-semibold text-foreground" : "text-muted-foreground")}>{day.weekday}</span>
     </li>

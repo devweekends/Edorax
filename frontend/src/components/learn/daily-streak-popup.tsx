@@ -81,11 +81,14 @@ function DayCell({
   selected: boolean;
   onSelect: () => void;
 }) {
+  const isInactive = day.status === "inactive" && !isToday;
   const label = isToday
     ? `${day.weekday}, today${todayActive ? ", counted" : ", not counted yet"}`
     : day.status === "completed"
       ? `${day.weekday}, completed`
-      : `${day.weekday}, missed`;
+      : isInactive
+        ? `${day.weekday}, before you joined`
+        : `${day.weekday}, missed`;
 
   return (
     <button
@@ -127,6 +130,7 @@ function DayCell({
             "relative flex size-9 items-center justify-center rounded-full border-2 transition-all",
             day.status === "completed" && !isToday && "border-primary bg-primary text-primary-foreground",
             day.status === "missed" && "border-border bg-muted/40 text-muted-foreground",
+            isInactive && "border-dashed border-border/70 bg-muted/20 text-muted-foreground/60",
             isToday && todayActive && "border-primary bg-primary text-primary-foreground shadow-md shadow-primary/25",
             isToday && !todayActive && "border-primary bg-card text-primary shadow-sm shadow-primary/20",
             selected && "ring-2 ring-ring ring-offset-2 ring-offset-card"
@@ -143,6 +147,8 @@ function DayCell({
               strokeWidth={2.25}
               aria-hidden
             />
+          ) : isInactive ? (
+            <span className="size-1.5 rounded-full bg-muted-foreground/40" aria-hidden />
           ) : (
             <X className="size-3.5" strokeWidth={2} aria-hidden />
           )}
@@ -207,18 +213,25 @@ export function DailyStreakPopup({ userId }: { userId: string }) {
     const dialog = dialogRef.current;
     if (!dialog) return;
     if (open && !dialog.open) {
+      // Never stack the streak popup on top of another open dialog (e.g. account setup).
+      const otherModalOpen = [...document.querySelectorAll("dialog[open], [role='dialog'][aria-modal='true']")].some(
+        (el) => el !== dialog
+      );
+      if (otherModalOpen) return;
       dialog.showModal();
-      try {
-        playFeedback("celebration");
-      } catch {
-        /* Sound feedback is best effort */
+      if ((payload?.streakCount ?? 0) > 0) {
+        try {
+          playFeedback("celebration");
+        } catch {
+          /* Sound feedback is best effort */
+        }
       }
     }
     if (!open && dialog.open) dialog.close();
     return () => {
       if (dialog.open) dialog.close();
     };
-  }, [open]);
+  }, [open, payload?.streakCount]);
 
   async function dismiss() {
     const today = payload?.today;
@@ -357,16 +370,18 @@ export function DailyStreakPopup({ userId }: { userId: string }) {
               {primaryLabel}
             </Button>
 
-            <Button
-              type="button"
-              variant="ghost"
-              className="mt-2 h-11 w-full text-muted-foreground hover:text-foreground"
-              onClick={() => void onShare()}
-              aria-label="Share streak"
-            >
-              <Share2 className="size-4" aria-hidden />
-              Share streak
-            </Button>
+            {payload.streakCount > 0 ? (
+              <Button
+                type="button"
+                variant="ghost"
+                className="mt-2 h-11 w-full text-muted-foreground hover:text-foreground"
+                onClick={() => void onShare()}
+                aria-label="Share streak"
+              >
+                <Share2 className="size-4" aria-hidden />
+                Share streak
+              </Button>
+            ) : null}
             {shareNote ? (
               <p className="mt-1 text-xs text-muted-foreground" role="status">
                 {shareNote}

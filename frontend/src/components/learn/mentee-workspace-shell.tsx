@@ -28,14 +28,21 @@ type LearnerNavItem = {
 
 export type LearnerStats = {
   streak: number;
+  xpTotal?: number | null;
   level: number | null;
   career: string | null;
   credits: number | null;
   hidden: boolean;
 };
 
+/** Hide the gamification stat strip until the learner has actually earned their first streak, XP or credits. */
+export function shouldShowStatStrip(stats: LearnerStats): boolean {
+  if (stats.hidden) return false;
+  return stats.streak > 0 || (stats.xpTotal ?? 0) > 0 || (stats.credits ?? 0) > 0;
+}
+
 function LearnerStatStrip({ stats }: { stats: LearnerStats }) {
-  if (stats.hidden) return null;
+  if (!shouldShowStatStrip(stats)) return null;
   const items: Array<{ href: string; icon: LucideIcon; value: string; label: string; hint: string }> = [
     { href: "/progress", icon: Flame, value: String(stats.streak), label: "day streak", hint: "Day streak: days in a row you studied. Opens Progress." },
   ];
@@ -98,10 +105,8 @@ export function MenteeWorkspaceShell({
 
   // Keep the stat strip fresh: it starts from the server-rendered values, then refetches on every
   // navigation so a balance change (reward/quest/claim) never leaves it stale.
-  const [liveStats, setLiveStats] = useState<LearnerStats | undefined>(stats);
-  useEffect(() => {
-    setLiveStats(stats);
-  }, [stats]);
+  const [fetchedStats, setFetchedStats] = useState<{ base: LearnerStats | undefined; value: LearnerStats } | null>(null);
+  const liveStats = fetchedStats && fetchedStats.base === stats ? fetchedStats.value : stats;
   useEffect(() => {
     if (pathname.startsWith("/courses/")) return;
     let cancelled = false;
@@ -115,13 +120,20 @@ export function MenteeWorkspaceShell({
         const gd = g?.data;
         const hd = h?.data;
         if (!gd && !hd) return;
-        setLiveStats((prev) => ({
-          streak: hd?.streakCount ?? prev?.streak ?? 0,
-          level: gd?.level?.level ?? null,
-          career: gd?.career?.title ?? null,
-          credits: gd?.credits?.balance ?? null,
-          hidden: gd?.hidden ?? false,
-        }));
+        setFetchedStats((prev) => {
+          const fallback = prev && prev.base === stats ? prev.value : stats;
+          return {
+            base: stats,
+            value: {
+              streak: hd?.streakCount ?? fallback?.streak ?? 0,
+              xpTotal: gd?.xp?.total ?? fallback?.xpTotal ?? 0,
+              level: gd?.level?.level ?? null,
+              career: gd?.career?.title ?? null,
+              credits: gd?.credits?.balance ?? null,
+              hidden: gd?.hidden ?? false,
+            },
+          };
+        });
       } catch {
         /* ignore */
       }
@@ -129,7 +141,7 @@ export function MenteeWorkspaceShell({
     return () => {
       cancelled = true;
     };
-  }, [pathname]);
+  }, [pathname, stats]);
 
   // Course overviews and chapter readers have their own focused navigation. The wrapper keeps them
   // full width: as bare children of the layout's flex column, their mx-auto roots shrink to fit the
@@ -138,13 +150,13 @@ export function MenteeWorkspaceShell({
 
   const area = areaForPath(pathname);
   const home: LearnerNavItem = { label: "Home", href: "/dashboard", icon: Home, active: pathname === "/dashboard" };
-  // Every learner area, in the order of LEARN_AREAS. Courses opens on every course; the learner's own courses are under "My learning".
-  const areaItems: LearnerNavItem[] = LEARN_AREAS.map((a) => ({
+  // Only show live / partly-live areas in the primary sidebar so new learners do not hit "Soon" dead ends.
+  const areaItems: LearnerNavItem[] = LEARN_AREAS.filter((a) => a.status !== "coming-soon").map((a) => ({
     label: a.id === "voice" ? a.name : a.short,
     href: a.href,
     icon: AREA_ICON[a.id],
     active: area?.id === a.id && pathname !== "/my-courses",
-    soon: a.status === "coming-soon",
+    soon: false,
   }));
   const myLearning: LearnerNavItem = {
     label: "My learning",
