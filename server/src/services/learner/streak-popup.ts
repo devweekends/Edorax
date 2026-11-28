@@ -53,21 +53,24 @@ export async function loadStreakPopup(userId: string, options: { now?: Date } = 
   const [user, activity] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
-      select: { streakPopupSeenOn: true, gamificationHidden: true, celebratedStreakMilestones: true },
+      select: { createdAt: true, streakPopupSeenOn: true, gamificationHidden: true, celebratedStreakMilestones: true },
     }),
     loadActiveDaysAndSeconds(userId, today),
   ]);
 
   const seenOn = user?.streakPopupSeenOn ? dateToDayKey(user.streakPopupSeenOn) : null;
+  const joinedOn = user?.createdAt ? localDayKey(user.createdAt, timeZone) : null;
   const todayActive = (activity.secondsByDay.get(today) ?? 0) > 0;
+  const hasActivity = activity.activeDays.length > 0;
   const week: StreakPopupDay[] = buildStreakWeek({
     today,
     activeDays: activity.activeDays,
     secondsByDay: activity.secondsByDay,
+    joinedOn,
   });
   const show =
     !(user?.gamificationHidden ?? false) &&
-    shouldShowStreakPopup({ seenOn, today });
+    shouldShowStreakPopup({ seenOn, today, hasActivity, joinedOn });
 
   const milestone = (user?.gamificationHidden ?? false)
     ? null

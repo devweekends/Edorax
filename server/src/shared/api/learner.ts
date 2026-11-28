@@ -189,7 +189,7 @@ export type ProfileUpdateInput = { name: string; timezone: string; skills: strin
 export type StreakPopupDayView = {
   day: string;
   weekday: string;
-  status: "completed" | "missed" | "today";
+  status: "completed" | "missed" | "today" | "inactive";
   seconds: number;
 };
 

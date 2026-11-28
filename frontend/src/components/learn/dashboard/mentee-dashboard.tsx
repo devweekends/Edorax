@@ -14,16 +14,18 @@ import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Progress, ProgressLabel } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
-import { helpUiCopy } from "@/shared/lib/help-ui-copy";
 import { formatStudyAmount } from "@/lib/format-study-duration";
 import { CourseCertificateLink } from "@/components/learn/course-certificate-link";
 import { WeeklyGoalEditor } from "@/components/learn/dashboard/weekly-goal-editor";
 import { WeeklyQuests } from "@/components/learn/dashboard/weekly-quests";
 import { LeagueGoalCard } from "@/components/learn/dashboard/league-goal-card";
 import { CourseStageLine, LearningMomentum } from "@/components/learn/dashboard/gamification";
+import { StarterOnboarding } from "@/components/learn/dashboard/starter-onboarding";
+import { QuickGoalNudge } from "@/components/learn/dashboard/quick-goal-nudge";
 import { showsGameElements } from "@/lib/gamification";
-import { MascotStill } from "@/components/mascot/mascot-tip";
+import { dashboardVisibility, getLearnerOnboardingStage, type LearnerOnboardingStage } from "@/lib/learner-onboarding";
 import { CourseCover } from "@/components/learn/course-cover";
+import type { CatalogCourseSummary } from "@/shared/api/catalog";
 import type {
   DashboardAction,
   DashboardCourse,
@@ -58,57 +60,81 @@ function statusDetails(state: DashboardCourse["state"]) {
   }
 }
 
-function DashboardHeader({ model }: { model: MenteeDashboardViewModel }) {
+function DashboardHeader({
+  model,
+  stage,
+  showGoalEditor,
+}: {
+  model: MenteeDashboardViewModel;
+  stage: LearnerOnboardingStage;
+  showGoalEditor: boolean;
+}) {
+  const greeting = stage === "choose_course" || stage === "first_lesson" ? "Welcome" : "Welcome back";
+  const subtitle =
+    stage === "choose_course"
+      ? "Start with one course below. No setup needed."
+      : stage === "first_lesson"
+        ? "Your first lesson is ready. Start whenever you like."
+        : "Take one step at a time. You can pick up from here when you are ready.";
+
   return (
     <header className="flex flex-col gap-4 border-b border-border pb-6 sm:flex-row sm:items-end sm:justify-between">
       <div>
         <p className="text-sm font-medium text-muted-foreground">My learning</p>
         <h1 className="mt-1 text-3xl font-semibold tracking-tight text-foreground">
-          {model.courses.length === 0 ? "Welcome" : "Welcome back"}, {model.learner.name}
+          {greeting}, {model.learner.name}
         </h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-          Take one step at a time. You can pick up from here when you are ready.
-        </p>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">{subtitle}</p>
       </div>
-      <WeeklyGoalEditor goal={model.habit.weeklyGoal} />
+      {showGoalEditor ? <WeeklyGoalEditor goal={model.habit.goal ?? model.habit.weeklyGoal} /> : null}
     </header>
   );
 }
 
-function ContinueLearning({ course }: { course: DashboardCourse }) {
+function ContinueLearning({ course, firstLesson = false }: { course: DashboardCourse; firstLesson?: boolean }) {
   const status = statusDetails(course.state);
+  const heading = firstLesson
+    ? "Your first lesson"
+    : course.state === "IN_PROGRESS"
+      ? "Continue where you left off"
+      : course.state === "COMPLETED"
+        ? "Look how far you have come"
+        : "Your next step";
+
   return (
     <section aria-labelledby="continue-heading" className="overflow-hidden rounded-2xl border bg-card ">
       <div className="p-5 sm:p-7">
       <div className="flex flex-wrap items-center gap-2">
         <BookOpen className="size-5 text-primary" aria-hidden />
-        <p id="continue-heading" className="text-sm font-semibold">{course.state === "IN_PROGRESS" ? "Continue where you left off" : course.state === "COMPLETED" ? "Look how far you have come" : "Your next step"}</p>
-        <Badge variant={status.variant}>{status.label}</Badge>
+        <p id="continue-heading" className="text-sm font-semibold">{heading}</p>
+        {!firstLesson ? <Badge variant={status.variant}>{status.label}</Badge> : null}
       </div>
       <h2 className="mt-4 max-w-2xl text-2xl font-semibold tracking-tight sm:text-3xl">
         {course.title}
       </h2>
-      {course.stage || course.xp !== null ? (
+      {!firstLesson && (course.stage || course.xp !== null) ? (
         <>
           <CourseStageLine course={course} className="mt-2 text-sm" />
           {course.targetChapter ? <p className="mt-1 text-sm text-muted-foreground">{course.targetChapter.title}</p> : null}
         </>
       ) : (
-        <p className="mt-2 text-sm text-muted-foreground">
+        <p className="mt-2 text-base text-muted-foreground">
           {[course.currentModule, course.targetChapter?.title].filter(Boolean).join(" · ")}
         </p>
       )}
-      <div className="mt-6">
-        <Progress value={course.percentComplete} className="gap-2 [&_[data-slot=progress-track]]:h-2 [&_[data-slot=progress-indicator]]:duration-200 motion-reduce:[&_[data-slot=progress-indicator]]:transition-none">
-          <ProgressLabel className="text-xs text-muted-foreground">
-            {course.chaptersCompleted} of {course.chaptersTotal} chapters complete
-          </ProgressLabel>
-          <span className="ml-auto text-xs tabular-nums text-muted-foreground">
-            {course.percentComplete === 0 && course.chaptersCompleted > 0 ? "<1" : course.percentComplete}%
-          </span>
-        </Progress>
-      </div>
-      {course.targetChapter && course.targetChapter.blocksTotal > 0 ? (
+      {!firstLesson ? (
+        <div className="mt-6">
+          <Progress value={course.percentComplete} className="gap-2 [&_[data-slot=progress-track]]:h-2 [&_[data-slot=progress-indicator]]:duration-200 motion-reduce:[&_[data-slot=progress-indicator]]:transition-none">
+            <ProgressLabel className="text-xs text-muted-foreground">
+              {course.chaptersCompleted} of {course.chaptersTotal} chapters complete
+            </ProgressLabel>
+            <span className="ml-auto text-xs tabular-nums text-muted-foreground">
+              {course.percentComplete === 0 && course.chaptersCompleted > 0 ? "<1" : course.percentComplete}%
+            </span>
+          </Progress>
+        </div>
+      ) : null}
+      {!firstLesson && course.targetChapter && course.targetChapter.blocksTotal > 0 ? (
         <p className="mt-4 text-sm text-muted-foreground">
           {course.targetChapter.blocksCompleted} of {course.targetChapter.blocksTotal} checkpoints complete in this chapter.
         </p>
@@ -445,22 +471,6 @@ export function MenteeCourseList({ courses, showHeading = true, primaryCourseId 
   );
 }
 
-function EmptyDashboard({ name }: { name: string }) {
-  return (
-    <div className="rounded-2xl border border-dashed bg-muted/20 px-6 py-16 text-center">
-      <MascotStill role="guide" state="begin" className="mx-auto size-24" />
-      <h2 className="mt-4 text-lg font-semibold">Your learning starts here</h2>
-      <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground">
-        {name}, choose a course from the catalog to get started. If your mentor sent an invite, open its link to join your course.
-      </p>
-      <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-        <Link href="/catalog" className={buttonVariants()}>Browse catalog</Link>
-        <Link href="/my-questions" className={buttonVariants({ variant: "outline" })}>{helpUiCopy.learnerNav}</Link>
-      </div>
-    </div>
-  );
-}
-
 function RecentEvents({ events }: { events: DashboardEvent[] }) {
   const visible = events.slice(0, 3);
   if (visible.length === 0) return null;
@@ -487,26 +497,59 @@ function RecentEvents({ events }: { events: DashboardEvent[] }) {
   );
 }
 
-export function MenteeDashboard({ model }: { model: MenteeDashboardViewModel }) {
+export function MenteeDashboard({
+  model,
+  starterCourses = [],
+}: {
+  model: MenteeDashboardViewModel;
+  starterCourses?: CatalogCourseSummary[];
+}) {
+  const stage = getLearnerOnboardingStage(model);
+  const visibility = dashboardVisibility(stage);
+  const hasGoal = Boolean(model.habit.goal ?? model.habit.weeklyGoal);
+  const showGoalEditor = visibility.showGoalEditorInHeader || hasGoal;
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-7 sm:px-6 sm:py-10 lg:px-8">
-      <DashboardHeader model={model} />
-      {model.courses.length === 0 ? (
-        <div className="mt-8"><EmptyDashboard name={model.learner.name} /></div>
+      <DashboardHeader model={model} stage={stage} showGoalEditor={showGoalEditor} />
+
+      {stage === "choose_course" ? (
+        <div className="mt-8">
+          <StarterOnboarding name={model.learner.name} courses={starterCourses} />
+        </div>
+      ) : stage === "first_lesson" ? (
+        <div className="mt-6 space-y-6">
+          {model.primaryCourse ? <ContinueLearning course={model.primaryCourse} firstLesson /> : null}
+          {model.courses.length > 1 ? <CourseListPreview courses={model.courses} /> : null}
+        </div>
       ) : (
         <div className="mt-6 space-y-6">
-          <WeeklyQuests />
-          <LeagueGoalCard view={model.leaderboard} />
           {model.activity.runningSession ? <ResumeBanner session={model.activity.runningSession} /> : null}
+          {/* Primary learning always sits first above the fold; habit & competition follow underneath. */}
           <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_20rem]">
             {model.primaryCourse ? <ContinueLearning course={model.primaryCourse} /> : null}
-            <WeeklySnapshot model={model} />
+            {visibility.showWeeklySnapshot ? <WeeklySnapshot model={model} /> : null}
           </div>
-          <CourseListPreview courses={model.courses} />
-          <div className="grid grid-cols-1 gap-5 border-t border-border pt-6 xl:grid-cols-2">
-            <ActionCenter actions={model.actions} hasCourse={Boolean(model.primaryCourse)} />
-            <RecentEvents events={model.recentEvents} />
-          </div>
+          {visibility.showQuickGoalNudge && !hasGoal && model.overview.chaptersCompleted > 0 ? (
+            <QuickGoalNudge />
+          ) : null}
+          {visibility.showWeeklyQuests || visibility.showLeagueGoal ? (
+            <div className="space-y-4">
+              {visibility.showWeeklyQuests ? <WeeklyQuests /> : null}
+              {visibility.showLeagueGoal ? <LeagueGoalCard view={model.leaderboard} /> : null}
+            </div>
+          ) : null}
+          {stage === "established" || model.courses.length > 1 ? (
+            <CourseListPreview courses={model.courses} />
+          ) : null}
+          {stage === "established" || model.actions.length > 0 || model.recentEvents.length > 0 ? (
+            <div className="grid grid-cols-1 gap-5 border-t border-border pt-6 xl:grid-cols-2">
+              {stage === "established" || model.actions.length > 0 ? (
+                <ActionCenter actions={model.actions} hasCourse={Boolean(model.primaryCourse)} />
+              ) : null}
+              <RecentEvents events={model.recentEvents} />
+            </div>
+          ) : null}
         </div>
       )}
     </div>
