@@ -31,6 +31,7 @@ export default async function LearnLayout({ children }: { children: React.ReactN
 
   const stats = {
     streak: habit?.streakCount ?? 0,
+    xpTotal: gamification?.xp?.total ?? 0,
     level: gamification?.level?.level ?? null,
     career: gamification?.career?.title ?? null,
     credits: gamification?.credits?.balance ?? null,

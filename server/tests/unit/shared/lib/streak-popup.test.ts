@@ -19,8 +19,16 @@ describe("shouldShowStreakPopup", () => {
     expect(shouldShowStreakPopup({ seenOn: "2026-11-02", today })).toBe(true);
   });
 
-  it("shows on the first open, whatever the streak is", () => {
-    expect(shouldShowStreakPopup({ seenOn: null, today })).toBe(true);
+  it("shows on the first open once the learner has activity", () => {
+    expect(shouldShowStreakPopup({ seenOn: null, today, hasActivity: true, joinedOn: "2026-11-01" })).toBe(true);
+  });
+
+  it("stays hidden for brand-new learners with no activity yet", () => {
+    expect(shouldShowStreakPopup({ seenOn: null, today, hasActivity: false, joinedOn: "2026-11-01" })).toBe(false);
+  });
+
+  it("stays hidden on the learner's registration day even after first activity", () => {
+    expect(shouldShowStreakPopup({ seenOn: null, today, hasActivity: true, joinedOn: today })).toBe(false);
   });
 });
 
@@ -60,6 +68,24 @@ describe("buildStreakWeek", () => {
     const week = buildStreakWeek({ today, activeDays: ["2026-11-02"] });
     expect(week.at(-1)).toMatchObject({ day: today, status: "today", seconds: 0 });
     expect(week[5]).toMatchObject({ day: "2026-11-02", status: "completed" });
+  });
+
+  it("marks days before the learner joined as inactive instead of missed", () => {
+    const week = buildStreakWeek({
+      today,
+      activeDays: ["2026-11-02"],
+      joinedOn: "2026-11-01",
+    });
+    expect(week.map((d) => d.status)).toEqual([
+      "inactive",
+      "inactive",
+      "inactive",
+      "inactive",
+      "missed",
+      "completed",
+      "today",
+    ]);
+    expect(streakDaySummary(week[0]!, today)).toContain("before you joined");
   });
 });
 
