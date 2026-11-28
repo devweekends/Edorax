@@ -392,7 +392,7 @@ export function BrowserShellLab({ lab, initialDone }: { lab: BrowserLab; initial
                 <p className="text-base">
                   You finished all {lab.steps.length} steps of {lab.title} on a real Linux machine.
                 </p>
-                <Link href="/labs?kind=shell" className={cn("inline-flex min-h-11 items-center gap-1.5 text-base font-bold text-primary hover:underline", focusRing)}>
+                <Link href={`/labs/${lab.topic ?? "linux"}`} className={cn("inline-flex min-h-11 items-center gap-1.5 text-base font-bold text-primary hover:underline", focusRing)}>
                   Pick the next lab
                   <ArrowRight className="size-4" aria-hidden />
                 </Link>

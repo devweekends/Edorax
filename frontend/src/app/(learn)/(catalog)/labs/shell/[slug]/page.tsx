@@ -9,7 +9,7 @@ import { Rich } from "@/components/shell-labs/rich";
 import { BrowserShellLab } from "@/components/shell-labs/browser-shell-lab";
 import { loadBrowserShellLab, loadDesktopDownloads, loadShellLab } from "@/lib/shell-labs-server";
 import { getSessionUser } from "@/server/auth/guards";
-import { shellLabMeta } from "@/lib/shell-labs";
+import { shellLabMeta, shellTopicLabel } from "@/lib/shell-labs";
 
 type Params = Promise<{ slug: string }>;
 
@@ -36,11 +36,11 @@ export default async function ShellLabPage({ params }: { params: Params }) {
   return (
     <AreaPage>
       <Link
-        href="/labs?kind=shell"
+        href={`/labs/${lab.topic}`}
         className="mb-3 inline-flex min-h-11 items-center gap-1.5 text-base font-bold text-primary outline-none hover:underline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-brand-yellow"
       >
         <ArrowLeft className="size-4" aria-hidden />
-        All shell labs
+        {shellTopicLabel(lab.topic)} labs
       </Link>
 
       {lab.browser ? (

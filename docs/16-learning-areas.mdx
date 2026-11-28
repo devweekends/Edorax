@@ -60,12 +60,17 @@ frontend/src/app/(learn)/(catalog)/
   voice/                   On-call tutors (coming soon page)
 ```
 
-**The Labs catalogue (`/labs`).** One job per screen. `/labs` shows the three kinds as tiles and a
-few labs of each to start with. `/labs?kind=visual` and `/labs?kind=shell` show every lab of that
-kind, grouped by topic, with a search box (`q`) and filters as plain links (`topic`, and for shell
-labs `level` and `where=browser`). `/labs?kind=guided` shows the tracks. Shell lab cards say where
-the lab runs and show the signed-in learner's progress. The cards live in
-`components/areas/lab-card.tsx`.
+**The Labs catalogue.** Labs live in collections, one page per topic:
+`/labs/linux`, `/labs/docker`, `/labs/kubernetes` and `/labs/ansible` hold shell labs, and
+`/labs/system-design-challenges`, `/labs/cloud-devops`, `/labs/system-design-ideas` and
+`/labs/networking` hold visual labs (`labs/[topic]/page.tsx`, list in `lib/lab-collections.ts`).
+A shell collection groups its labs by level and has one filter, "In your browser". `/labs` is the
+overview: one featured lab (the one to continue, or the next one to start), the shell collections,
+the visual collections, and the guided tracks. There is no search box. Old addresses such as
+`/labs?kind=shell&topic=linux` redirect to the collection. Each topic has one icon and colour
+(`lib/lab-topics.ts`) on its tile, its page and its cards. Shell lab cards say where the lab runs
+and show the signed-in learner's progress. The parts live in `components/areas/lab-card.tsx`.
+A new shell topic gets its page by itself; `visual`, `guided` and `shell` are reserved names.
 
 **Navigation.**
 

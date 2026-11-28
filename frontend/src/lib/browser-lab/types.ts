@@ -44,6 +44,8 @@ export interface BrowserLabStep {
 
 export interface BrowserLab {
   slug: string;
+  /** linux, docker and so on: the collection the lab belongs to. */
+  topic?: string;
   title: string;
   machine: { name: string; memoryMb?: number };
   setup?: string;
