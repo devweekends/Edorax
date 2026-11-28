@@ -43,7 +43,10 @@ export function pickContinueTarget<
   TChapter extends Pick<SyllabusChapter, "slug" | "title" | "status" | "locked">,
 >(flatChapters: TChapter[], lastChapterSlug?: string | null): TChapter | null {
   if (lastChapterSlug) {
-    const start = flatChapters.findIndex((c) => c.slug === lastChapterSlug);
+    const cleanedLast = cleanChapterSlug(lastChapterSlug);
+    const start = flatChapters.findIndex(
+      (c) => c.slug === lastChapterSlug || (cleanedLast !== "" && cleanChapterSlug(c.slug) === cleanedLast)
+    );
     if (start >= 0) {
       const resume = flatChapters.slice(start).find((c) => !c.locked && c.status !== "COMPLETED");
       if (resume) return resume;
