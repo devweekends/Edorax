@@ -263,6 +263,37 @@
 
 }
 
+/* The scrollbar of the workspace sidebar and of the lab steps panel: a slim brand-colour bar that is always there when the menu
+   is longer than the screen. The space for it is kept free at all times, so the icons never jump.
+   Chrome, Edge and Safari draw it from the ::-webkit-scrollbar rules. Setting scrollbar-width or
+   scrollbar-color there would switch them to the system bar with arrow buttons, so only browsers
+   without ::-webkit-scrollbar (Firefox) get those two properties. */
+.sidebar-scroll {
+  scrollbar-gutter: stable;
+}
+.sidebar-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+.sidebar-scroll::-webkit-scrollbar-button {
+  display: none;
+}
+.sidebar-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.sidebar-scroll::-webkit-scrollbar-thumb {
+  background: color-mix(in oklab, var(--primary) 45%, transparent);
+  border-radius: 999px;
+}
+.sidebar-scroll::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklab, var(--primary) 75%, transparent);
+}
+@supports not selector(::-webkit-scrollbar) {
+  .sidebar-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklab, var(--primary) 45%, transparent) transparent;
+  }
+}
+
 /* Sleek custom scrollbars for diagrams, code blocks, and horizontal panels */
 .diagram-scroll-container,
 .custom-scrollbar {
@@ -1016,6 +1047,10 @@ body:has([data-learner-bottom-nav]) {
     --audiobook-bar-bottom: 0px;
     --audiobook-bar-left: 15rem;
     --audiobook-bar-safe: env(safe-area-inset-bottom, 0px);
+  }
+  /* The learner sidebar as icons only: the player starts where the narrow sidebar ends. */
+  body:has([data-learner-sidebar="icons"]) {
+    --audiobook-bar-left: 4.5rem;
   }
 }
 body:has([data-audiobook-bar]) {

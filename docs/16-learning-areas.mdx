@@ -30,7 +30,7 @@ Lab kinds, under `/labs`:
 |---|---|---|
 | Visual labs | `/labs/visual`, `/labs/visual/[slug]` | Open |
 | Guided labs | `/labs/guided` | Open |
-| Shell labs | `/labs/shell` (with the desktop app docs at `#desktop`) | Coming soon, with the desktop app |
+| Shell labs | `/labs/shell` (with the desktop app docs at `#desktop`) | Desktop app; some Linux labs also run in the browser |
 
 ## Information architecture (implemented)
 
@@ -59,6 +59,13 @@ frontend/src/app/(learn)/(catalog)/
   puzzles/                 Puzzles (coming soon page)
   voice/                   On-call tutors (coming soon page)
 ```
+
+**The Labs catalogue (`/labs`).** One job per screen. `/labs` shows the three kinds as tiles and a
+few labs of each to start with. `/labs?kind=visual` and `/labs?kind=shell` show every lab of that
+kind, grouped by topic, with a search box (`q`) and filters as plain links (`topic`, and for shell
+labs `level` and `where=browser`). `/labs?kind=guided` shows the tracks. Shell lab cards say where
+the lab runs and show the signed-in learner's progress. The cards live in
+`components/areas/lab-card.tsx`.
 
 **Navigation.**
 
@@ -183,6 +190,46 @@ containers and small networks the learner can break and fix.
   networks, reset, and progress sync. The desktop README lists these as follow-up work.
 - The web page `/labs/shell` explains this and carries the desktop app docs (`#desktop`). Link
   downloads there when the app is packaged and signed.
+
+### Shell labs in the browser (first version)
+
+Some shell labs also run on the website, with nothing to install. The lab page `/labs/shell/[slug]`
+shows the steps next to a terminal, and the machine is a real Linux kernel compiled to WebAssembly
+([unkernel](https://github.com/pithings/unkernel)) that runs inside the learner's browser tab. No
+server runs the lab. The lab file is the same YAML the desktop app runs.
+
+- Which labs: the server decides with `runsInBrowser` in `server/src/services/shell-labs-public.ts`.
+  A lab runs in the browser when its topic is `linux`, it has one machine, no `vm`, no `build`
+  script, an Ubuntu or Debian image, and only packages from `BROWSER_LAB_PACKAGES`. A lab file can
+  set `browser: true` or `browser: false` to overrule this. The public catalogue carries the result
+  as `browser`, and the cards say "In your browser".
+- What stays in the desktop app: Docker and other `vm` labs, Kubernetes, Ansible and every lab with
+  more machines, firewall labs (the browser kernel has no packet filter), and labs on Rocky Linux.
+- API: `GET /api/v1/shell-labs/browser/:slug` (signed in, verified email) sends one whole lab, checks
+  included, because the browser runs the checks itself, as the desktop app does. Progress uses the
+  same `/api/v1/shell-labs/progress` routes, so steps passed on the web show in the desktop app.
+- Code: `frontend/src/lib/browser-lab/runtime.ts` (start the machine, run setup, run checks, open a
+  terminal), `prepare.ts` (what is done to a new machine so it behaves like the desktop app's
+  container) and `frontend/src/components/shell-labs/browser-shell-lab.tsx` (the page).
+- Files the page needs, in `frontend/public/unkernel/` (not in git):
+  `pnpm labs:assets` copies the SDK and the kernel from the `unkernel` package and downloads the
+  Debian image; `pnpm labs:image` builds `labs-data.img`, a disk with the lab packages installed
+  (about 5 minutes, Node 24). The image is a sparse file: 4 GB in size, about 260 MB of data.
+  In production, put `debian.erofs` and `labs-data.img` in a bucket that allows range requests and
+  set `NEXT_PUBLIC_BROWSER_LAB_IMAGES` to its URL.
+- The page: the open step's "Done when" list is checked every 4 seconds while the machine runs, so a
+  step passes by itself; "Check my work" also says what is still wrong. Sounds come from
+  `lib/sound-feedback` (start, hint, wrong, step passed, lab complete), with small confetti for a
+  step and the party popper for the whole lab. The sound button uses the same setting as the
+  course reader, and reduced motion turns both off.
+- Proof that a lab works: `pnpm labs:verify --root <Edorax Core checkout>` boots the same kernel and
+  images under Node, runs each lab's setup, then every step's solution and checks. Run it after a
+  change to the labs, to `prepare.ts`, to the package list or to the `unkernel` version.
+- Limits to know: the machine is Debian 13 on arm64, not Ubuntu 24.04 on x86, so a lab that depends
+  on an Ubuntu-only detail needs `browser: false`. The machine lives in the tab: a reload starts a
+  new one. The browser needs JSPI (a WebAssembly feature in current Chrome, Edge, Firefox and
+  Safari); an older browser sees a message and the desktop app download. The kernel is GPL-2.0 and
+  is served unchanged, with its licence files next to it.
 
 ## Bite-sized practice (planned)
 
