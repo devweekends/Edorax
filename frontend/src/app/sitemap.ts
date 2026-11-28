@@ -14,8 +14,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${SITE_URL}/learn`, changeFrequency: "weekly", priority: 0.8 },
     ...FEATURE_PAGES.map((page) => ({ url: `${SITE_URL}${featurePath(page.slug)}`, changeFrequency: "monthly" as const, priority: 0.8 })),
     ...LEARN_AREAS.filter((area) => area.href !== "/catalog").map((area) => ({ url: `${SITE_URL}${area.href}`, changeFrequency: "weekly" as const, priority: 0.7 })),
-    // A filter such as /labs?kind=visual is the same page as /labs (its canonical), so only plain paths are listed.
-    ...LAB_KINDS.filter((kind) => !kind.href.includes("?")).map((kind) => ({ url: `${SITE_URL}${kind.href}`, changeFrequency: "weekly" as const, priority: 0.6 })),
+    // Only plain paths are listed. Shell collections (/labs/linux) come from the API and are left out here.
+    ...LAB_KINDS.filter((kind) => !/[?#]/.test(kind.href)).map((kind) => ({ url: `${SITE_URL}${kind.href}`, changeFrequency: "weekly" as const, priority: 0.6 })),
     ...LAB_SLUGS.map((slug) => ({ url: `${SITE_URL}/labs/visual/${slug}`, changeFrequency: "monthly" as const, priority: 0.5 })),
   ];
   try {

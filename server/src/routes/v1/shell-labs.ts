@@ -13,6 +13,7 @@ router.get("/public", shellLabs.listPublic);
 router.use(authenticate, requireVerified);
 
 router.get("/version", shellLabs.version);
+router.get("/browser/:slug", shellLabs.browserLab);
 router.get("/progress", shellLabs.progress);
 router.put("/progress/:slug", shellLabs.saveProgress);
 router.get("/", shellLabs.list);

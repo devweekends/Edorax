@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { StreakPopover } from "@/components/learn/streak-popover";
-import { Award, BookOpenText, Building2,CircleHelp, Coins, Compass, Flame, GraduationCap, Highlighter, Home, Star, Trophy, TrendingUp, User, type LucideIcon } from "lucide-react";
+import { Award, BookOpenText, Building2, CircleHelp, Coins, Compass, Flame, GraduationCap, Highlighter, Home, PanelLeft, Star, Trophy, TrendingUp, User, type LucideIcon } from "lucide-react";
 import { WorkspaceAccountMenu } from "@/components/workspace/workspace-account-menu";
 import { Logo } from "@/components/brand/logo";
 import { cn } from "@/lib/utils";
@@ -14,6 +14,11 @@ import { helpUiCopy } from "@/shared/lib/help-ui-copy";
 import type { InstructorAccessView } from "@/shared/lib/instructor-access";
 import { LEARN_AREAS, areaForPath } from "@/lib/learn-areas";
 import { AREA_ICON } from "@/components/areas/area-icon";
+import { useSidebarCollapsed } from "@/lib/sidebar-collapsed";
+
+/** The plain square icon button of the sidebar's top row: no border, a soft background on hover. */
+const railButton =
+  "grid size-10 place-items-center rounded-lg border-0 bg-transparent text-muted-foreground shadow-none outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-brand-yellow";
 
 type LearnerNavItem = {
   label: string;
@@ -102,6 +107,9 @@ export function MenteeWorkspaceShell({
   stats?: LearnerStats;
 }) {
   const pathname = usePathname();
+
+  // The desktop sidebar can shrink to icons only, to give a lab or a lesson the whole width.
+  const [collapsed, toggleSidebar] = useSidebarCollapsed();
 
   // Keep the stat strip fresh: it starts from the server-rendered values, then refetches on every
   // navigation so a balance change (reward/quest/claim) never leaves it stale.
@@ -228,19 +236,46 @@ export function MenteeWorkspaceShell({
         </div>
       </header>
 
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-60 border-r border-border bg-card lg:flex lg:flex-col">
-        <div className="flex h-16 shrink-0 items-center justify-between gap-3 px-5">
-          <Link href="/dashboard" aria-label="Edorax home" className="inline-flex text-foreground outline-none focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-brand-yellow">
-            <Logo size="sm" />
-          </Link>
-          <NotificationBell />
-        </div>
+      <aside
+        data-learner-sidebar={collapsed ? "icons" : "full"}
+        className={cn("fixed inset-y-0 left-0 z-40 hidden border-r border-border bg-card transition-[width] duration-200 lg:flex lg:flex-col", collapsed ? "w-[4.5rem]" : "w-60")}
+      >
+        {/* The top row works like the ChatGPT sidebar: a panel button on the right closes it to icons,
+            and in the icon rail the logo itself turns into the button that opens it again. The rail
+            has no bell: notifications are one click away in the open sidebar. */}
+        {collapsed ? (
+          <div className="flex shrink-0 flex-col items-center px-2 pb-2 pt-4">
+            <button
+              type="button"
+              onClick={toggleSidebar}
+              aria-expanded={false}
+              aria-label="Open sidebar"
+              title="Open sidebar"
+              className={cn("group/open cursor-e-resize", railButton)}
+            >
+              <Logo size="sm" withWordmark={false} className="group-hover/open:hidden group-focus-visible/open:hidden" />
+              <PanelLeft className="hidden size-5 group-hover/open:block group-focus-visible/open:block" aria-hidden />
+            </button>
+          </div>
+        ) : (
+          <div className="flex h-16 shrink-0 items-center justify-between pl-5 pr-2.5">
+            <Link href="/dashboard" aria-label="Edorax home" className="inline-flex text-foreground outline-none focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-brand-yellow">
+              <Logo size="sm" />
+            </Link>
+            <div className="flex items-center">
+              <NotificationBell className={railButton} />
+              <button type="button" onClick={toggleSidebar} aria-expanded aria-label="Close sidebar" title="Close sidebar" className={cn("cursor-w-resize", railButton)}>
+                <PanelLeft className="size-5" aria-hidden />
+              </button>
+            </div>
+          </div>
+        )}
 
-        <nav aria-label="Learner workspace" className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 py-4">
+        <nav aria-label="Learner workspace" className={cn("sidebar-scroll min-h-0 flex-1 overflow-y-auto", collapsed ? "py-3 pl-2 pr-1" : "space-y-1 py-4 pl-3 pr-2")}>
           {sidebarGroups.map((group, gi) => (
-            <div key={group.label ?? gi} className={gi > 0 ? "pt-4" : undefined}>
-              {group.label ? <p className="px-3.5 pb-1 text-xs font-bold uppercase tracking-wider text-muted-foreground">{group.label}</p> : null}
-              <ul className="space-y-1">
+            <div key={group.label ?? gi} className={gi > 0 ? (collapsed ? "mt-4 pt-4 before:mx-auto before:-mt-4 before:mb-4 before:block before:h-px before:w-6 before:bg-border" : "pt-4") : undefined}>
+              {group.label && !collapsed ? <p className="px-3.5 pb-1 text-xs font-bold uppercase tracking-wider text-muted-foreground">{group.label}</p> : null}
+              <ul className={collapsed ? "space-y-2" : "space-y-1"}>
                 {group.items.map((item) => {
                   const Icon = item.icon;
                   return (
@@ -248,15 +283,24 @@ export function MenteeWorkspaceShell({
                       <Link
                         href={item.href}
                         aria-current={item.active ? "page" : undefined}
+                        aria-label={collapsed ? `${item.label}${item.soon ? " (soon)" : ""}${item.count ? `, ${item.count}` : ""}` : undefined}
+                        title={collapsed ? `${item.label}${item.soon ? " (soon)" : ""}` : undefined}
                         className={cn(
-                          "flex min-h-11 items-center gap-3 rounded-md px-3.5 text-base outline-none transition-colors focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-brand-yellow",
+                          "relative flex items-center gap-3 text-base outline-none transition-colors focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-brand-yellow",
+                          collapsed ? "mx-auto size-10 justify-center rounded-lg" : "min-h-11 rounded-md px-3.5",
                           item.active ? "bg-secondary font-bold text-primary" : "font-medium text-foreground hover:bg-muted"
                         )}
                       >
-                        <Icon className="size-5" aria-hidden />
-                        <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                        {item.count ? <Count value={item.count} /> : null}
-                        {item.soon ? <span className="rounded-sm bg-muted px-1.5 py-0.5 text-xs font-bold text-muted-foreground">Soon</span> : null}
+                        <Icon className={cn("size-5 shrink-0", collapsed && item.soon && !item.active && "text-muted-foreground")} aria-hidden />
+                        {collapsed ? (
+                          item.count ? <span aria-hidden className="absolute right-1.5 top-1.5 size-2 rounded-full bg-brand-yellow ring-2 ring-card" /> : null
+                        ) : (
+                          <>
+                            <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                            {item.count ? <Count value={item.count} /> : null}
+                            {item.soon ? <span className="rounded-sm bg-muted px-1.5 py-0.5 text-xs font-bold text-muted-foreground">Soon</span> : null}
+                          </>
+                        )}
                       </Link>
                     </li>
                   );
@@ -264,19 +308,19 @@ export function MenteeWorkspaceShell({
               </ul>
             </div>
           ))}
-          {pendingReviews > 0 ? (
+          {pendingReviews > 0 && !collapsed ? (
             <p className="px-3.5 pt-3 text-sm leading-5 text-muted-foreground">
               {pendingReviews} submission{pendingReviews === 1 ? "" : "s"} awaiting review
             </p>
           ) : null}
         </nav>
 
-        <div className="shrink-0 border-t border-border p-2">
-          <WorkspaceAccountMenu current="learn" user={user} instructorAccess={instructorAccess} signOutAction={signOutAction} />
+        <div className={cn("shrink-0 border-t border-border", collapsed ? "mx-3 flex justify-center py-3" : "p-2")}>
+          <WorkspaceAccountMenu current="learn" user={user} instructorAccess={instructorAccess} signOutAction={signOutAction} rail={collapsed} />
         </div>
       </aside>
 
-      <main className="min-h-dvh pb-20 lg:pb-0 lg:pl-60">
+      <main className={cn("min-h-dvh pb-20 transition-[padding] duration-200 lg:pb-0", collapsed ? "lg:pl-[4.5rem]" : "lg:pl-60")}>
         {liveStats ? <LearnerStatStrip stats={liveStats} /> : null}
         {children}
       </main>

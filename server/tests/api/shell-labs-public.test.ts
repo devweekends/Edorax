@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { toPublicShellLab } from "../../src/services/shell-labs-public.js";
+import { runsInBrowser, toPublicShellLab } from "../../src/services/shell-labs-public.js";
 
 describe("toPublicShellLab", () => {
   const lab = {
@@ -36,6 +36,7 @@ describe("toPublicShellLab", () => {
       scenario: "Tidy the reports folder.",
       tags: ["Demo", "Files"],
       steps: [{ id: "make-folder", goal: "Create the reports folder" }],
+      browser: true,
     });
   });
 
@@ -45,6 +46,30 @@ describe("toPublicShellLab", () => {
   });
 
   it("copes with a lab that has no steps", () => {
-    expect(toPublicShellLab({ slug: "x" })).toMatchObject({ slug: "x", minutes: 0, scenario: null, tags: [], steps: [] });
+    expect(toPublicShellLab({ slug: "x" })).toMatchObject({ slug: "x", minutes: 0, scenario: null, tags: [], steps: [], browser: false });
+  });
+});
+
+describe("runsInBrowser", () => {
+  const linux = (machine: Record<string, unknown>, extra: Record<string, unknown> = {}) => ({ topic: "linux", machine: { name: "box", image: "ubuntu:24.04", ...machine }, ...extra });
+
+  it("takes a one-machine Linux lab whose packages are in the browser image", () => {
+    expect(runsInBrowser(linux({}))).toBe(true);
+    expect(runsInBrowser(linux({ packages: ["cron", "nano"] }))).toBe(true);
+  });
+
+  it("leaves out what a browser tab cannot run", () => {
+    expect(runsInBrowser(linux({ vm: true }))).toBe(false);
+    expect(runsInBrowser(linux({ build: "curl -O https://example.com/x" }))).toBe(false);
+    expect(runsInBrowser(linux({ packages: ["iptables"] }))).toBe(false);
+    expect(runsInBrowser(linux({ image: "rockylinux:9.3" }))).toBe(false);
+    expect(runsInBrowser(linux({}, { machines: [{ name: "web1", image: "ubuntu:24.04" }] }))).toBe(false);
+    expect(runsInBrowser({ ...linux({}), topic: "kubernetes" })).toBe(false);
+    expect(runsInBrowser({ topic: "linux" })).toBe(false);
+  });
+
+  it("lets the lab file decide", () => {
+    expect(runsInBrowser(linux({}, { browser: false }))).toBe(false);
+    expect(runsInBrowser({ ...linux({}), topic: "kubernetes", browser: true })).toBe(true);
   });
 });

@@ -86,7 +86,7 @@ export default async function PuzzlesPage({ searchParams }: { searchParams: Sear
         </dl>
       </section>
 
-      <ComingSoonPanel title="Puzzles are on the way" action={{ href: "/labs?kind=visual", label: "Try a visual lab now" }}>
+      <ComingSoonPanel title="Puzzles are on the way" action={{ href: "/labs#visual", label: "Try a visual lab now" }}>
         The visual labs are the closest thing today: a design, a set of checks, and a reason for every result.
       </ComingSoonPanel>
     </AreaPage>

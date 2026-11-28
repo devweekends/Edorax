@@ -124,7 +124,7 @@ export const LAB_KINDS: readonly LabKind[] = [
   {
     id: "visual",
     name: "Visual labs",
-    href: "/labs?kind=visual",
+    href: "/labs#visual",
     status: "live",
     tagline: "No code. Move parts, press Run, watch the checks.",
     summary:

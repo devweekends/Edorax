@@ -16,6 +16,8 @@ export interface PublicShellLab {
   scenario: string | null;
   tags: string[];
   steps: PublicShellLabStep[];
+  /** True when the lab can run in the browser. Older API versions do not send it. */
+  browser?: boolean;
 }
 
 const TOPIC_LABEL: Record<string, string> = {
@@ -42,10 +44,11 @@ export function shellLevelLabel(level: string): string {
   return LEVEL_LABEL[level] ?? capitalise(level);
 }
 
-/** "Linux · Beginner · 10 min · 4 steps" for the card and the lab page. */
+/** "Linux · Beginner · 10 min · 4 steps" for the card and the lab page, with "In your browser" when the lab runs there. */
 export function shellLabMeta(lab: PublicShellLab): string {
   const parts = [shellTopicLabel(lab.topic), shellLevelLabel(lab.level)];
   if (lab.minutes > 0) parts.push(`${lab.minutes} min`);
   if (lab.steps.length > 0) parts.push(`${lab.steps.length} ${lab.steps.length === 1 ? "step" : "steps"}`);
+  if (lab.browser) parts.push("In your browser");
   return parts.join(" · ");
 }

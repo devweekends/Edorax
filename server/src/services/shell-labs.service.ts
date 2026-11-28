@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { prisma } from "../db/prisma.js";
 import type { Prisma } from "../generated/prisma/index.js";
-import { BadRequestError } from "../utils/errors.js";
-import { toPublicShellLab, type PublicShellLab } from "./shell-labs-public.js";
+import { BadRequestError, NotFoundError } from "../utils/errors.js";
+import { runsInBrowser, toPublicShellLab, type PublicShellLab } from "./shell-labs-public.js";
 
 // Shell labs live in the private content repository and reach the database through
 // `pnpm labs:publish`. The desktop app reads them from the API and runs the checks
@@ -147,6 +147,17 @@ export async function shellLabsWithVersion(): Promise<{ version: string; labs: R
 /** Every active lab in index order, public fields only. */
 export async function listPublicShellLabs(): Promise<PublicShellLab[]> {
   return (await listActiveShellLabs()).map(toPublicShellLab);
+}
+
+/**
+ * One whole lab for the website's browser runtime, which runs the checks itself like the desktop
+ * app does. Only labs that can run in the browser are served here.
+ */
+export async function browserShellLab(slug: string): Promise<Record<string, unknown>> {
+  const row = await prisma.shellLab.findFirst({ where: { slug, active: true }, select: { data: true } });
+  const lab = row?.data as Record<string, unknown> | undefined;
+  if (!lab || !runsInBrowser(lab)) throw new NotFoundError("This lab does not run in the browser");
+  return lab;
 }
 
 // ---- Progress: the steps a learner has passed, per lab ----

@@ -65,3 +65,6 @@ frontend/public/vendor/mermaid.min.js
 /desktop/ide/gen-esbuild.config.js
 /desktop/ide/.theia/
 /desktop/ide/runtime/
+
+# browser shell labs: kernel, Debian image and package image (pnpm labs:assets, pnpm labs:image)
+frontend/public/unkernel/

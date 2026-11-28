@@ -1,6 +1,7 @@
 "use client";
 
-import { Check, ChevronsUpDown, GraduationCap, LayoutDashboard, Loader2, LogOut, Plug, Settings, Shield, User } from "lucide-react";
+import { Check, ChevronsUpDown, GraduationCap, LayoutDashboard, Loader2, LogOut, Moon, Plug, Settings, Shield, Sun, User } from "lucide-react";
+import { useTheme } from "next-themes";
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -18,6 +19,7 @@ import type { InstructorAccessView } from "@/shared/lib/instructor-access";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { useHydrated } from "@/lib/use-browser-storage";
 
 export function WorkspaceAccountMenu({
   current,
@@ -25,13 +27,23 @@ export function WorkspaceAccountMenu({
   instructorAccess,
   signOutAction,
   compact = false,
+  rail = false,
 }: {
   current: "learn" | "teach" | "admin";
   user: { name?: string | null; email?: string | null; image?: string | null; role?: string };
   instructorAccess?: InstructorAccessView;
   signOutAction: () => Promise<void>;
   compact?: boolean;
+  /**
+   * For the sidebar closed to icons: only the avatar shows, and the theme switch is a row
+   * inside the menu. Implies `compact`.
+   */
+  rail?: boolean;
 }) {
+  if (rail) compact = true;
+  const { theme, setTheme, resolvedTheme } = useTheme();
+  const hydrated = useHydrated();
+  const isDark = hydrated && (resolvedTheme ?? theme) === "dark";
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const runAction = (action: () => void | Promise<void>) => startTransition(async () => { await action(); });
@@ -50,7 +62,7 @@ export function WorkspaceAccountMenu({
 
   return (
     <div className={cn("flex items-center gap-1", !compact && "w-full")}>
-    {compact && <ThemeToggle className="grid size-10 place-items-center rounded-lg p-0" />}
+    {compact && !rail && <ThemeToggle className="grid size-10 place-items-center rounded-lg p-0" />}
     <DropdownMenu>
       <DropdownMenuTrigger
         render={<button type="button" disabled={pending} aria-busy={pending || undefined} aria-label={`Account and workspace: ${label}`} className={cn(
@@ -73,7 +85,7 @@ export function WorkspaceAccountMenu({
           <ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground" />
         </>}
       </DropdownMenuTrigger>
-      <DropdownMenuContent side={compact ? "bottom" : "top"} align={compact ? "end" : "start"} className="w-60 max-w-[calc(100vw-2rem)] p-1.5">
+      <DropdownMenuContent side={rail ? "right" : compact ? "bottom" : "top"} align={compact ? "end" : "start"} className="w-60 max-w-[calc(100vw-2rem)] p-1.5">
         <DropdownMenuGroup>
           <DropdownMenuLabel className="px-2 py-2 font-normal">
             <span className="block truncate font-medium text-foreground">{name}</span>
@@ -117,6 +129,12 @@ export function WorkspaceAccountMenu({
         {isAdmin && <DropdownMenuItem disabled={pending} className="min-h-9 gap-2 px-2" onClick={() => runAction(() => router.push("/integrations"))}>
           <Plug className="size-4" /> Integration API
         </DropdownMenuItem>}
+        {rail && (
+          <DropdownMenuItem className="min-h-9 gap-2 px-2" onClick={() => setTheme(isDark ? "light" : "dark")}>
+            {isDark ? <Sun className="size-4" /> : <Moon className="size-4" />}
+            {isDark ? "Light mode" : "Dark mode"}
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem disabled={pending} className="min-h-9 gap-2 px-2" variant="destructive" onClick={() => runAction(signOutAction)}>
           <LogOut className="size-4" /> Sign out

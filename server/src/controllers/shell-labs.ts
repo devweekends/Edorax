@@ -18,6 +18,11 @@ export async function list(_req: Request, res: Response) {
   ok(res, await shellLabs.shellLabsWithVersion());
 }
 
+// GET /api/v1/shell-labs/browser/:slug — one whole lab for the website, which runs it in the browser
+export async function browserLab(req: Request, res: Response) {
+  ok(res, { lab: await shellLabs.browserShellLab(String(req.params.slug)) });
+}
+
 // GET /api/v1/shell-labs/progress — the steps this learner has passed, per lab
 export async function progress(req: Request, res: Response) {
   ok(res, { progress: await shellLabs.shellLabProgress(req.user!.id) });
