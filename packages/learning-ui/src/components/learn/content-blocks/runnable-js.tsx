@@ -1,8 +1,11 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
+import { Check, WandSparkles } from "lucide-react";
 import { cn } from "../../../lib/utils";
 import { startRun, type RunHandle, type RunResult } from "../../../lib/run-js";
+import { formatCode } from "../../../lib/format-code";
+import { CodeMirrorEditor, type CodeEditorHandle } from "../code-editor";
 import { RUNNABLE_JS_MAX_SOURCE, RUNNABLE_JS_TIME_LIMIT_MS } from "../../../shared/runnable-js/spec";
 
 export type RunnableJsProps = {
@@ -12,10 +15,6 @@ export type RunnableJsProps = {
 };
 
 type RunState = { status: "idle" } | { status: "running" } | { status: "done"; result: RunResult };
-
-function rowsFor(source: string): number {
-  return Math.min(16, Math.max(3, source.split("\n").length));
-}
 
 /**
  * A small JavaScript example the learner can change and run where they read it.
@@ -27,9 +26,12 @@ export function RunnableJs({ code = "", title }: RunnableJsProps) {
   const original = code.slice(0, RUNNABLE_JS_MAX_SOURCE);
   const [source, setSource] = useState(original);
   const [state, setState] = useState<RunState>({ status: "idle" });
+  const [formatting, setFormatting] = useState(false);
+  const [formatted, setFormatted] = useState(false);
+  const [formatError, setFormatError] = useState<string | null>(null);
   const handle = useRef<RunHandle | null>(null);
+  const editorRef = useRef<CodeEditorHandle | null>(null);
   const baseId = useId();
-  const editorId = `${baseId}-code`;
   const outputId = `${baseId}-output`;
   const label = title || "JavaScript example";
 
@@ -49,10 +51,35 @@ export function RunnableJs({ code = "", title }: RunnableJsProps) {
     });
   };
 
+  const format = async () => {
+    if (formatting || !source.trim()) return;
+    setFormatting(true);
+    setFormatError(null);
+    try {
+      const cursorOffset = editorRef.current?.getCursorOffset();
+      const res = await formatCode(source, { language: "javascript", cursorOffset });
+      if (res.ok) {
+        if (editorRef.current) {
+          editorRef.current.applyFormatted(res.code, res.cursorOffset);
+        } else {
+          setSource(res.code);
+        }
+        setFormatted(true);
+        setTimeout(() => setFormatted(false), 1500);
+      } else {
+        setFormatError(res.error);
+      }
+    } finally {
+      setFormatting(false);
+    }
+  };
+
   const reset = () => {
     handle.current?.cancel();
     handle.current = null;
     setSource(original);
+    setFormatError(null);
+    setFormatted(false);
     setState({ status: "idle" });
   };
 
@@ -73,29 +100,30 @@ export function RunnableJs({ code = "", title }: RunnableJsProps) {
           <span className="text-xs text-[var(--code-lang-fg)]">You can change this code</span>
         </div>
 
-        <label htmlFor={editorId} className="sr-only">
-          {label}: code you can edit and run
-        </label>
-        <textarea
-          id={editorId}
+        <CodeMirrorEditor
           value={source}
-          rows={rowsFor(source)}
-          onChange={(event) => {
-            setSource(event.target.value);
+          onChange={(next) => {
+            if (formatError) setFormatError(null);
+            setSource(next);
           }}
-          onKeyDown={(event) => {
-            if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
-              event.preventDefault();
-              run();
-            }
-          }}
-          spellCheck={false}
-          autoCapitalize="off"
-          autoCorrect="off"
-          wrap="off"
+          language="javascript"
+          ariaLabel={`${label}: code you can edit and run`}
+          minHeight="110px"
+          maxHeight="360px"
           maxLength={RUNNABLE_JS_MAX_SOURCE}
-          className="block w-full resize-y overflow-x-auto bg-transparent p-3 font-mono text-[13px] leading-[1.65] text-[var(--code-fg)] caret-indigo-400 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring selection:bg-secondary sm:p-4"
+          onRunShortcut={run}
+          onFormatShortcut={() => void format()}
+          editorRef={editorRef}
         />
+
+        {formatError ? (
+          <div
+            role="status"
+            className="border-t border-[var(--code-border)] bg-destructive/10 px-3 py-2 font-mono text-xs text-destructive sm:px-4"
+          >
+            Could not format: {formatError}
+          </div>
+        ) : null}
 
         <div className="flex flex-wrap items-center gap-2 border-t border-[var(--code-border)] bg-[var(--code-toolbar)] px-3 py-2">
           <button
@@ -110,13 +138,22 @@ export function RunnableJs({ code = "", title }: RunnableJsProps) {
           </button>
           <button
             type="button"
+            onClick={() => void format()}
+            disabled={running || formatting || !source.trim()}
+            className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-[var(--code-border)] px-3.5 text-sm font-medium text-[var(--code-fg)] hover:bg-[var(--code-border)]/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {formatted ? <Check className="size-3.5 text-ok" aria-hidden /> : <WandSparkles className="size-3.5" aria-hidden />}
+            {formatting ? "Formatting…" : formatted ? "Formatted" : "Format"}
+          </button>
+          <button
+            type="button"
             onClick={reset}
             disabled={!changed && state.status === "idle"}
             className="inline-flex min-h-9 items-center rounded-full border border-[var(--code-border)] px-4 text-sm font-medium text-[var(--code-fg)] hover:bg-[var(--code-border)]/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
           >
             Reset
           </button>
-          <span className="ml-auto hidden text-xs text-[var(--code-lang-fg)] sm:inline">Ctrl + Enter to run</span>
+          <span className="ml-auto hidden text-xs text-[var(--code-lang-fg)] sm:inline">Ctrl + Enter to run · Shift + Alt + F to format</span>
         </div>
 
         <div className="border-t border-[var(--code-border)]">

@@ -2,15 +2,19 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
+  Check,
   CheckCircle2,
   CirclePlay,
   Code2,
   Lightbulb,
   RotateCcw,
   Sparkles,
+  WandSparkles,
   XCircle,
 } from "lucide-react";
 import { Button } from "../../components/ui/button";
+import { CodeMirrorEditor, type CodeEditorHandle } from "../../components/learn/code-editor";
+import { canFormatLanguage, formatCode } from "../../lib/format-code";
 import { cn } from "../../lib/utils";
 import type { SanitizedCodeConfig } from "../../shared/blocks/code/schema";
 import { checkpointAttrs } from "../../components/learn/checkpoint-marker";
@@ -33,32 +37,49 @@ function CodeEditor({
   readOnly,
   filename,
   language,
+  rawLanguage,
+  onSubmitShortcut,
 }: {
   value: string;
   onChange: (next: string) => void;
   readOnly?: boolean;
   filename: string;
   language: string;
+  rawLanguage: string;
+  onSubmitShortcut?: () => void;
 }) {
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const gutterRef = useRef<HTMLDivElement>(null);
+  const editorRef = useRef<CodeEditorHandle | null>(null);
+  const [formatting, setFormatting] = useState(false);
+  const [formatted, setFormatted] = useState(false);
+  const [formatError, setFormatError] = useState<string | null>(null);
   const lines = lineCount(value);
+  const formattable = !readOnly && canFormatLanguage(rawLanguage);
 
-  const syncScroll = useCallback(() => {
-    if (gutterRef.current && textareaRef.current) {
-      gutterRef.current.scrollTop = textareaRef.current.scrollTop;
+  const handleFormat = useCallback(async () => {
+    if (readOnly || formatting || !value.trim() || !canFormatLanguage(rawLanguage)) return;
+    setFormatting(true);
+    setFormatError(null);
+    try {
+      const cursorOffset = editorRef.current?.getCursorOffset();
+      const res = await formatCode(value, { language: rawLanguage, cursorOffset });
+      if (res.ok) {
+        if (editorRef.current) {
+          editorRef.current.applyFormatted(res.code, res.cursorOffset);
+        } else {
+          onChange(res.code);
+        }
+        setFormatted(true);
+        setTimeout(() => setFormatted(false), 1500);
+      } else {
+        setFormatError(res.error);
+      }
+    } finally {
+      setFormatting(false);
     }
-  }, []);
-
-  useEffect(() => {
-    const el = textareaRef.current;
-    if (!el) return;
-    el.addEventListener("scroll", syncScroll);
-    return () => el.removeEventListener("scroll", syncScroll);
-  }, [syncScroll]);
+  }, [formatting, onChange, rawLanguage, readOnly, value]);
 
   return (
-    <div className="overflow-hidden rounded-xl border border-[var(--code-border)] bg-[var(--code-surface)] ">
+    <div className="overflow-hidden rounded-xl border border-[var(--code-border)] bg-[var(--code-surface)]">
       {/* Editor title bar */}
       <div className="flex items-center justify-between gap-3 border-b border-[var(--code-border)] bg-[var(--code-toolbar)] px-3 py-2.5 sm:px-4">
         <div className="flex min-w-0 items-center gap-3">
@@ -74,44 +95,52 @@ function CodeEditor({
             </span>
           </div>
         </div>
-        <span className="shrink-0 text-xs text-[var(--code-lang-fg)]">Editable</span>
-      </div>
-
-      <div className="flex max-h-[min(420px,55vh)] min-h-[220px]">
-        {/* Line numbers */}
-        <div
-          ref={gutterRef}
-          className="hidden shrink-0 overflow-hidden border-r border-[var(--code-border)] bg-[var(--code-surface)] py-4 pr-3 pl-3 text-right font-mono text-[13px] leading-[1.65] text-[var(--code-lang-fg)] select-none sm:block"
-          aria-hidden
-        >
-          {Array.from({ length: lines }, (_, i) => (
-            <div key={i}>{i + 1}</div>
-          ))}
-        </div>
-
-        <textarea
-          ref={textareaRef}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onScroll={syncScroll}
-          readOnly={readOnly}
-          spellCheck={false}
-          autoCapitalize="off"
-          autoCorrect="off"
-          className={cn(
-            "block min-h-[220px] w-full flex-1 resize-none bg-transparent py-4 pr-4 pl-4 font-mono text-[13px] leading-[1.65] text-[var(--code-fg)] outline-none sm:pl-3",
-            "placeholder:text-[var(--code-lang-fg)] caret-indigo-400",
-            "selection:bg-secondary",
-            readOnly && "opacity-90"
+        <div className="flex shrink-0 items-center gap-2">
+          {formattable ? (
+            <button
+              type="button"
+              onClick={() => void handleFormat()}
+              disabled={formatting || !value.trim()}
+              aria-label="Format code"
+              className="inline-flex h-7 items-center gap-1.5 rounded-md border border-[var(--code-border)] bg-[var(--code-surface)] px-2.5 text-xs font-medium text-[var(--code-fg)] transition-colors hover:bg-[var(--code-border)]/30 focus-visible:outline-2 focus-visible:outline-[var(--ring)] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {formatted ? <Check className="size-3.5 text-ok" aria-hidden /> : <WandSparkles className="size-3.5" aria-hidden />}
+              {formatting ? "Formatting…" : formatted ? "Formatted" : "Format"}
+            </button>
+          ) : (
+            <span className="text-xs text-[var(--code-lang-fg)]">Read-only</span>
           )}
-          aria-label={`Code editor for ${filename}`}
-        />
+        </div>
       </div>
+
+      <CodeMirrorEditor
+        value={value}
+        onChange={(next) => {
+          if (formatError) setFormatError(null);
+          onChange(next);
+        }}
+        language={rawLanguage}
+        readOnly={readOnly}
+        ariaLabel={`Code editor for ${filename}`}
+        onRunShortcut={onSubmitShortcut}
+        onFormatShortcut={() => void handleFormat()}
+        editorRef={editorRef}
+      />
+
+      {formatError ? (
+        <div
+          role="status"
+          className="border-t border-[var(--code-border)] bg-destructive/10 px-3 py-2 font-mono text-xs text-destructive sm:px-4"
+        >
+          Could not format: {formatError}
+        </div>
+      ) : null}
 
       {/* Status bar */}
-      <div className="flex items-center justify-between border-t border-[var(--code-border)] bg-[var(--code-toolbar)] px-3 py-1.5 font-mono text-xs text-[var(--code-lang-fg)] sm:px-4">
+      <div className="flex items-center justify-between gap-2 border-t border-[var(--code-border)] bg-[var(--code-toolbar)] px-3 py-1.5 font-mono text-xs text-[var(--code-lang-fg)] sm:px-4">
         <span>{lines} line{lines === 1 ? "" : "s"}</span>
-        <span>UTF-8 · Spaces: 2</span>
+        <span className="hidden sm:inline">Shift+Alt+F format · Ctrl+Enter check · Spaces: 2</span>
+        <span className="sm:hidden">Spaces: 2</span>
       </div>
     </div>
   );
@@ -288,7 +317,19 @@ export function CodeExerciseClient({
       {/* Editor */}
       <div className="space-y-4 bg-muted/25 px-4 py-5 sm:px-6">
         {renderEditor ? renderEditor({ value: source, onChange: setSource, readOnly: passed || submitting, filename, language: config.language }) : (
-          <CodeEditor value={source} onChange={setSource} readOnly={passed || submitting} filename={filename} language={language} />
+          <CodeEditor
+            value={source}
+            onChange={setSource}
+            readOnly={passed || submitting}
+            filename={filename}
+            language={language}
+            rawLanguage={config.language}
+            onSubmitShortcut={() => {
+              if (!passed && !submitting && source.trim()) {
+                void submit();
+              }
+            }}
+          />
         )}
 
         {hintIndex >= 0 && hints[hintIndex] ? (

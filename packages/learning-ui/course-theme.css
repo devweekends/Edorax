@@ -39,6 +39,15 @@
   --code-border: #dce0f2;
   --code-lang-fg: #46507a;
   --code-fg: #0a0f2c;
+  --cm-keyword: #2434e0;
+  --cm-string: #0b6b45;
+  --cm-number: #b45309;
+  --cm-comment: #647099;
+  --cm-function: #6d28d9;
+  --cm-type: #0e7490;
+  --cm-operator: #334155;
+  --cm-active-line: rgb(36 52 224 / 6%);
+  --cm-selection: rgb(36 52 224 / 16%);
   --ok: #0b6b45;
   --ok-soft: #ddf3e8;
 }
@@ -82,6 +91,15 @@
   --code-border: #26305f;
   --code-lang-fg: #aab3de;
   --code-fg: #e8ebff;
+  --cm-keyword: #8b9cff;
+  --cm-string: #5eead4;
+  --cm-number: #ffc933;
+  --cm-comment: #7c87b5;
+  --cm-function: #c4b5fd;
+  --cm-type: #67e8f9;
+  --cm-operator: #cbd5f5;
+  --cm-active-line: rgb(122 139 255 / 10%);
+  --cm-selection: rgb(122 139 255 / 28%);
   --ok: #3ddc97;
   --ok-soft: #0e3326;
 }
